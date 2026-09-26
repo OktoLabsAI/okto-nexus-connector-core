@@ -1,0 +1,151 @@
+name: Core release candidate
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Exact project version to build
+        required: true
+        type: string
+      expected_wheel_sha256:
+        description: Reviewed wheel SHA-256 (required to publish)
+        required: false
+        type: string
+      expected_sdist_sha256:
+        description: Reviewed sdist SHA-256 (required to publish)
+        required: false
+        type: string
+      publish:
+        description: Request protected PyPI publication after review
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: core-release
+  cancel-in-progress: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Check out Core
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: '3.13'
+      - name: Install validation dependencies
+        run: python -m pip install '.[test]' 'twine==7.0.0'
+      - name: Verify generated contracts
+        run: python contracts/generate.py --check
+      - name: Test Core
+        run: python -m pytest -q
+      - name: Build independent artifacts
+        run: python tools/build_artifacts.py
+      - name: Prepare dependency wheelhouse
+        run: >-
+          python -m pip download --only-binary=:all: --dest build/offline-wheelhouse
+          'setuptools>=68' wheel 'rfc8785==0.1.4' 'jsonschema==4.26.0'
+      - name: Verify offline wheel and sdist installation
+        run: python tools/verify_offline_artifacts.py --wheelhouse build/offline-wheelhouse
+      - name: Verify installed wheel and both consumers
+        run: python tools/verify_wheel.py
+      - name: Check package metadata strictly
+        run: python -m twine check --strict dist/*.whl dist/*.tar.gz
+      - name: Validate reviewed version and artifact hashes
+        shell: bash
+        env:
+          CORE_VERSION: ${{ inputs.version }}
+          CORE_WHEEL_SHA: ${{ inputs.expected_wheel_sha256 }}
+          CORE_SDIST_SHA: ${{ inputs.expected_sdist_sha256 }}
+          CORE_PUBLISH: ${{ inputs.publish }}
+        run: |
+          set -euo pipefail
+          args=(--version "$CORE_VERSION")
+          if [[ "$CORE_PUBLISH" == "true" ]]; then
+            [[ "$GITHUB_REF" == "refs/heads/main" ]]
+            [[ -n "$CORE_WHEEL_SHA" && -n "$CORE_SDIST_SHA" ]]
+          else
+            args+=(--allow-development)
+          fi
+          if [[ -n "$CORE_WHEEL_SHA" ]]; then args+=(--wheel-sha256 "$CORE_WHEEL_SHA"); fi
+          if [[ -n "$CORE_SDIST_SHA" ]]; then args+=(--sdist-sha256 "$CORE_SDIST_SHA"); fi
+          python tools/validate_release.py "${args[@]}"
+      - name: Inventory installed runtime dependencies
+        run: python tools/generate_sbom.py
+      - name: Retain checked distributions
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-release-distributions
+          path: |
+            dist/*.whl
+            dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+      - name: Retain SBOM for review
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: core-release-sbom
+          path: dist/*.sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: ${{ inputs.publish && github.ref == 'refs/heads/main' }}
+    needs: prepare
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    environment: pypi
+    permissions:
+      actions: read
+      id-token: write
+    steps:
+      - name: Retrieve only checked distributions
+        uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7.0.0
+        with:
+          name: core-release-distributions
+          path: dist
+      - name: Require commit, version and legal approvals; recheck bytes
+        shell: bash
+        env:
+          CORE_VERSION: ${{ inputs.version }}
+          CORE_WHEEL_SHA: ${{ inputs.expected_wheel_sha256 }}
+          CORE_SDIST_SHA: ${{ inputs.expected_sdist_sha256 }}
+          APPROVED_COMMIT: ${{ secrets.CORE_RELEASE_APPROVED_COMMIT }}
+          APPROVED_VERSION: ${{ secrets.CORE_RELEASE_APPROVED_VERSION }}
+          LICENSE_REVIEWED_COMMIT: ${{ secrets.CORE_LICENSE_REVIEWED_COMMIT }}
+        run: |
+          set -euo pipefail
+          [[ -n "$APPROVED_COMMIT" && "$APPROVED_COMMIT" == "$GITHUB_SHA" ]]
+          [[ -n "$APPROVED_VERSION" && "$APPROVED_VERSION" == "$CORE_VERSION" ]]
+          [[ -n "$LICENSE_REVIEWED_COMMIT" && "$LICENSE_REVIEWED_COMMIT" == "$GITHUB_SHA" ]]
+          python - <<'PY'
+          import hashlib, os, re
+          from pathlib import Path
+          version = os.environ["CORE_VERSION"]
+          distribution = "nexus_connector_core-" + version
+          expected = {
+              distribution + "-py3-none-any.whl": os.environ["CORE_WHEEL_SHA"],
+              distribution + ".tar.gz": os.environ["CORE_SDIST_SHA"],
+          }
+          files = {path.name: path for path in Path("dist").iterdir()}
+          if set(files) != set(expected):
+              raise SystemExit("expected exactly the two reviewed distributions")
+          for name, digest in expected.items():
+              if not re.fullmatch(r"[0-9a-f]{64}", digest):
+                  raise SystemExit("invalid reviewed distribution hash")
+              if hashlib.sha256(files[name].read_bytes()).hexdigest() != digest:
+                  raise SystemExit("distribution changed after review")
+          PY
+      - name: Publish reviewed distributions with PyPI OIDC
+        uses: pypa/gh-action-pypi-publish@a892a5a61159132606e93a2fa6f4358831b04d26 # v1.14.2
+        with:
+          packages-dir: dist
+          attestations: 'true'

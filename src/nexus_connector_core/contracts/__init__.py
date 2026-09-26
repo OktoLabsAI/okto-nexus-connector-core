@@ -1,0 +1,1 @@
+"""Packaged NXL contract resources."""

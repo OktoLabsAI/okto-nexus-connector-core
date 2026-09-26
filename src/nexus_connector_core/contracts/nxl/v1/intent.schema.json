@@ -1,0 +1,101 @@
+{
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/intent.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "allOf": [
+    {
+      "else": {
+        "not": {
+          "required": [
+            "expected_turn_id"
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "action": {
+            "enum": [
+              "turn.interrupt",
+              "turn.steer"
+            ]
+          }
+        }
+      },
+      "then": {
+        "required": [
+          "expected_turn_id"
+        ]
+      }
+    }
+  ],
+  "properties": {
+    "action": {
+      "enum": [
+        "runtime.open",
+        "turn.submit",
+        "turn.interrupt",
+        "turn.steer",
+        "runtime.close",
+        "approval.decide",
+        "input.provide"
+      ]
+    },
+    "agent_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "binding_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "configuration_revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "executor_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "expected_turn_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "payload": {
+      "maxProperties": 32,
+      "type": "object"
+    },
+    "server_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "session_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "workspace_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "server_id",
+    "executor_id",
+    "binding_id",
+    "agent_id",
+    "workspace_id",
+    "session_id",
+    "action",
+    "payload",
+    "configuration_revision"
+  ],
+  "title": "intent",
+  "type": "object"
+}

@@ -1,0 +1,75 @@
+{
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/event.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "category": {
+      "enum": [
+        "lifecycle",
+        "turn_state",
+        "text_delta",
+        "text_snapshot",
+        "tool_activity",
+        "approval_request",
+        "input_request",
+        "usage",
+        "system_warning",
+        "rate_limit",
+        "error",
+        "native_unknown"
+      ]
+    },
+    "executor_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "native_type": {
+      "maxLength": 160,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "operation_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "payload": {
+      "maxProperties": 32,
+      "type": "object"
+    },
+    "sequence": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "type": "integer"
+    },
+    "server_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "session_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "stream_epoch": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "server_id",
+    "executor_id",
+    "session_id",
+    "stream_epoch",
+    "sequence",
+    "category",
+    "payload"
+  ],
+  "title": "event",
+  "type": "object"
+}

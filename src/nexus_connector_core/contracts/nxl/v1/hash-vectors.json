@@ -1,0 +1,32 @@
+{
+  "revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+  "vectors": [
+    {
+      "canonical": "{\"a\":\"á\",\"z\":1}",
+      "input": {
+        "a": "á",
+        "z": 1.0
+      },
+      "sha256": "sha256:1c625d93d5def955dbd5f06d2e231f50a11965750cce1f44be1becf8306e86c9"
+    },
+    {
+      "canonical": "{\"😀\":1,\"\":2}",
+      "input": {
+        "": 2,
+        "😀": 1
+      },
+      "sha256": "sha256:04208f6cdb854e2ab1b07dd3633a39dec854344fe72824cf7f2fdb4e2e33129e"
+    },
+    {
+      "canonical": "{\"n\":[0,1e-7,1e+21]}",
+      "input": {
+        "n": [
+          -0.0,
+          1e-07,
+          1e+21
+        ]
+      },
+      "sha256": "sha256:be6425b9698e1f4cc31d8d1274b03a01fbe1a91f4e892acfd270c9c8e05ac296"
+    }
+  ]
+}

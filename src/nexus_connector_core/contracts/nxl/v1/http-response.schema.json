@@ -1,0 +1,108 @@
+{
+  "$defs": {
+    "id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/http-response.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "oneOf": [
+    {
+      "not": {
+        "required": [
+          "error"
+        ]
+      },
+      "properties": {
+        "status": {
+          "maximum": 299,
+          "minimum": 200
+        }
+      },
+      "required": [
+        "data"
+      ]
+    },
+    {
+      "not": {
+        "required": [
+          "data"
+        ]
+      },
+      "properties": {
+        "status": {
+          "maximum": 599,
+          "minimum": 400
+        }
+      },
+      "required": [
+        "error"
+      ]
+    }
+  ],
+  "properties": {
+    "data": {
+      "type": [
+        "object",
+        "array",
+        "null"
+      ]
+    },
+    "error": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "corrective_action": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "operation_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "possible_effect": {
+          "type": "boolean"
+        },
+        "retry_safe": {
+          "type": "boolean"
+        },
+        "stage": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "stage",
+        "possible_effect",
+        "retry_safe"
+      ],
+      "type": "object"
+    },
+    "request_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "status": {
+      "maximum": 599,
+      "minimum": 100,
+      "type": "integer"
+    }
+  },
+  "required": [
+    "request_id",
+    "status"
+  ],
+  "title": "http-response",
+  "type": "object"
+}

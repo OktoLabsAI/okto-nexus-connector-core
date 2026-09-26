@@ -1,0 +1,84 @@
+{
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/inventory.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "candidates": {
+      "items": {
+        "additionalProperties": false,
+        "properties": {
+          "adapter_id": {
+            "enum": [
+              "codex_app_server",
+              "pi_rpc",
+              "claude_stream",
+              "claude_attach"
+            ]
+          },
+          "architecture": {
+            "maxLength": 80,
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "candidate_id": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "fingerprint": {
+            "pattern": "^sha256:[0-9a-f]{64}$",
+            "type": "string"
+          },
+          "trust": {
+            "enum": [
+              "selected",
+              "untrusted",
+              "rejected"
+            ]
+          },
+          "version": {
+            "maxLength": 80,
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "candidate_id",
+          "adapter_id",
+          "fingerprint",
+          "trust"
+        ],
+        "type": "object"
+      },
+      "maxItems": 128,
+      "type": "array"
+    },
+    "executor_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    },
+    "server_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "server_id",
+    "executor_id",
+    "revision",
+    "candidates"
+  ],
+  "title": "inventory",
+  "type": "object"
+}

@@ -1,0 +1,52 @@
+"""Embeddable native harness core. Importing this package has no runtime side effects."""
+
+from .models import (
+    ExecutionContext,
+    Operation,
+    OperationReceipt,
+    OperationKey,
+    SessionKey,
+    ClaimedSession,
+    SessionClaimPage,
+    OwnedSlotReservation,
+    OwnedSlotPage,
+    ProcessBirthEvidence,
+    ProcessBirthRecord,
+    ProcessBirthObservation,
+    RuntimeEvent,
+    EventCursor,
+    StorageStatus,
+    RuntimeSnapshot,
+    CoreError,
+    InstallationCandidate,
+    LaunchIntent,
+    PreparedLaunch,
+    DiscoveryRequest,
+    Inventory,
+    OpenOperation,
+    TurnOperation,
+    ControlOperation,
+    NativeApprovalOperation,
+    CloseOperation,
+    ReconcileRequest,
+    ReconcileReport,
+    ShutdownPolicy,
+    ShutdownReport,
+)
+from .protocol import CONTRACT_REVISION, intent_hash, submit_frame_intent_hash
+from .ports import OwnedSlotLedger, RuntimeCore
+from .runtime import LocalRuntimeCore
+from .slot_ledger import SQLiteOwnedSlotLedger
+
+__version__ = "0.1.0.dev0"
+
+__all__ = [
+    "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
+    "OperationReceipt", "OperationKey", "SessionKey", "ClaimedSession", "SessionClaimPage", "OwnedSlotReservation", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
+    "InstallationCandidate", "LaunchIntent", "PreparedLaunch",
+    "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
+    "ControlOperation", "NativeApprovalOperation", "CloseOperation", "ReconcileRequest",
+    "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
+    "RuntimeCore", "LocalRuntimeCore", "OwnedSlotLedger",
+    "SQLiteOwnedSlotLedger",
+]

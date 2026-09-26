@@ -1,0 +1,40 @@
+{
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/error.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "code": {
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+    },
+    "corrective_action": {
+      "maxLength": 512,
+      "type": "string"
+    },
+    "operation_id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "possible_effect": {
+      "type": "boolean"
+    },
+    "retry_safe": {
+      "type": "boolean"
+    },
+    "stage": {
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+    }
+  },
+  "required": [
+    "code",
+    "stage",
+    "possible_effect",
+    "retry_safe"
+  ],
+  "title": "error",
+  "type": "object"
+}

@@ -1,0 +1,900 @@
+{
+  "frames": {
+    "invalid": [
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "core_version": "0.1.0.dev0",
+        "event_types": [
+          "turn_state"
+        ],
+        "executor_id": "exe_B",
+        "limits": {
+          "frame_bytes": 1048576
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "hello"
+      },
+      {
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "core_version": "0.1.0.dev0",
+        "event_types": [
+          "turn_state"
+        ],
+        "executor_id": "exe_B",
+        "limits": {
+          "frame_bytes": 1048576
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "welcome"
+      },
+      {
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "credential_epoch": 5,
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "binding.attach"
+      },
+      {
+        "agent_id": "ag_D",
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "binding.detach"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "inventory_revision": 6,
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "inventory.snapshot"
+      },
+      {
+        "candidates": [
+          {
+            "adapter_id": "pi_rpc",
+            "candidate_id": "candidate_K",
+            "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "trust": "selected",
+            "version": "0.85.1"
+          }
+        ],
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "inventory_revision": 6,
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "inventory.delta"
+      },
+      {
+        "action": "turn.submit",
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "configuration_revision": 4,
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "intent_hash": "sha256:0190ec9adb05d5255eac23fbdf54a1071cbb5d7422871db2ce33a5d6b85e9a7f",
+        "operation_id": "op_H",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "operation.submit",
+        "workspace_binding_id": "wb_F",
+        "workspace_id": "ws_E"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "intent_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "operation_id": "op_H",
+        "possible_effect": true,
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stage": "SUBMITTED",
+        "type": "operation.receipt"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "operation.query"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stream_epoch": "epoch_M",
+        "type": "event.batch"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stream_epoch": "epoch_M",
+        "type": "event.ack"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "operation_ids": [
+          "op_H"
+        ],
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "reconcile.request"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "receipts": [
+          {
+            "operation_id": "op_H",
+            "stage": "SUBMITTED"
+          }
+        ],
+        "server_id": "srv_A",
+        "type": "reconcile.report"
+      },
+      {
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "lease.renew"
+      },
+      {
+        "agent_id": "ag_D",
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "lease_id": "lease_J",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "session_owner_generation": 2,
+        "type": "lease.granted",
+        "valid_for_ms": 120000
+      },
+      {
+        "agent_id": "ag_D",
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "kind": "approval",
+        "operation_id": "op_H",
+        "protocol_major": 1,
+        "request_id": "req_I",
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "approval.request"
+      },
+      {
+        "agent_id": "ag_D",
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "decision": "decline",
+        "executor_id": "exe_B",
+        "operation_id": "op_H",
+        "protocol_major": 1,
+        "request_id": "req_I",
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "approval.decision"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "heartbeat"
+      },
+      {
+        "code": "EXECUTOR_OFFLINE",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "possible_effect": true,
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "stage": "SUBMITTED",
+        "type": "error"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "goaway"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "intent_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "operation_id": "op_H",
+        "possible_effect": true,
+        "protocol_major": 1,
+        "retry_safe": false,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stage": "EXACTLY_ONCE",
+        "type": "operation.receipt"
+      },
+      {
+        "action": "shell.exec",
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "configuration_revision": 4,
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "intent_hash": "sha256:0190ec9adb05d5255eac23fbdf54a1071cbb5d7422871db2ce33a5d6b85e9a7f",
+        "operation_id": "op_H",
+        "payload": {
+          "delivery_id": "dlv_1",
+          "text": "Olá"
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "operation.submit",
+        "workspace_binding_id": "wb_F",
+        "workspace_id": "ws_E"
+      },
+      {
+        "action": "turn.steer",
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "configuration_revision": 4,
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "intent_hash": "sha256:0190ec9adb05d5255eac23fbdf54a1071cbb5d7422871db2ce33a5d6b85e9a7f",
+        "operation_id": "op_H",
+        "payload": {
+          "delivery_id": "dlv_1",
+          "text": "Olá"
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "operation.submit",
+        "workspace_binding_id": "wb_F",
+        "workspace_id": "ws_E"
+      },
+      {
+        "action": "turn.submit",
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "configuration_revision": 4,
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "expected_turn_id": "unexpected_turn",
+        "intent_hash": "sha256:0190ec9adb05d5255eac23fbdf54a1071cbb5d7422871db2ce33a5d6b85e9a7f",
+        "operation_id": "op_H",
+        "payload": {
+          "delivery_id": "dlv_1",
+          "text": "Olá"
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "operation.submit",
+        "workspace_binding_id": "wb_F",
+        "workspace_id": "ws_E"
+      },
+      {
+        "code": "EXECUTOR_OFFLINE",
+        "contract_revision": "nxl-1-draft-2026-09-24-r1",
+        "executor_id": "exe_B",
+        "possible_effect": true,
+        "protocol_major": 1,
+        "retry_safe": false,
+        "server_id": "srv_A",
+        "stage": "SUBMITTED",
+        "type": "error"
+      },
+      {
+        "code": "EXECUTOR_OFFLINE",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "possible_effect": true,
+        "protocol_major": 1,
+        "retry_safe": false,
+        "server_id": "srv_A",
+        "stage": "SUBMITTED",
+        "ticket": "not-allowed-on-error",
+        "type": "error"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "events": [
+          {
+            "category": "turn_state",
+            "executor_id": "exe_B",
+            "native_type": "turn/completed",
+            "payload": {},
+            "sequence": 0,
+            "server_id": "srv_A",
+            "session_id": "session_G",
+            "stream_epoch": "epoch_M"
+          }
+        ],
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stream_epoch": "epoch_M",
+        "type": "event.batch"
+      }
+    ],
+    "valid": [
+      {
+        "capabilities": [
+          {
+            "adapter_id": "codex_app_server",
+            "conversation": false,
+            "managed_work": false,
+            "native_version": null,
+            "platform": "win32",
+            "tool_path": "none"
+          }
+        ],
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "core_version": "0.1.0.dev0",
+        "event_types": [
+          "turn_state"
+        ],
+        "executor_id": "exe_B",
+        "limits": {
+          "frame_bytes": 1048576
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "hello"
+      },
+      {
+        "capabilities": [
+          {
+            "adapter_id": "codex_app_server",
+            "conversation": false,
+            "managed_work": false,
+            "native_version": null,
+            "platform": "win32",
+            "tool_path": "none"
+          }
+        ],
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "core_version": "0.1.0.dev0",
+        "event_types": [
+          "turn_state"
+        ],
+        "executor_id": "exe_B",
+        "limits": {
+          "frame_bytes": 1048576
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "welcome"
+      },
+      {
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "credential_epoch": 5,
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "ticket": "fixture-ticket-not-a-secret",
+        "type": "binding.attach"
+      },
+      {
+        "agent_id": "ag_D",
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "reason": "drain",
+        "server_id": "srv_A",
+        "type": "binding.detach"
+      },
+      {
+        "candidates": [
+          {
+            "adapter_id": "pi_rpc",
+            "candidate_id": "candidate_K",
+            "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "trust": "selected",
+            "version": "0.85.1"
+          }
+        ],
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "inventory_revision": 6,
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "inventory.snapshot"
+      },
+      {
+        "candidates": [
+          {
+            "adapter_id": "pi_rpc",
+            "candidate_id": "candidate_K",
+            "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+            "trust": "selected",
+            "version": "0.85.1"
+          }
+        ],
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "inventory_revision": 6,
+        "protocol_major": 1,
+        "removed_candidate_ids": [],
+        "server_id": "srv_A",
+        "type": "inventory.delta"
+      },
+      {
+        "action": "turn.submit",
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "configuration_revision": 4,
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "intent_hash": "sha256:0190ec9adb05d5255eac23fbdf54a1071cbb5d7422871db2ce33a5d6b85e9a7f",
+        "operation_id": "op_H",
+        "payload": {
+          "delivery_id": "dlv_1",
+          "text": "Olá"
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "operation.submit",
+        "workspace_binding_id": "wb_F",
+        "workspace_id": "ws_E"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "intent_hash": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "operation_id": "op_H",
+        "possible_effect": true,
+        "protocol_major": 1,
+        "retry_safe": false,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stage": "SUBMITTED",
+        "type": "operation.receipt"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "operation_id": "op_H",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "operation.query"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "events": [
+          {
+            "category": "turn_state",
+            "executor_id": "exe_B",
+            "native_type": "turn/completed",
+            "payload": {},
+            "sequence": 1,
+            "server_id": "srv_A",
+            "session_id": "session_G",
+            "stream_epoch": "epoch_M"
+          }
+        ],
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stream_epoch": "epoch_M",
+        "type": "event.batch"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "sequence": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "stream_epoch": "epoch_M",
+        "type": "event.ack"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "operation_ids": [
+          "op_H"
+        ],
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_ids": [
+          "session_G"
+        ],
+        "type": "reconcile.request"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "receipts": [
+          {
+            "operation_id": "op_H",
+            "stage": "SUBMITTED"
+          }
+        ],
+        "server_id": "srv_A",
+        "snapshots": [
+          {
+            "ownership": "owned",
+            "session_id": "session_G"
+          }
+        ],
+        "type": "reconcile.report"
+      },
+      {
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "lease_id": "lease_J",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "lease.renew"
+      },
+      {
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "lease_id": "lease_J",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "session_owner_generation": 2,
+        "type": "lease.granted",
+        "valid_for_ms": 120000
+      },
+      {
+        "agent_id": "ag_D",
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "kind": "approval",
+        "operation_id": "op_H",
+        "proposal": {
+          "action": "write"
+        },
+        "protocol_major": 1,
+        "request_id": "req_I",
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "approval.request"
+      },
+      {
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "decision": "decline",
+        "executor_id": "exe_B",
+        "operation_id": "op_H",
+        "protocol_major": 1,
+        "request_id": "req_I",
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "approval.decision"
+      },
+      {
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "type": "heartbeat"
+      },
+      {
+        "code": "EXECUTOR_OFFLINE",
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "possible_effect": true,
+        "protocol_major": 1,
+        "retry_safe": false,
+        "server_id": "srv_A",
+        "stage": "SUBMITTED",
+        "type": "error"
+      },
+      {
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "protocol_major": 1,
+        "reason": "drain",
+        "server_id": "srv_A",
+        "type": "goaway"
+      },
+      {
+        "action": "turn.interrupt",
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "configuration_revision": 4,
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "expected_turn_id": "turn_N",
+        "intent_hash": "sha256:eb6cf507ea51c6d04e78839b058721c213213e5ff931c8d79614e30b538c1258",
+        "operation_id": "op_turn_interrupt",
+        "payload": {
+          "delivery_id": "dlv_1",
+          "text": "Olá"
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "operation.submit",
+        "workspace_binding_id": "wb_F",
+        "workspace_id": "ws_E"
+      },
+      {
+        "action": "turn.steer",
+        "agent_id": "ag_D",
+        "authorization_revision": 3,
+        "binding_id": "bind_C",
+        "configuration_revision": 4,
+        "connection_generation": 7,
+        "contract_revision": "nxl-1-agent-centric-http-only-2026-09-25-r3",
+        "executor_id": "exe_B",
+        "expected_turn_id": "turn_N",
+        "intent_hash": "sha256:4d790fb8332785419332fa44427b6bd34ff03091d63694bd2528e2451b4f7a6d",
+        "operation_id": "op_turn_steer",
+        "payload": {
+          "delivery_id": "dlv_1",
+          "text": "Olá"
+        },
+        "protocol_major": 1,
+        "server_id": "srv_A",
+        "session_id": "session_G",
+        "type": "operation.submit",
+        "workspace_binding_id": "wb_F",
+        "workspace_id": "ws_E"
+      }
+    ]
+  },
+  "models": {
+    "capability": {
+      "invalid": [
+        {
+          "adapter_id": "codex_app_server",
+          "conversation": false,
+          "managed_work": false,
+          "native_version": null,
+          "platform": "win32",
+          "tool_path": "local_mcp_proxy"
+        }
+      ],
+      "valid": [
+        {
+          "adapter_id": "codex_app_server",
+          "conversation": false,
+          "managed_work": false,
+          "native_version": null,
+          "platform": "win32",
+          "tool_path": "none"
+        }
+      ]
+    },
+    "error": {
+      "invalid": [
+        {
+          "code": "EXECUTOR_OFFLINE",
+          "retry_safe": true
+        }
+      ],
+      "valid": [
+        {
+          "code": "EXECUTOR_OFFLINE",
+          "possible_effect": true,
+          "retry_safe": false,
+          "stage": "SUBMITTED"
+        }
+      ]
+    },
+    "event": {
+      "invalid": [
+        {
+          "category": "turn_state",
+          "executor_id": "exe_B",
+          "native_type": "turn/completed",
+          "payload": {},
+          "sequence": 0,
+          "server_id": "srv_A",
+          "session_id": "session_G",
+          "stream_epoch": "epoch_M"
+        }
+      ],
+      "valid": [
+        {
+          "category": "turn_state",
+          "executor_id": "exe_B",
+          "native_type": "turn/completed",
+          "payload": {},
+          "sequence": 1,
+          "server_id": "srv_A",
+          "session_id": "session_G",
+          "stream_epoch": "epoch_M"
+        }
+      ]
+    },
+    "http-response": {
+      "invalid": [
+        {
+          "request_id": "req_I",
+          "secret": "forbidden",
+          "status": 200
+        },
+        {
+          "data": {
+            "ok": false
+          },
+          "request_id": "req_I",
+          "status": 500
+        }
+      ],
+      "valid": [
+        {
+          "data": {
+            "ok": true
+          },
+          "request_id": "req_I",
+          "status": 200
+        },
+        {
+          "error": {
+            "code": "BINDING_NOT_AUTHORIZED",
+            "possible_effect": false,
+            "retry_safe": true,
+            "stage": "admission"
+          },
+          "request_id": "req_I",
+          "status": 403
+        }
+      ]
+    },
+    "intent": {
+      "invalid": [
+        {
+          "action": "shell.exec"
+        },
+        {
+          "action": "turn.interrupt",
+          "agent_id": "ag_D",
+          "binding_id": "bind_C",
+          "configuration_revision": 4,
+          "executor_id": "exe_B",
+          "payload": {
+            "delivery_id": "dlv_1",
+            "text": "Olá"
+          },
+          "server_id": "srv_A",
+          "session_id": "session_G",
+          "workspace_id": "ws_E"
+        },
+        {
+          "action": "turn.submit",
+          "agent_id": "ag_D",
+          "binding_id": "bind_C",
+          "configuration_revision": 4,
+          "executor_id": "exe_B",
+          "expected_turn_id": "unexpected_turn",
+          "payload": {
+            "delivery_id": "dlv_1",
+            "text": "Olá"
+          },
+          "server_id": "srv_A",
+          "session_id": "session_G",
+          "workspace_id": "ws_E"
+        }
+      ],
+      "valid": [
+        {
+          "action": "turn.submit",
+          "agent_id": "ag_D",
+          "binding_id": "bind_C",
+          "configuration_revision": 4,
+          "executor_id": "exe_B",
+          "payload": {
+            "delivery_id": "dlv_1",
+            "text": "Olá"
+          },
+          "server_id": "srv_A",
+          "session_id": "session_G",
+          "workspace_id": "ws_E"
+        },
+        {
+          "action": "turn.steer",
+          "agent_id": "ag_D",
+          "binding_id": "bind_C",
+          "configuration_revision": 4,
+          "executor_id": "exe_B",
+          "expected_turn_id": "turn_N",
+          "payload": {
+            "delivery_id": "dlv_1",
+            "text": "Olá"
+          },
+          "server_id": "srv_A",
+          "session_id": "session_G",
+          "workspace_id": "ws_E"
+        }
+      ]
+    },
+    "inventory": {
+      "invalid": [
+        {
+          "candidates": [
+            {
+              "adapter_id": "pi_rpc"
+            }
+          ],
+          "executor_id": "exe_B",
+          "revision": 6,
+          "server_id": "srv_A"
+        }
+      ],
+      "valid": [
+        {
+          "candidates": [
+            {
+              "adapter_id": "pi_rpc",
+              "candidate_id": "candidate_K",
+              "fingerprint": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+              "trust": "selected",
+              "version": "0.85.1"
+            }
+          ],
+          "executor_id": "exe_B",
+          "revision": 6,
+          "server_id": "srv_A"
+        }
+      ]
+    }
+  },
+  "revision": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+}

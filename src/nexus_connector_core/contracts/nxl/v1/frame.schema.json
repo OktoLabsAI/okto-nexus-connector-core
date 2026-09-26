@@ -1,0 +1,1427 @@
+{
+  "$defs": {
+    "hash": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "type": "string"
+    },
+    "id": {
+      "maxLength": 160,
+      "minLength": 1,
+      "type": "string"
+    },
+    "revision": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "type": "integer"
+    }
+  },
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/frame.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/capability.schema.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false,
+            "properties": {
+              "adapter_id": {
+                "enum": [
+                  "codex_app_server",
+                  "pi_rpc",
+                  "claude_stream",
+                  "claude_attach"
+                ]
+              },
+              "approvals": {
+                "type": "boolean"
+              },
+              "conversation": {
+                "type": "boolean"
+              },
+              "interrupt": {
+                "type": "boolean"
+              },
+              "managed_work": {
+                "type": "boolean"
+              },
+              "native_version": {
+                "maxLength": 80,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "platform": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              "steer_timing": {
+                "enum": [
+                  "IMMEDIATE",
+                  "NEXT_TURN_BOUNDARY",
+                  "UNSUPPORTED"
+                ]
+              },
+              "tool_path": {
+                "enum": [
+                  "direct_mcp_http",
+                  "structured_native",
+                  "none"
+                ]
+              }
+            },
+            "required": [
+              "adapter_id",
+              "native_version",
+              "platform",
+              "conversation",
+              "managed_work",
+              "tool_path"
+            ],
+            "title": "capability",
+            "type": "object"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "core_version": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_types": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "limits": {
+          "maxProperties": 32,
+          "type": "object"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "hello"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "core_version",
+        "event_types",
+        "limits",
+        "capabilities"
+      ],
+      "title": "hello",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "capabilities": {
+          "items": {
+            "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/capability.schema.json",
+            "$schema": "https://json-schema.org/draft/2020-12/schema",
+            "additionalProperties": false,
+            "properties": {
+              "adapter_id": {
+                "enum": [
+                  "codex_app_server",
+                  "pi_rpc",
+                  "claude_stream",
+                  "claude_attach"
+                ]
+              },
+              "approvals": {
+                "type": "boolean"
+              },
+              "conversation": {
+                "type": "boolean"
+              },
+              "interrupt": {
+                "type": "boolean"
+              },
+              "managed_work": {
+                "type": "boolean"
+              },
+              "native_version": {
+                "maxLength": 80,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "platform": {
+                "maxLength": 80,
+                "minLength": 1,
+                "type": "string"
+              },
+              "steer_timing": {
+                "enum": [
+                  "IMMEDIATE",
+                  "NEXT_TURN_BOUNDARY",
+                  "UNSUPPORTED"
+                ]
+              },
+              "tool_path": {
+                "enum": [
+                  "direct_mcp_http",
+                  "structured_native",
+                  "none"
+                ]
+              }
+            },
+            "required": [
+              "adapter_id",
+              "native_version",
+              "platform",
+              "conversation",
+              "managed_work",
+              "tool_path"
+            ],
+            "title": "capability",
+            "type": "object"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "connection_generation": {
+          "$ref": "#/$defs/revision"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "core_version": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "event_types": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "limits": {
+          "maxProperties": 32,
+          "type": "object"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "welcome"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "core_version",
+        "connection_generation",
+        "event_types",
+        "limits",
+        "capabilities"
+      ],
+      "title": "welcome",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "authorization_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "credential_epoch": {
+          "$ref": "#/$defs/revision"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "ticket": {
+          "description": "Sensitive attach ticket; never log or place in a URL.",
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "binding.attach"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "authorization_revision",
+        "credential_epoch",
+        "ticket"
+      ],
+      "title": "binding.attach",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "reason": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "binding.detach"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "reason"
+      ],
+      "title": "binding.detach",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "adapter_id": {
+                "enum": [
+                  "codex_app_server",
+                  "pi_rpc",
+                  "claude_stream",
+                  "claude_attach"
+                ]
+              },
+              "architecture": {
+                "maxLength": 80,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "candidate_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "fingerprint": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "trust": {
+                "enum": [
+                  "selected",
+                  "untrusted",
+                  "rejected"
+                ]
+              },
+              "version": {
+                "maxLength": 80,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "candidate_id",
+              "adapter_id",
+              "fingerprint",
+              "trust"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "inventory_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "inventory.snapshot"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "inventory_revision",
+        "candidates"
+      ],
+      "title": "inventory.snapshot",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "candidates": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "adapter_id": {
+                "enum": [
+                  "codex_app_server",
+                  "pi_rpc",
+                  "claude_stream",
+                  "claude_attach"
+                ]
+              },
+              "architecture": {
+                "maxLength": 80,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "candidate_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "fingerprint": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "trust": {
+                "enum": [
+                  "selected",
+                  "untrusted",
+                  "rejected"
+                ]
+              },
+              "version": {
+                "maxLength": 80,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "candidate_id",
+              "adapter_id",
+              "fingerprint",
+              "trust"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "inventory_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "removed_candidate_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "inventory.delta"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "inventory_revision",
+        "candidates",
+        "removed_candidate_ids"
+      ],
+      "title": "inventory.delta",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "else": {
+            "not": {
+              "required": [
+                "expected_turn_id"
+              ]
+            }
+          },
+          "if": {
+            "properties": {
+              "action": {
+                "enum": [
+                  "turn.interrupt",
+                  "turn.steer"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "expected_turn_id"
+            ]
+          }
+        }
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "runtime.open",
+            "turn.submit",
+            "turn.interrupt",
+            "turn.steer",
+            "runtime.close",
+            "approval.decide",
+            "input.provide"
+          ]
+        },
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "authorization_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "configuration_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "connection_generation": {
+          "$ref": "#/$defs/revision"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "expected_turn_id": {
+          "$ref": "#/$defs/id"
+        },
+        "intent_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "payload": {
+          "maxProperties": 32,
+          "type": "object"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_owner_generation": {
+          "$ref": "#/$defs/revision"
+        },
+        "type": {
+          "const": "operation.submit"
+        },
+        "workspace_binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "workspace_id": {
+          "$ref": "#/$defs/id"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "workspace_id",
+        "workspace_binding_id",
+        "session_id",
+        "operation_id",
+        "action",
+        "connection_generation",
+        "authorization_revision",
+        "configuration_revision",
+        "intent_hash",
+        "payload"
+      ],
+      "title": "operation.submit",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "error_code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "intent_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "native_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "possible_effect": {
+          "type": "boolean"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "retry_safe": {
+          "type": "boolean"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stage": {
+          "enum": [
+            "RECEIVED_DURABLE",
+            "PREPARED",
+            "SUBMISSION_STARTED",
+            "SUBMITTED",
+            "ACCEPTED",
+            "RUNNING",
+            "WAITING_INPUT",
+            "SUCCEEDED",
+            "FAILED",
+            "CANCELLED",
+            "OUTCOME_UNKNOWN"
+          ]
+        },
+        "type": {
+          "const": "operation.receipt"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "session_id",
+        "operation_id",
+        "intent_hash",
+        "stage",
+        "possible_effect",
+        "retry_safe"
+      ],
+      "title": "operation.receipt",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "operation.query"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "operation_id"
+      ],
+      "title": "operation.query",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "events": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "enum": [
+                  "lifecycle",
+                  "turn_state",
+                  "text_delta",
+                  "text_snapshot",
+                  "tool_activity",
+                  "approval_request",
+                  "input_request",
+                  "usage",
+                  "system_warning",
+                  "rate_limit",
+                  "error",
+                  "native_unknown"
+                ]
+              },
+              "executor_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "native_type": {
+                "maxLength": 160,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "operation_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "payload": {
+                "maxProperties": 32,
+                "type": "object"
+              },
+              "sequence": {
+                "maximum": 9007199254740991,
+                "minimum": 1,
+                "type": "integer"
+              },
+              "server_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "session_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "stream_epoch": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "server_id",
+              "executor_id",
+              "session_id",
+              "stream_epoch",
+              "sequence",
+              "category",
+              "payload"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stream_epoch": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "event.batch"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "session_id",
+        "stream_epoch",
+        "events"
+      ],
+      "title": "event.batch",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "sequence": {
+          "$ref": "#/$defs/revision"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stream_epoch": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "event.ack"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "session_id",
+        "stream_epoch",
+        "sequence"
+      ],
+      "title": "event.ack",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_ids": {
+          "items": {
+            "$ref": "#/$defs/id"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "type": {
+          "const": "reconcile.request"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "operation_ids",
+        "session_ids"
+      ],
+      "title": "reconcile.request",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "receipts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "operation_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "stage": {
+                "enum": [
+                  "RECEIVED_DURABLE",
+                  "PREPARED",
+                  "SUBMISSION_STARTED",
+                  "SUBMITTED",
+                  "ACCEPTED",
+                  "RUNNING",
+                  "WAITING_INPUT",
+                  "SUCCEEDED",
+                  "FAILED",
+                  "CANCELLED",
+                  "OUTCOME_UNKNOWN"
+                ]
+              }
+            },
+            "required": [
+              "operation_id",
+              "stage"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "snapshots": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "ownership": {
+                "enum": [
+                  "owned",
+                  "released",
+                  "unknown"
+                ]
+              },
+              "session_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "session_id",
+              "ownership"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "type": {
+          "const": "reconcile.report"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "receipts",
+        "snapshots"
+      ],
+      "title": "reconcile.report",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "authorization_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "connection_generation": {
+          "$ref": "#/$defs/revision"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "lease.renew"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "session_id",
+        "connection_generation",
+        "authorization_revision",
+        "lease_id"
+      ],
+      "title": "lease.renew",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "authorization_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "lease_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_owner_generation": {
+          "$ref": "#/$defs/revision"
+        },
+        "type": {
+          "const": "lease.granted"
+        },
+        "valid_for_ms": {
+          "maximum": 120000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "session_id",
+        "lease_id",
+        "valid_for_ms",
+        "session_owner_generation",
+        "authorization_revision"
+      ],
+      "title": "lease.granted",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "kind": {
+          "enum": [
+            "approval",
+            "input"
+          ]
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "proposal": {
+          "maxProperties": 32,
+          "type": "object"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_id": {
+          "$ref": "#/$defs/id"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "approval.request"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "session_id",
+        "operation_id",
+        "request_id",
+        "kind",
+        "proposal"
+      ],
+      "title": "approval.request",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "authorization_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "decision": {
+          "enum": [
+            "accept",
+            "decline",
+            "cancel"
+          ]
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_id": {
+          "$ref": "#/$defs/id"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "approval.decision"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "session_id",
+        "operation_id",
+        "request_id",
+        "decision",
+        "authorization_revision"
+      ],
+      "title": "approval.decision",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "connection_generation": {
+          "$ref": "#/$defs/revision"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "heartbeat"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "connection_generation"
+      ],
+      "title": "heartbeat",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 80,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "corrective_action": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "possible_effect": {
+          "type": "boolean"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "retry_safe": {
+          "type": "boolean"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "stage": {
+          "enum": [
+            "RECEIVED_DURABLE",
+            "PREPARED",
+            "SUBMISSION_STARTED",
+            "SUBMITTED",
+            "ACCEPTED",
+            "RUNNING",
+            "WAITING_INPUT",
+            "SUCCEEDED",
+            "FAILED",
+            "CANCELLED",
+            "OUTCOME_UNKNOWN"
+          ]
+        },
+        "type": {
+          "const": "error"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "code",
+        "stage",
+        "possible_effect",
+        "retry_safe"
+      ],
+      "title": "error",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-25-r3"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "reason": {
+          "maxLength": 4096,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "type": {
+          "const": "goaway"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "reason"
+      ],
+      "title": "goaway",
+      "type": "object"
+    }
+  ],
+  "title": "NXL v1 frame (development revision r3)"
+}

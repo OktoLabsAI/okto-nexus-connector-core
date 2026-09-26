@@ -1,0 +1,63 @@
+{
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/v1/capability.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "adapter_id": {
+      "enum": [
+        "codex_app_server",
+        "pi_rpc",
+        "claude_stream",
+        "claude_attach"
+      ]
+    },
+    "approvals": {
+      "type": "boolean"
+    },
+    "conversation": {
+      "type": "boolean"
+    },
+    "interrupt": {
+      "type": "boolean"
+    },
+    "managed_work": {
+      "type": "boolean"
+    },
+    "native_version": {
+      "maxLength": 80,
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "platform": {
+      "maxLength": 80,
+      "minLength": 1,
+      "type": "string"
+    },
+    "steer_timing": {
+      "enum": [
+        "IMMEDIATE",
+        "NEXT_TURN_BOUNDARY",
+        "UNSUPPORTED"
+      ]
+    },
+    "tool_path": {
+      "enum": [
+        "direct_mcp_http",
+        "structured_native",
+        "none"
+      ]
+    }
+  },
+  "required": [
+    "adapter_id",
+    "native_version",
+    "platform",
+    "conversation",
+    "managed_work",
+    "tool_path"
+  ],
+  "title": "capability",
+  "type": "object"
+}
