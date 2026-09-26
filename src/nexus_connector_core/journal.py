@@ -26,6 +26,8 @@ from .protocol import canonical_json
 class JournalLimits:
     max_storage_bytes: int = 256 * 1024 * 1024
     reserved_storage_bytes: int = 16 * 1024 * 1024
+    max_wal_bytes: int = 64 * 1024 * 1024
+    reserved_wal_bytes: int = 4 * 1024 * 1024
     total_event_bytes: int = 256 * 1024 * 1024
     reserved_event_bytes: int = 16 * 1024 * 1024
     server_event_bytes: int = 256 * 1024 * 1024
@@ -54,6 +56,7 @@ class JournalLimits:
                 raise ValueError(f"invalid journal limit: {field.name}")
         for maximum, reserve in (
             (self.max_storage_bytes, self.reserved_storage_bytes),
+            (self.max_wal_bytes, self.reserved_wal_bytes),
             (self.total_event_bytes, self.reserved_event_bytes),
             (self.server_event_bytes, self.server_reserved_bytes),
             (self.session_event_bytes, self.session_reserved_bytes),
@@ -738,6 +741,18 @@ class SQLiteJournal:
                             possible_effect=possible_effect,
                             retry_safe=not possible_effect,
                             operation_id=operation_id)
+        # Hard WAL bound: maintenance (a bounded truncate checkpoint) was
+        # already attempted before this transaction; if the WAL is still
+        # over its ceiling - typically a pinned reader prevents truncation -
+        # admissions stop honestly instead of growing without bound. The
+        # reserve stays available for critical writes only.
+        wal_ceiling = (self.limits.max_wal_bytes if critical else
+                       self.limits.max_wal_bytes - self.limits.reserved_wal_bytes)
+        if status.wal_bytes + estimate > wal_ceiling:
+            raise CoreError("JOURNAL_FULL", stage,
+                            possible_effect=possible_effect,
+                            retry_safe=not possible_effect,
+                            operation_id=operation_id)
 
     def _recover_normal_storage(self, estimate_bytes: int, *, stage: str,
                                 possible_effect: bool = False,
@@ -752,9 +767,12 @@ class SQLiteJournal:
             self.limits.max_storage_bytes - self.limits.reserved_storage_bytes,
             self.limits.max_storage_bytes * 4 // 5,
         )
+        wal_ceiling = self.limits.max_wal_bytes - self.limits.reserved_wal_bytes
         if (status.page_size and not logical_pressure and
                 status.total_bytes + estimate_bytes + status.page_size * 4
-                <= normal_ceiling):
+                <= normal_ceiling and
+                status.wal_bytes + estimate_bytes + status.page_size * 4
+                <= wal_ceiling):
             return
         try:
             self._compact_acked_locked(128, priority_session=priority_session)

@@ -52,6 +52,7 @@ def _kernel():
         "CreateJobObjectW": ([ctypes.c_void_p, w.LPCWSTR], w.HANDLE),
         "SetInformationJobObject": ([w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD], w.BOOL),
         "CloseHandle": ([w.HANDLE], w.BOOL),
+        "QueryInformationJobObject": ([w.HANDLE, ctypes.c_int, ctypes.c_void_p, w.DWORD, ctypes.POINTER(w.DWORD)], w.BOOL),
         "TerminateJobObject": ([w.HANDLE, w.UINT], w.BOOL),
         "InitializeProcThreadAttributeList": ([ctypes.c_void_p, w.DWORD, w.DWORD, ctypes.POINTER(SIZE_T)], w.BOOL),
         "UpdateProcThreadAttribute": ([ctypes.c_void_p, w.DWORD, SIZE_T, ctypes.c_void_p, SIZE_T, ctypes.c_void_p, ctypes.c_void_p], w.BOOL),
@@ -80,6 +81,17 @@ class OwnedWindowsPopen(subprocess.Popen):
         try:
             limits = _ExtendedLimits()
             limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
+            self._requested_tree_limit = kwargs.pop("max_tree_processes", None)
+            self._active_process_limit = False
+            if self._requested_tree_limit is not None:
+                if (type(self._requested_tree_limit) is not int or
+                        not 1 <= self._requested_tree_limit <= 0xFFFFFFFF):
+                    raise ValueError("invalid owned tree process limit")
+                # Kernel-enforced: CreateProcess inside the job fails once
+                # the active process count reaches the limit.
+                limits.basic.flags |= 0x8  # JOB_OBJECT_LIMIT_ACTIVE_PROCESS
+                limits.basic.active_process_limit = self._requested_tree_limit
+                self._active_process_limit = True
             _check(self._kernel.SetInformationJobObject(self._job, 9, ctypes.byref(limits), ctypes.sizeof(limits)))
             super().__init__(*args, **kwargs)
         except BaseException:
@@ -140,6 +152,46 @@ class OwnedWindowsPopen(subprocess.Popen):
             if self._job:
                 self._kernel.CloseHandle(self._job)
                 self._job = None
+
+    def owned_tree_pids(self, limit: int = 256) -> tuple[list[int], bool]:
+        """Bounded census of the PIDs currently inside this job object."""
+        if (type(limit) is not int or not 1 <= limit <= 4096):
+            raise ValueError("invalid census limit")
+        with self._job_lock:
+            job = self._job
+            if not job:
+                return [], False
+
+        class _ProcessIdList(ctypes.Structure):
+            _fields_ = [("assigned", w.DWORD),
+                        ("in_list", w.DWORD),
+                        ("list", w.WPARAM * 1)]
+
+        capacity = limit
+        while True:
+            buffer = ctypes.create_string_buffer(
+                ctypes.sizeof(_ProcessIdList) + ctypes.sizeof(w.WPARAM) * (capacity - 1))
+            view = ctypes.cast(buffer, ctypes.POINTER(_ProcessIdList)).contents
+            if self._kernel.QueryInformationJobObject(
+                    job, 3, buffer, ctypes.sizeof(buffer), None):
+                # Success: the whole list fit; nothing was dropped.
+                count = view.in_list
+                entries = ctypes.cast(
+                    ctypes.addressof(buffer) + _ProcessIdList.list.offset,
+                    ctypes.POINTER(w.WPARAM))
+                return ([int(entries[index]) for index in range(count)],
+                        False)
+            error = ctypes.get_last_error()
+            if error == 234 and view.assigned > capacity:  # ERROR_MORE_DATA
+                if view.assigned > 4096:
+                    entries = ctypes.cast(
+                        ctypes.addressof(buffer) + _ProcessIdList.list.offset,
+                        ctypes.POINTER(w.WPARAM))
+                    return ([int(entries[index]) for index in range(limit)],
+                            True)
+                capacity = view.assigned
+                continue
+            raise ctypes.WinError(error)
 
     def terminate(self):
         with self._job_lock:

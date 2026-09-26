@@ -12,7 +12,21 @@ Only an owned managed process tree may receive a force-stop request. An attach
 target is externally owned. Shutdown, clock rollback, disk pressure and
 provider write errors can leave an `unknown` effect/ownership; callers must
 retain those facts and reconcile rather than silently retry or report success.
-SQLite logical quotas and checkpointing are not a complete disk quota.
+SQLite logical quotas and checkpointing are not a complete disk quota; the
+journal additionally enforces a hard WAL admission ceiling with automatic
+bounded-truncate maintenance — a pinned reader that prevents truncation
+stops new admissions honestly (`JOURNAL_FULL`, with a reserve kept for
+critical writes) instead of letting the WAL grow without bound.
+
+Owned launches may set `max_tree_processes`: on Windows this is
+kernel-enforced through the job object's active-process limit (process
+creation inside the tree fails once the cap is reached); on Linux it is
+recorded but not kernel-enforced and is reported as such.
+`owned_tree_census` offers a bounded read-only PID census of one owned tree
+(job object on Windows; the guardian plus the isolated native session's
+process group on Linux). Both are observations, never authority to signal
+or adopt a PID, and descendants that escape via `setsid` remain outside
+census and containment alike.
 
 The release workflow is manual, main-only for publication and separates the
 build/test job from a PyPI-environment OIDC job. It requires reviewed version,

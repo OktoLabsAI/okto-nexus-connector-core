@@ -44,7 +44,7 @@ parciais não convertem automaticamente um gate em PASS.
 | TK-37 | Fault matrix | NOT_RUN | — |
 | TK-38 | SO real | NOT_RUN | — |
 | TK-39 | Fuzz | NOT_RUN | — |
-| TK-40 | Fairness | NOT_RUN | — |
+| TK-40 | Fairness | PASS | Combined synthetic campaigns on Windows/WSL2: per-session/global byte-item caps with noisy-session eviction and large-event preflight, slow-subscriber isolation through real child stdout with targeted interrupt surviving saturation, four-process journal fairness across servers/sessions, a 100k-operation campaign, and sustained 45 s four-session runs (1,374/1,826 turns, 13,768/18,288 events) with bounded journals, zero faults and typed urgent-control outcomes (`core-engineering-closures-2026-09-26.md` and prior fairness evidence). Real-provider sustained load remains open and is not part of these clauses. |
 | TK-41 | Journal alternativo | NOT_RUN | — |
 | TK-42 | Packaging | NOT_RUN | — |
 | TK-43 | Dois consumidores | NOT_RUN | — |

@@ -803,3 +803,24 @@ passes on WSL2. TK-25 (real out-of-order responses) and the retry clause
 of TK-26 remain blocked: the real providers cannot be forced into
 out-of-order replies or provider-side failures on demand, and the
 synthetic coverage is already recorded.
+K04/K05/K10 engineering-closure update: the journal now enforces a hard WAL
+admission ceiling (`max_wal_bytes`/`reserved_wal_bytes`) with automatic
+bounded-truncate maintenance - a pinned reader stops admissions with a
+typed JOURNAL_FULL and releasing it self-recovers; critical writes keep a
+reserve and hit the hard cap. Owned launches can set `max_tree_processes`,
+kernel-enforced via the Windows job object's active-process limit and
+explicitly reported as unenforced on Linux, plus a bounded read-only
+`owned_tree_census` on both OSes (job members; guardian + native session
+group). Authorized real campaigns: managed shutdown during live turns on
+all three qualified adapters (bounded 3.1-3.9 s, honest per-session
+outcomes, CANCELLED/SUCCEEDED receipts, late submits refused), and a real
+Codex cross-process resume (persisted rollout located by thread id, fresh
+app-server resumed the exact idle thread and completed another turn).
+Sustained 45 s four-session saturation campaigns ran on Windows and WSL2
+(1,374/1,826 turns; 13,768/18,288 events; bounded journals; zero faults;
+typed urgent-control outcomes) - TK-40 moved to PASS on combined synthetic
+evidence with scope noted. External blockers recorded: physical
+filesystem-full needs root/admin (unavailable), and no native Linux
+harness exists for attach/Linux provider gates. Full Python 3.13 suites
+passed Windows 622/74 and WSL2 680/16. See
+`evidence/core-engineering-closures-2026-09-26.md`.

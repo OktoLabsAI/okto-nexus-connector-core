@@ -21,6 +21,14 @@ class OwnedLinuxPopen(subprocess.Popen):
     def __init__(self, argv, **kwargs):
         if sys.platform != "linux":
             raise RuntimeError("Linux process ownership requires pidfd support")
+        # Recorded for the census surface; the Linux backend has no
+        # kernel-enforced active-process limit, so this stays observability
+        # only and is reported as unenforced rather than silently dropped.
+        self._requested_tree_limit = kwargs.pop("max_tree_processes", None)
+        if self._requested_tree_limit is not None and (
+                type(self._requested_tree_limit) is not int or
+                self._requested_tree_limit < 1):
+            raise ValueError("invalid owned tree process limit")
         if isinstance(argv, (str, bytes)) or any(kwargs.get(key) for key in ("shell", "preexec_fn", "executable")):
             raise ValueError("Owned Linux processes require argv without shell/preexec overrides")
         if kwargs.get("pass_fds"):
@@ -76,6 +84,47 @@ class OwnedLinuxPopen(subprocess.Popen):
             if self._owns_slot:
                 self._owns_slot = False
                 self._slot_pool.release()
+
+    def owned_tree_pids(self, limit: int = 256) -> tuple[list[int], bool]:
+        """Bounded census of the owned tree: guardian plus the isolated
+        native session it reaps.
+
+        The guardian spawns the native process with ``start_new_session```,
+        so the tree is the guardian's own group plus the native leader's
+        group. Descendants that escape the native group (another setsid) are
+        outside this census and the guardian's containment - the same
+        documented boundary.
+        """
+        if (type(limit) is not int or not 1 <= limit <= 4096):
+            raise ValueError("invalid census limit")
+        try:
+            os.kill(self.pid, 0)
+        except ProcessLookupError:
+            return [], False
+        records: list[tuple[int, int, int]] = []
+        for entry in os.listdir("/proc"):
+            if not entry.isdigit():
+                continue
+            try:
+                with open(f"/proc/{entry}/stat", "rb") as stream:
+                    # After the comm field in parentheses: state(0), ppid(1),
+                    # pgrp(2).
+                    stats = stream.read(4096).rsplit(b")", 1)[1].split()
+                records.append((int(entry), int(stats[1]), int(stats[2])))
+            except (OSError, ValueError, IndexError):
+                continue
+        leaders = {pid for pid, ppid, _pgid in records if ppid == self.pid}
+        groups = {self.pid} | leaders
+        pids: list[int] = []
+        overflow = False
+        for pid, _ppid, pgid in records:
+            if pgid in groups or pid in groups:
+                if len(pids) < limit:
+                    pids.append(pid)
+                else:
+                    overflow = True
+                    break
+        return pids, overflow
 
     def _close_ownership_fds(self):
         with self._ownership_lock:
