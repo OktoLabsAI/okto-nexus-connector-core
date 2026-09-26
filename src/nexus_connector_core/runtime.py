@@ -383,7 +383,12 @@ class LocalRuntimeCore:
             semantic = Operation(operation.operation_id, operation.session_id,
                                  "turn.interrupt", {}, operation.expected_turn_id)
             return await self._send(semantic, context, "interrupt", {})
-        if operation.verb != "steer" or not operation.text or not operation.expected_turn_id:
+        # Steer targeting is adapter-specific: Codex correlates an explicit
+        # native turn ID, while Pi has no native turn ID on the wire and is
+        # steered ID-less against its observed active agent run. The
+        # per-adapter gate in _send refuses the shapes an adapter cannot
+        # target before operation admission.
+        if operation.verb != "steer" or not operation.text:
             raise CoreError("CAPABILITY_UNSUPPORTED", "control")
         if len(operation.text.encode("utf-8")) > 1024 * 1024:
             raise CoreError("VALIDATION_ERROR", "control")
@@ -546,8 +551,23 @@ class LocalRuntimeCore:
                     raise CoreError("SESSION_CLOSING", "admission")
                 if binding.faulted:
                     raise CoreError("EVENT_STREAM_UNAVAILABLE", "admission")
-                if verb == "steer" and binding.adapter_id != "codex_app_server":
-                    raise CoreError("CAPABILITY_UNSUPPORTED", "control")
+                if verb == "steer":
+                    # Codex steer must name the active native turn ID. Pi
+                    # steer is the ID-less contract: the bridge targets the
+                    # agent run it observed starting for the active submit
+                    # (native queue semantics, next turn boundary) and
+                    # refuses before the write when there is none. Supplying
+                    # a native turn ID for Pi is refused the same way, so
+                    # neither adapter silently accepts an untargetable
+                    # steer. Other adapters keep refusing steer outright.
+                    if binding.adapter_id == "codex_app_server":
+                        if not semantic.expected_turn_id:
+                            raise CoreError("CAPABILITY_UNSUPPORTED", "control")
+                    elif binding.adapter_id == "pi_rpc":
+                        if semantic.expected_turn_id is not None:
+                            raise CoreError("CAPABILITY_UNSUPPORTED", "control")
+                    else:
+                        raise CoreError("CAPABILITY_UNSUPPORTED", "control")
                 if semantic.action not in binding.context.allowed_actions:
                     raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
 

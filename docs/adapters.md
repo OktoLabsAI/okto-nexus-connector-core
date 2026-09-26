@@ -53,8 +53,20 @@ for this compound launch, not `node --version`. A rejected `prompt`, `steer`
 or `abort` response is surfaced as an error and fails the send; because bytes
 crossed the native pipe, the Core journal conservatively records an unknown
 possible effect, never a submitted/successful command. This does not claim
-the rejection is a pre-write refusal. Public Pi steer remains unavailable
-until an ID-less target/queue contract is qualified.
+the rejection is a pre-write refusal.
+
+Public Pi steer now uses an ID-less target contract. `turn.steer` is
+admitted only without `expected_turn_id`; naming a native turn ID is
+refused before operation admission because Pi's wire has no turn
+vocabulary. The target is the agent run Core observed starting
+(`agent_start`) for the active submit: with no active submit or no observed
+start, the bridge refuses before the native write with a retry-safe
+`STALE_TURN`. Delivery follows Pi's native next-turn-boundary steering
+queue (`queue_update`), and the steered content remains part of the same
+active turn; a follow-up after `agent_settled` is a new `turn.submit`.
+This contract is verified against contained peers, the copied-adapter
+bridge and the public runtime/journal; real-provider steer/queue behavior
+remains unqualified.
 
 Native approval/input handling is disabled by default in the copied Codex
 and Claude stream adapters. An explicitly opted-in factory can expose their

@@ -15,7 +15,8 @@ from pathlib import Path
 
 import nexus_connector_core as core_package
 from nexus_connector_core import (
-    CloseOperation, ExecutionContext, InstallationCandidate, LaunchIntent,
+    CloseOperation, ControlOperation, CoreError, ExecutionContext,
+    InstallationCandidate, LaunchIntent,
     LocalRuntimeCore, OpenOperation, OperationReceipt, RuntimeEvent,
     SessionKey, ShutdownPolicy, TurnOperation,
 )
@@ -102,6 +103,55 @@ async def _embedded_host() -> None:
             report = await runtime.shutdown(ShutdownPolicy())
             assert report.session_outcomes[SessionKey(
                 "server", "executor", "session")] == "already_closed"
+
+            # Second consumer shape on the same journal: the ID-less Pi
+            # steer contract through the same public API. Steer without a
+            # native turn ID is admitted; naming one is refused before any
+            # admission for this adapter.
+            pi_binary = root / "selected-pi-cli.js"
+            pi_binary.write_bytes(b"synthetic selected pi cli")
+            pi_candidate = InstallationCandidate(
+                "pi_rpc", str(pi_binary), fingerprint(pi_binary),
+                "explicit", "selected")
+            pi_factory = _Factory()
+            pi_runtime = LocalRuntimeCore(
+                journal, pi_factory, candidates={"pi_rpc": pi_candidate},
+                workspace_roots={"workspace": str(root)})
+            pi_context = ExecutionContext(
+                "server", "executor", "binding", "agent", "workspace",
+                1, 1, 1, time.monotonic() + 60,
+                frozenset({"runtime.open", "turn.submit", "turn.steer",
+                           "runtime.close"}))
+            pi_prepared = await pi_runtime.prepare(
+                LaunchIntent("agent", "workspace", "pi_rpc"), pi_context)
+            opened = await pi_runtime.open(
+                OpenOperation("pi-open", "pi-session", "pi-epoch", pi_prepared),
+                pi_context)
+            assert opened.stage == "SUBMITTED"
+            submitted = await pi_runtime.submit(
+                TurnOperation("pi-turn", "pi-session", "hello"), pi_context)
+            assert submitted.stage == "SUBMITTED" and submitted.possible_effect
+            steered = await pi_runtime.control(
+                ControlOperation("pi-steer", "pi-session", "steer", "redirect"),
+                pi_context)
+            assert steered.stage == "SUBMITTED"
+            assert pi_factory.native.sent == [
+                ("send_turn", "pi-turn"), ("steer", "pi-steer")]
+            try:
+                await pi_runtime.control(
+                    ControlOperation("pi-native-target", "pi-session", "steer",
+                                     "x", "native-turn-1"), pi_context)
+            except CoreError as error:
+                assert error.code == "CAPABILITY_UNSUPPORTED"
+            else:
+                raise AssertionError(
+                    "pi steer naming a native turn ID must be refused")
+            await pi_runtime.close(
+                CloseOperation("pi-close", "pi-session"), pi_context)
+            assert pi_factory.native.stopped
+            report = await pi_runtime.shutdown(ShutdownPolicy())
+            assert report.session_outcomes[SessionKey(
+                "server", "executor", "pi-session")] == "already_closed"
         finally:
             journal.close()
 

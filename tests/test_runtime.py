@@ -1618,6 +1618,33 @@ def test_non_codex_steer_refused_before_admission(tmp_path):
     asyncio.run(run())
 
 
+def test_pi_steer_is_admitted_without_native_turn_id(tmp_path):
+    async def run():
+        runtime, journal, factory = make_runtime(tmp_path, adapter_id="pi_rpc")
+        allowed = context(actions={"runtime.open", "turn.steer", "runtime.close"})
+        prepared = await runtime.prepare(LaunchIntent("agent", "ws", "pi_rpc"),
+                                         allowed)
+        await runtime.open(OpenOperation("open", "session", "epoch", prepared), allowed)
+        receipt = await runtime.control(
+            ControlOperation("steer", "session", "steer", "new direction"),
+            allowed)
+        assert receipt.stage == "SUBMITTED"
+        assert factory.native.sent == [("steer", {"text": "new direction"}, "steer")]
+        assert factory.native.targets == [None]
+        # Pi's wire has no native turn vocabulary: naming one is refused
+        # before admission instead of being silently ignored or coerced.
+        with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
+            await runtime.control(ControlOperation(
+                "native-target", "session", "steer", "new direction",
+                "native-turn-1"), allowed)
+        assert (await runtime.reconcile(ReconcileRequest(
+            "srv", "exe", ("native-target",), ()))).receipts == (None,)
+        await runtime.shutdown(ShutdownPolicy())
+        journal.close()
+
+    asyncio.run(run())
+
+
 def test_stream_fault_does_not_claim_process_was_released(tmp_path):
     async def run():
         runtime, journal, factory = make_runtime(tmp_path)

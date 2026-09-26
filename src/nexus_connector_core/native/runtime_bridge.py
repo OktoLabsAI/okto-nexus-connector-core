@@ -113,6 +113,16 @@ class CopiedAdapterSession:
                     expected_turn_id != self._active_turn_id):
                 raise RuntimeCommandNotSent("expected native turn is not active",
                                             code="STALE_TURN")
+            if (verb == "steer" and
+                    self._session.harness_kind == "pi" and
+                    not self._pi_started_for_active):
+                # Pi's wire carries no native turn ID, so the only honest
+                # ID-less steer target is the agent run this bridge has
+                # observed starting for the active submit. Refusing before
+                # the write keeps it a durable safe failure, never a guess
+                # that lands on a turn that never started.
+                raise RuntimeCommandNotSent(
+                    "no started pi agent run to steer", code="STALE_TURN")
         if verb == "send_turn":
             if self._active_operation_id is not None:
                 raise CoreError("STALE_TURN", "native_send")

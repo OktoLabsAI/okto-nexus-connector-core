@@ -12,7 +12,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `ExecutionContext` | Host-issued server/executor/binding/agent/workspace identity, revisions, generations, monotonic lease deadline and allowed actions. Never derive it from a peer payload. |
 | `DiscoveryRequest`, `Inventory`, `InstallationCandidate` | Discover or pass explicitly selected local native candidates; discovery is not qualification. |
 | `LaunchIntent`, `PreparedLaunch`, `OpenOperation` | Prepare a selected managed launch and open a session. `open` revalidates binary/profile/root before native effect. |
-| `TurnOperation`, `ControlOperation`, `CloseOperation` | Submit text, interrupt/steer a targeted turn, or close an owned session. Use a new operation ID for each new intent. |
+| `TurnOperation`, `ControlOperation`, `CloseOperation` | Submit text, interrupt/steer a targeted turn, or close an owned session. Steer targeting is adapter-specific (see below). Use a new operation ID for each new intent. |
 | `NativeApprovalOperation` | Host-authorized response to one pending Codex/Claude native approval or input request. The host passes the redacted event's `native_approval` projection; the adapter checks it against its original in-memory request. |
 | `Operation`, `OperationKey`, `OperationReceipt`, `intent_hash`, `submit_frame_intent_hash` | Semantic intent identity and namespace-scoped durable receipt. Reuse an operation ID only for the identical intent. |
 | `SessionKey`, `RuntimeSnapshot`, `ReconcileRequest`, `ReconcileReport` | Namespace-scoped inspection and recovery queries. A missing process-local handle yields unknown ownership, not proof of stop. |
@@ -57,6 +57,22 @@ The opt-in also requires both `approval.decide` and `input.provide` in the
 launch context; otherwise launch refuses before resolving credentials.
 `compact_events(max_rows=...)` accepts only an integer from 1 to 4,096
 (default 128); invalid batches fail before calling the journal port.
+`turn.steer` targeting is adapter-specific. The Codex app-server adapter
+requires `expected_turn_id` naming the active native turn and refuses a
+steer without one before admission. The Pi RPC adapter has no native turn
+ID on the wire: its steer is admitted only with `expected_turn_id=None`,
+targets the agent run Core observed starting (`agent_start`) for the active
+submit, and refuses before admission when a native turn ID is supplied.
+The copied-adapter bridge refuses an ID-less Pi steer before the native
+write with a retry-safe `STALE_TURN` when no submit is active or its agent
+run has not been observed starting; delivery then follows Pi's native
+next-turn-boundary steering queue (`queue_update`), not immediate
+injection, and the steered content stays part of the same active turn. A
+Pi follow-up after `agent_settled` is a new `turn.submit`. Every steer
+still requires `turn.steer` in the host-issued `ExecutionContext` and in
+the active binding. This contract is exercised against contained peers
+and the public runtime; real-provider steer/queue behavior remains
+unqualified.
 `runtime.open` atomically claims its session ID in the journal namespace;
 host journal adapters must implement the `claim_session` admission flag and
 atomically retain the supplied opening generations with that claim. Legacy

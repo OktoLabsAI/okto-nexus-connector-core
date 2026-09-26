@@ -665,6 +665,52 @@ def test_pi_terminal_needs_active_agent_start(stale_terminal_first):
     asyncio.run(run())
 
 
+def test_pi_steer_targets_only_the_observed_active_agent_run():
+    class TurnConnector(FakeCopiedConnector):
+        def events(self):
+            yield HarnessEvent("native-session", "pi", "tool_activity",
+                               "agent_start", "2026-09-26T00:00:00Z", {},
+                               delivery_phase="started")
+            yield HarnessEvent("native-session", "pi", "turn_completed",
+                               "agent_settled", "2026-09-26T00:00:00Z", {},
+                               delivery_phase="terminal",
+                               delivery_outcome="success")
+
+    async def run():
+        connector = TurnConnector()
+        harness = HarnessSession("native-session", "pi", "agent", "STARTING",
+                                 HarnessCapabilities(False, "NEXT_TURN_BOUNDARY",
+                                                     True, False, True),
+                                 "2026-09-26T00:00:00Z")
+        bridge = CopiedAdapterSession(connector, harness,
+                                      session_id="public-session",
+                                      stream_epoch="epoch", context=context())
+        with pytest.raises(RuntimeCommandNotSent, match="no active turn"):
+            await bridge.send("steer", {"text": "early"}, "steer-idle")
+        await bridge.send("send_turn", {"text": "hello"}, "op-1")
+        # The submit is active but its agent run has not been observed
+        # starting yet: refusing here is proven before any native write.
+        with pytest.raises(RuntimeCommandNotSent,
+                           match="no started pi agent run") as exc:
+            await bridge.send("steer", {"text": "too early"}, "steer-early")
+        assert exc.value.code == "STALE_TURN"
+        assert [command.verb for command in connector.sent] == ["send_turn"]
+        stream = bridge.events()
+        assert (await anext(stream)).native_type == "agent_start"
+        await bridge.send("steer", {"text": "redirect"}, "steer-1")
+        assert connector.sent[-1].verb == "steer"
+        assert connector.sent[-1].payload == {"text": "redirect"}
+        terminal = await anext(stream)
+        assert terminal.native_type == "agent_settled"
+        assert terminal.operation_id == "op-1"
+        assert not bridge.active_turn()
+        with pytest.raises(RuntimeCommandNotSent, match="no active turn"):
+            await bridge.send("steer", {"text": "late"}, "steer-late")
+        await bridge.close()
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("stale_turn_id", ["native-turn-1", None])
 def test_codex_old_or_uncorrelated_terminal_cannot_settle_new_turn(stale_turn_id):
     class TurnConnector(FakeCopiedConnector):
@@ -1206,6 +1252,161 @@ def test_pi_stale_idless_terminal_cannot_complete_new_public_operation(tmp_path)
             assert error.payload["code"] == "EVENT_STREAM_UNAVAILABLE"
             receipt = await journal.get_receipt(OperationKey("srv", "exe", "turn"))
             assert receipt.stage == "SUBMITTED" and receipt.possible_effect
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0.1, 0.1))
+            journal.close()
+
+    asyncio.run(run())
+
+
+def test_pi_public_idless_steer_settles_active_turn(tmp_path):
+    peer = Path(__file__).parent / "fixtures" / "pi_rpc_peer.py"
+
+    class FixtureFactory:
+        async def open(self, prepared, session_id, authority, *, stream_epoch):
+            connector = PiRpcConnector(
+                command=(sys.executable, str(peer), str(tmp_path / "pi-log.jsonl")),
+                version_command=(sys.executable, "-c", "print('0.85.1')"),
+                cwd=str(tmp_path), handshake_timeout_s=5, command_timeout_s=5)
+            native = await asyncio.to_thread(
+                connector.start, owning_agent_id=authority.agent_id)
+            return CopiedAdapterSession(
+                connector, native, session_id=session_id,
+                stream_epoch=stream_epoch, context=authority)
+
+    async def run():
+        candidate = InstallationCandidate(
+            "pi_rpc", sys.executable, fingerprint(Path(sys.executable)),
+            "explicit", "selected")
+        journal = SQLiteJournal(tmp_path / "journal.db")
+        runtime = LocalRuntimeCore(
+            journal, FixtureFactory(), candidates={"pi_rpc": candidate},
+            workspace_roots={"ws": str(tmp_path)})
+        authority = replace(context(), allowed_actions=frozenset({
+            "runtime.open", "turn.submit", "turn.steer", "turn.interrupt"}))
+        try:
+            prepared = await runtime.prepare(
+                LaunchIntent("agent", "ws", "pi_rpc"), authority)
+            await runtime.open(
+                OpenOperation("open", "public-session", "epoch", prepared),
+                authority)
+            await runtime.submit(
+                TurnOperation("turn", "public-session", "TRIGGER_HOLD_FOR_STEER"),
+                authority)
+
+            async def native_type(native):
+                async for event in runtime.events(EventCursor(
+                        "srv", "exe", "public-session", "epoch")):
+                    if event.native_type == native:
+                        return event
+
+            await asyncio.wait_for(native_type("agent_start"), timeout=5)
+            steer = await runtime.control(
+                ControlOperation("steer", "public-session", "steer",
+                                 "redirect to tests"), authority)
+            assert steer.stage == "SUBMITTED" and steer.possible_effect
+            queued = await asyncio.wait_for(native_type("queue_update"),
+                                            timeout=5)
+            assert queued.payload.get("steering") == ["redirect to tests"]
+            terminal = await asyncio.wait_for(native_type("agent_settled"),
+                                              timeout=10)
+            assert terminal.operation_id == "turn"
+            assert terminal.payload.get("delivery_phase") == "terminal"
+            receipt = await journal.get_receipt(OperationKey("srv", "exe", "turn"))
+            assert receipt.stage == "SUCCEEDED"
+            # The steer command's own receipt stays at accepted-possible-
+            # effect: only the active submit's terminal settles, and the
+            # steered content is part of that same turn.
+            steer_receipt = await journal.get_receipt(
+                OperationKey("srv", "exe", "steer"))
+            assert steer_receipt.stage == "SUBMITTED"
+            # A Pi steer naming a native turn ID is refused before admission.
+            with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
+                await runtime.control(
+                    ControlOperation("native-target", "public-session", "steer",
+                                     "x", "native-turn-1"), authority)
+            assert (await journal.get_receipt(
+                OperationKey("srv", "exe", "native-target"))) is None
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0.1, 0.1))
+            journal.close()
+
+    asyncio.run(run())
+
+
+def test_pi_public_interrupt_settles_and_allows_follow_up_submit(tmp_path):
+    peer = Path(__file__).parent / "fixtures" / "pi_rpc_peer.py"
+
+    class FixtureFactory:
+        async def open(self, prepared, session_id, authority, *, stream_epoch):
+            connector = PiRpcConnector(
+                command=(sys.executable, str(peer), str(tmp_path / "pi-log.jsonl")),
+                version_command=(sys.executable, "-c", "print('0.85.1')"),
+                cwd=str(tmp_path), handshake_timeout_s=5, command_timeout_s=5)
+            native = await asyncio.to_thread(
+                connector.start, owning_agent_id=authority.agent_id)
+            return CopiedAdapterSession(
+                connector, native, session_id=session_id,
+                stream_epoch=stream_epoch, context=authority)
+
+    async def run():
+        candidate = InstallationCandidate(
+            "pi_rpc", sys.executable, fingerprint(Path(sys.executable)),
+            "explicit", "selected")
+        journal = SQLiteJournal(tmp_path / "journal.db")
+        runtime = LocalRuntimeCore(
+            journal, FixtureFactory(), candidates={"pi_rpc": candidate},
+            workspace_roots={"ws": str(tmp_path)})
+        authority = replace(context(), allowed_actions=frozenset({
+            "runtime.open", "turn.submit", "turn.steer", "turn.interrupt"}))
+        try:
+            prepared = await runtime.prepare(
+                LaunchIntent("agent", "ws", "pi_rpc"), authority)
+            await runtime.open(
+                OpenOperation("open", "public-session", "epoch", prepared),
+                authority)
+            await runtime.submit(
+                TurnOperation("turn-1", "public-session", "TRIGGER_HOLD_FOR_ABORT"),
+                authority)
+
+            async def wait_terminal(operation_id):
+                async for event in runtime.events(EventCursor(
+                        "srv", "exe", "public-session", "epoch")):
+                    if (event.native_type == "agent_settled" and
+                            event.payload.get("delivery_phase") == "terminal" and
+                            event.operation_id == operation_id):
+                        return event
+
+            async def wait_started():
+                async for event in runtime.events(EventCursor(
+                        "srv", "exe", "public-session", "epoch")):
+                    if event.native_type == "agent_start":
+                        return event
+
+            await asyncio.wait_for(wait_started(), timeout=5)
+            interrupt = await runtime.control(
+                ControlOperation("interrupt-1", "public-session", "interrupt"),
+                authority)
+            assert interrupt.stage == "SUBMITTED" and interrupt.possible_effect
+            terminal = await asyncio.wait_for(wait_terminal("turn-1"), timeout=10)
+            assert terminal.operation_id == "turn-1"
+            receipt = await journal.get_receipt(
+                OperationKey("srv", "exe", "turn-1"))
+            # The aborted peer turn ends with stopReason "error", which the
+            # reducer maps to a FAILED terminal - never a silent success.
+            assert receipt.stage == "FAILED"
+            # Follow-up after the real settle is a new submit, not a replay:
+            # the aborted turn no longer occupies the session's turn slot.
+            follow_up = await runtime.submit(
+                TurnOperation("turn-2", "public-session", "follow up"),
+                authority)
+            assert follow_up.stage == "SUBMITTED"
+            terminal_two = await asyncio.wait_for(wait_terminal("turn-2"),
+                                                  timeout=10)
+            assert terminal_two.operation_id == "turn-2"
+            second = await journal.get_receipt(
+                OperationKey("srv", "exe", "turn-2"))
+            assert second.stage == "SUCCEEDED"
         finally:
             await runtime.shutdown(ShutdownPolicy(0.1, 0.1))
             journal.close()
