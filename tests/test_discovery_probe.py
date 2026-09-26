@@ -203,6 +203,42 @@ def test_qualification_requires_exact_platform_architecture_and_binary(monkeypat
         "native_version": "2.1.282", "platform": sys.platform,
         "architecture": "x86_64", "fingerprint": "sha256:abc",
     }).conversation
+
+
+def test_production_allowlist_grants_only_the_recorded_real_builds():
+    """The 2026-09-26 real-campaign grants are exact and control-aware."""
+    codex = ("codex", "0.157.0", "win32", "x86_64",
+             "sha256:ed1c7b36e44536809c868864c833af8a857f56599a7a7fe23b908a1ba1093b1f")
+    pi = ("pi", "0.87.1", "win32", "x86_64",
+          "sha256:3765c5c53d04d5ef6ed4d1309284338aa14104228280fd643ec4cd12fa862058")
+    claude = ("claude_code", "2.1.282", "win32", "x86_64",
+              "sha256:fc0e3af017705624b9e1bce913f72761864ff994804514da1f5e41380fca4484")
+    assert compatibility.QUALIFIED_BUILDS == compatibility.QUALIFIED_CONTROL_BUILDS
+    for key in (codex, pi, claude):
+        assert compatibility.qualified_build(*key)
+        assert compatibility.qualified_build(*key, control=True)
+        # Any drift — version, platform, architecture or file bytes — loses
+        # the grant entirely.
+        for drifted in ((key[0], "9.9.9", *key[2:]),
+                        (key[0], key[1], "linux", *key[3:]),
+                        (key[0], key[1], key[2], "aarch64", *key[4:]),
+                        (key[0], key[1], key[2], key[3], "sha256:" + "0" * 64)):
+            assert not compatibility.qualified_build(*drifted)
+    # Claude advertises interrupt only: it has no steer vocabulary, while
+    # Codex and Pi advertise steer plus interrupt from their campaigns.
+    assert compatibility.control_observation(
+        "claude_code", claude[1], platform=claude[2],
+        architecture=claude[3], fingerprint=claude[4]
+    )["compatible_controls"] == ["interrupt"]
+    assert compatibility.control_observation(
+        "pi", pi[1], platform=pi[2], architecture=pi[3],
+        fingerprint=pi[4])["compatible_controls"] == ["steer", "interrupt"]
+    assert compatibility.control_observation(
+        "codex", codex[1], platform=codex[2], architecture=codex[3],
+        fingerprint=codex[4])["compatible_controls"] == ["steer", "interrupt"]
+    assert compatibility.control_observation(
+        "pi", "0.87.1", platform="win32", architecture="x86_64",
+        fingerprint="sha256:" + "0" * 64)["compatible_controls"] == []
     assert not compatibility.qualified_capabilities("claude_code", "managed", {
         "native_version": "2.1.282", "platform": sys.platform,
         "architecture": "x86_64",

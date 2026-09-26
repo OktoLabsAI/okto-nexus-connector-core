@@ -42,8 +42,12 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
         if intent.model is not None:
             argv += ("--model", intent.model)
     elif intent.adapter_id == "claude_stream":
+        # Mirrors the copied connector's own qualified default argv: the
+        # partial-message flag is load-bearing for interrupt safety and
+        # --verbose is part of the proven stream-json shape.
         argv = (str(executable), "-p", "--output-format", "stream-json",
-                "--input-format", "stream-json")
+                "--input-format", "stream-json", "--verbose",
+                "--include-partial-messages")
     else:
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
     profile = {"adapter_id": intent.adapter_id, "mode": intent.mode,

@@ -12,20 +12,21 @@ the current/previous-release TK-44 campaign remains unrun.
 | Surface | Declared or observed | Qualified for production? |
 | --- | --- | --- |
 | Python | `>=3.11` package metadata; CI defines 3.11–3.13 on Windows 2022 and Ubuntu 24.04 | No; hosted matrix has not run. Local Windows/WSL2 × Python 3.11–3.13 tests and offline artifact installs are partial evidence. |
-| `codex_app_server` managed | Registry lists win32, linux, darwin; selected local Codex 0.157.0 on Windows/x86_64 completed a no-turn handshake and, under explicit user authorization, a real three-turn campaign: plain turn with `turn/completed` terminal, steer with the expected native turn ID applied mid-turn, and interrupt ending `interrupted`. | No approval/input (HITL) traffic, `thread/resume`, Linux/macOS or version drift exercised; production allowlist stays empty. |
-| `pi_rpc` managed | Registry lists win32, linux, darwin; selected local Pi 0.87.1 on Windows/x86_64 completed ID-echo readiness and, under explicit user authorization, real campaigns: one no-tools provider turn, then steer (queued `queue_update`, next-turn-boundary delivery as a user message, settle only at `agent_settled`), abort (settle observed before the ack, matching the documented wire order), follow-up submit after abort, and bounded close during a live turn. Its managed shell launcher can be selected as an explicit Node executable plus installed Pi CLI JavaScript, with both files bound to the candidate fingerprint. | No tools/extensions (no real `extension_ui_request` traffic), no automatic-retry semantics, Linux provider behavior, version drift or sustained load; production allowlist stays empty. |
-| `claude_stream` managed | Registry lists win32, linux, darwin; local Claude 2.1.282 observed and, under explicit user authorization, a real stream-json campaign: plain turn with `result:success` terminal after deltas, a second turn over the same process, and an interrupt while generating that produced `control_response:success` and an honest `result:error_during_execution` terminal. | No approval/input or `can_use_tool` traffic, no slow-output drain case, requesting-phase refusal remains synthetic pre-write evidence, Linux/macOS and version drift unexercised; production allowlist stays empty. |
+| `codex_app_server` managed | Registry lists win32, linux, darwin; selected local Codex 0.157.0 on Windows/x86_64 is **production-qualified** (exact fingerprint `sha256:ed1c7b36…b1f`) for managed conversation, events, steer and interrupt by the recorded real campaigns, and passed the full managed-factory path (prepare → open → real turn → terminal-correlated receipt → bounded shutdown). | HITL traffic, `thread/resume`, Linux/macOS and version drift remain unqualified. |
+| `pi_rpc` managed | Registry lists win32, linux, darwin; the selected local Pi 0.87.1 Node+CLI pair on Windows/x86_64 is **production-qualified** (composite fingerprint binding both files) for managed conversation, events, queued ID-less steer and abort, and passed the full managed-factory path with a real turn. | No tools/extensions (no real `extension_ui_request` traffic), no automatic-retry semantics, Linux provider behavior, version drift or sustained load; the work bridge stays unqualified. |
+| `claude_stream` managed | Registry lists win32, linux, darwin; selected local Claude 2.1.282 on Windows/x86_64 (exact fingerprint `sha256:fc0e3af0…484`) is **production-qualified** for managed conversation, events and interrupt (no steer vocabulary), and passed the full managed-factory path with a real turn. | No approval/input or `can_use_tool` traffic yet, no slow-output drain case, Linux/macOS and version drift unexercised. |
 | `claude_attach` external | Registry lists linux, darwin, freebsd | No; public attach lifecycle and real substrate qualification remain open. |
 | Core wheel/sdist | Identical local Windows/WSL2 hashes; isolated offline installs across Python 3.11–3.13 on both local OS environments | Partial packaging evidence only; not hosted CI, native Linux or real consumers. |
 
 Registry platform membership is a code-path gate, **not** a capability grant.
-The effective exact-build and control qualification sets are empty. Native
-eligibility must be established for the selected binary's kind, observed
-version, platform, architecture and SHA-256 fingerprint (for Node-launched
-Pi, a composite fingerprint of Node and the installed CLI); a version string or
-synthetic peer does not qualify a provider. Unsupported adapter/platform
-selection fails closed. The immutable NXL schemas and bundled fixtures are
-Core-owned; application consumers must pin the same wheel and manifest hash.
+The effective exact-build qualification sets contain exactly the three
+Windows builds recorded above (conversation and controls; Claude
+interrupt-only). Any drift — version, platform, architecture or file bytes,
+and for Pi any change to the bound Node executable or CLI JavaScript —
+loses the grant entirely. A version string or synthetic peer does not
+qualify a provider. Unsupported adapter/platform selection fails closed.
+The immutable NXL schemas and bundled fixtures are Core-owned; application
+consumers must pin the same wheel and manifest hash.
 
 Any security-semantic contract change requires version/revision decision,
 updated schemas/fixtures and consumer tests. Published compatibility ranges

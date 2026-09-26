@@ -21,6 +21,33 @@ BASELINE_CONVERSATION_VERSIONS = {"codex": {"0.156.1"}, "claude_code": {"2.1.280
 # Historical Nexus version lists above are provenance, not grants here.
 QUALIFIED_BUILDS: set[tuple[str, str, str, str, str]] = set()
 QUALIFIED_CONTROL_BUILDS: set[tuple[str, str, str, str, str]] = set()
+
+# Production qualification granted by the recorded 2026-09-26 real
+# campaigns on the user-authorized Windows host (see
+# plans/implementation/evidence/codex-real-turn-controls-2026-09-26.md,
+# pi-real-controls-2026-09-26.md and claude-real-turn-controls-2026-09-26.md
+# plus the earlier handshake/readiness observations). Each key is exact:
+# kind, observed version, host platform, parsed architecture and the
+# selected file fingerprint. The Pi key is the domain-separated composite
+# binding the trusted Node executable AND the installed CLI JavaScript
+# (paths and hashes) of that one installation; any other Node/CLI pair or
+# changed file content does not inherit the grant. This is a wire-contract
+# qualification for managed conversation and the listed controls — not a
+# promise that every model task succeeds, not resume/deduplication, not the
+# Pi work bridge, and not native approval traffic.
+_QUALIFIED_PRODUCTION_BUILDS = {
+    ("codex", "0.157.0", "win32", "x86_64",
+     "sha256:ed1c7b36e44536809c868864c833af8a857f56599a7a7fe23b908a1ba1093b1f"),
+    ("pi", "0.87.1", "win32", "x86_64",
+     "sha256:3765c5c53d04d5ef6ed4d1309284338aa14104228280fd643ec4cd12fa862058"),
+    ("claude_code", "2.1.282", "win32", "x86_64",
+     "sha256:fc0e3af017705624b9e1bce913f72761864ff994804514da1f5e41380fca4484"),
+}
+QUALIFIED_BUILDS |= _QUALIFIED_PRODUCTION_BUILDS
+# Real controls were exercised for every build above: Codex steer and
+# interrupt with expected native turn IDs, Pi queued steer and abort,
+# Claude interrupt while generating (Claude has no steer vocabulary).
+QUALIFIED_CONTROL_BUILDS |= _QUALIFIED_PRODUCTION_BUILDS
 ATTACH_QUALIFIED = False
 
 
@@ -77,8 +104,16 @@ def control_observation(kind, version, *, platform=None, architecture=None,
                         fingerprint=None):
     verified = qualified_build(kind, version, platform, architecture,
                                fingerprint, control=True)
-    return {"compatible_controls": ["steer", "interrupt"] if verified else [],
-            "control_contract_basis": "tested_version_contract" if verified else "unverified"}
+    if not verified:
+        return {"compatible_controls": [],
+                "control_contract_basis": "unverified"}
+    # Claude stream has no steer vocabulary: its only real-time control is
+    # interrupt, and public turn.steer is refused for claude_stream. Pi's
+    # steer is the ID-less queued next-turn-boundary contract.
+    controls = (["interrupt"] if kind == "claude_code"
+                else ["steer", "interrupt"])
+    return {"compatible_controls": controls,
+            "control_contract_basis": "tested_version_contract"}
 
 
 def claude_version_observation(command, *, cwd, env, timeout=3.0):
