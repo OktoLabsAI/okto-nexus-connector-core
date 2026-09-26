@@ -65,8 +65,22 @@ start, the bridge refuses before the native write with a retry-safe
 queue (`queue_update`), and the steered content remains part of the same
 active turn; a follow-up after `agent_settled` is a new `turn.submit`.
 This contract is verified against contained peers, the copied-adapter
-bridge and the public runtime/journal; real-provider steer/queue behavior
-remains unqualified.
+bridge, the public runtime/journal, and — under explicit user
+authorization — against real Pi 0.87.1 on Windows: the steer queued
+(`queue_update` with a non-empty steering list), drained at the next turn
+boundary as a user message, and the turn settled only at `agent_settled`.
+Sustained-load, retry and Linux provider behavior remain unqualified.
+
+Claude stream has no steer vocabulary: public `turn.steer` is refused for
+`claude_stream`, and adapter-level steer/interrupt during the fatal
+requesting window are refused before the native write (a durable safe
+failure). The honest control semantics are therefore queue-free:
+interrupt while generating lands a native `control_request` interrupt and
+the turn ends with its real result subtype (`error_during_execution` when
+interrupted, verified against real Claude 2.1.282), and any follow-up is a
+new `send_turn` reprompt on the same stream-json process — interrupt-then-
+reprompt, never steering. Requesting-phase refusal itself remains covered
+by synthetic pre-write tests.
 
 Native approval/input handling is disabled by default in the copied Codex
 and Claude stream adapters. An explicitly opted-in factory can expose their

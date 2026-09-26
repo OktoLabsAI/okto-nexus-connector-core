@@ -25,14 +25,14 @@ parciais não convertem automaticamente um gate em PASS.
 | TK-18 | Bounded output | NOT_RUN | — |
 | TK-19 | Lease/timeout | NOT_RUN | — |
 | TK-20 | Shutdown | NOT_RUN | — |
-| TK-21 | Codex lifecycle | NOT_RUN | — |
+| TK-21 | Codex lifecycle | PASS | Real campaign Windows/x86_64, codex 0.157.0 (`codex-real-turn-controls-2026-09-26.md`): handshake, thread, three turns, native turn IDs, terminal `turn/completed` correlated before/at completion; process alive between turns ≠ active turn. Scope: one build/OS; no HITL/resume. |
 | TK-22 | Codex control | NOT_RUN | — |
 | TK-23 | Codex HITL | NOT_RUN | — |
-| TK-24 | Pi framing | NOT_RUN | — |
+| TK-24 | Pi framing | PASS | Bounded byte/LF framing with fragmented UTF-8/CRLF/U+2028/U+2029 inside JSON and separated stderr proven against real contained child processes on Windows/WSL2 × Python 3.11–3.13 (`pi-byte-framing-2026-09-26.md`). Real-Pi sustained-load backpressure is outside this case's clauses. |
 | TK-25 | Pi correlation | NOT_RUN | — |
 | TK-26 | Pi settled | NOT_RUN | — |
 | TK-27 | Claude stream | NOT_RUN | — |
-| TK-28 | Claude control | NOT_RUN | — |
+| TK-28 | Claude control | PASS | Requesting-phase steer/interrupt refusal proven pre-write synthetically (`claude-control-2026-09-25.md`); generating-phase interrupt verified against real Claude 2.1.282 with `control_response:success` and honest `result:error_during_execution`, no no-op positive; queue-less interrupt-then-reprompt semantics published in `docs/adapters.md` (`claude-real-turn-controls-2026-09-26.md`). Scope: one build/OS. |
 | TK-29 | Claude HITL/erros | NOT_RUN | — |
 | TK-30 | Attach target | NOT_RUN | — |
 | TK-31 | Attach detach | NOT_RUN | — |
