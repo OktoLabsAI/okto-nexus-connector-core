@@ -17,6 +17,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `Operation`, `OperationKey`, `OperationReceipt`, `intent_hash`, `submit_frame_intent_hash` | Semantic intent identity and namespace-scoped durable receipt. Reuse an operation ID only for the identical intent. |
 | `SessionKey`, `RuntimeSnapshot`, `ReconcileRequest`, `ReconcileReport` | Namespace-scoped inspection and recovery queries. A missing process-local handle yields unknown ownership, not proof of stop. |
 | `ClaimedSession`, `SessionClaimPage` | Paged durable session-ID history with the original open operation ID and, for new Core opens, opening connection/owner generations. These are claims, not active-process or lease observations. |
+| `SessionLeaseState` | Durable last-known lease fence for one claimed session, written atomically with the claim and advanced by `renew_lease`/`revoke_lease` through journal CAS. Fence evidence for host reconciliation — not process liveness, not a lease deadline, not takeover authority. |
 | `ProcessBirthEvidence`, `ProcessBirthRecord` | Historical OS birth identity for a Core-owned process container. PID/token are diagnostic evidence, never authority to signal or reattach after restart. |
 | `ProcessBirthObservation` | One read-only, transient comparison of a stored birth to the current OS PID; it does not grant ownership. |
 | `RuntimeEvent`, `EventCursor` | Durable technical event stream; cursor includes server, executor, session and stream epoch. |
@@ -30,7 +31,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 `LocalRuntimeCore` implements `discover`, `prepare`, `open`, `submit`,
 `control`, `decide_native_approval`, `events`, `acknowledge_events`, `compact_events`, `storage_status`,
 `checkpoint_wal`, `inspect`, `claimed_sessions`, `process_birth`,
-`observe_process_birth`, `reconcile`, `close`, `shutdown`, `renew_lease` and
+`observe_process_birth`, `persisted_lease`, `reconcile`, `close`, `shutdown`, `renew_lease` and
 `revoke_lease` as defined in `RuntimeCore`. `events` is an async iterator; the
 other public operations above are awaited. `acknowledge_events` is for a
 trusted host **after** its Server durable-ingress ACK, not on network receipt.
@@ -77,6 +78,17 @@ unqualified.
 host journal adapters must implement the `claim_session` admission flag and
 atomically retain the supplied opening generations with that claim. Legacy
 claims without this evidence report `None`, never a guessed generation.
+When the opening admission also supplies the authorization/configuration
+revisions, the claim seeds a durable `session_lease_state` row.
+`renew_lease` and `revoke_lease` advance that row through journal CAS before
+the in-memory generation changes: a second Core instance sharing the journal,
+or a host-side CAS, makes an older renewal fail `STALE_GENERATION` without
+ever becoming active, and a revocation committed durably can never be
+un-revoked. A legacy claim without lease evidence fails renewal with
+`SESSION_UNKNOWN` rather than being seeded from memory. `persisted_lease`
+reads the last durable fence for host reconciliation after restart; it is
+evidence, not liveness or takeover authority. Host journal adapters must
+implement `cas_session_lease`/`get_session_lease`.
 For managed launches, the Journal port must also implement
 `reserve_owned_slot`/`release_owned_slot`; a reservation is acquired after
 possible-effect admission but before native launch and is retained on an

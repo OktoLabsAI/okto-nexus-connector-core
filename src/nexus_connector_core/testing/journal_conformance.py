@@ -32,6 +32,8 @@ class JournalConformanceTrace:
     claim_inventory_seen: bool
     process_birth_seen: bool
     owned_slot_seen: bool
+    lease_fence_seen: bool
+    lease_revive_blocked: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +42,8 @@ class JournalRestartTrace:
     claimed_session_id: str
     replay_sequences: tuple[int, ...]
     acknowledged_sequence: int
+    lease_connection_generation: int
+    lease_revoked: bool
 
 
 async def _expect_code(awaitable, code: str) -> None:
@@ -134,11 +138,13 @@ async def run_journal_conformance(journal: Journal) -> JournalConformanceTrace:
     claim_key = OperationKey(server, executor, prefix + "-claim-open")
     claim_receipt, claim_fresh = await journal.admit(
         claim_key, intent, claim_session, claim_session=True,
-        connection_generation=7, session_owner_generation=9)
+        connection_generation=7, session_owner_generation=9,
+        authorization_revision=4, configuration_revision=2)
     assert claim_fresh
     claim_duplicate, claim_fresh = await journal.admit(
         claim_key, intent, claim_session, claim_session=True,
-        connection_generation=7, session_owner_generation=9)
+        connection_generation=7, session_owner_generation=9,
+        authorization_revision=4, configuration_revision=2)
     assert not claim_fresh and claim_duplicate == claim_receipt
     await _expect_code(journal.admit(
         OperationKey(server, executor, prefix + "-claim-other-open"),
@@ -174,11 +180,56 @@ async def run_journal_conformance(journal: Journal) -> JournalConformanceTrace:
     fresh_page = await journal.claimed_sessions(server, executor)
     assert {claim.key.session_id for claim in fresh_page.claims} == {
         claim_session, later_claim_session}
+    lease_session = SessionKey(server, executor, claim_session)
+    opening_lease = await journal.get_session_lease(lease_session)
+    assert opening_lease is not None and (
+        opening_lease.connection_generation == 7 and
+        opening_lease.owner_generation == 9 and
+        opening_lease.authorization_revision == 4 and
+        opening_lease.configuration_revision == 2 and
+        not opening_lease.revoked), "opening lease fence lost by host adapter"
+    renewed_lease = await journal.cas_session_lease(
+        lease_session, expected_connection_generation=7,
+        connection_generation=8, owner_generation=9,
+        authorization_revision=5, configuration_revision=2, revoked=False)
+    assert renewed_lease.connection_generation == 8
+    await _expect_code(journal.cas_session_lease(
+        lease_session, expected_connection_generation=7,
+        connection_generation=9, owner_generation=9,
+        authorization_revision=6, configuration_revision=2,
+        revoked=False), "STALE_GENERATION")
+    await _expect_code(journal.cas_session_lease(
+        lease_session, expected_connection_generation=8,
+        connection_generation=8, owner_generation=9,
+        authorization_revision=4, configuration_revision=2,
+        revoked=False), "STALE_GENERATION")
+    revoked_lease = await journal.cas_session_lease(
+        lease_session, expected_connection_generation=8,
+        connection_generation=8, owner_generation=9,
+        authorization_revision=6, configuration_revision=2, revoked=True)
+    assert revoked_lease.revoked
+    await _expect_code(journal.cas_session_lease(
+        lease_session, expected_connection_generation=8,
+        connection_generation=9, owner_generation=9,
+        authorization_revision=7, configuration_revision=2,
+        revoked=False), "STALE_GENERATION")
+    # A claim admitted without lease evidence is a legacy claim: it reports
+    # no durable fence and can never be cas'd from memory after the fact.
+    legacy_key = OperationKey(server, executor, prefix + "-legacy-open")
+    legacy_session = session + "-legacy-claim"
+    await journal.admit(legacy_key, intent, legacy_session, claim_session=True)
+    assert await journal.get_session_lease(
+        SessionKey(server, executor, legacy_session)) is None
+    await _expect_code(journal.cas_session_lease(
+        SessionKey(server, executor, legacy_session),
+        expected_connection_generation=1, connection_generation=2,
+        owner_generation=1, authorization_revision=1,
+        configuration_revision=1, revoked=False), "SESSION_UNKNOWN")
     return JournalConformanceTrace(admitted.stage, uncertain.stage,
                                    resolved.stage, terminal_receipt.stage,
                                    not_sent.retry_safe, duplicate_fresh, before,
                                    after, acknowledged, sequences, gap_detected,
-                                   True, True, True, True)
+                                   True, True, True, True, True, True)
 
 
 async def run_journal_restart_conformance(
@@ -200,7 +251,8 @@ async def run_journal_restart_conformance(
     async with open_journal() as first:
         admitted, fresh = await first.admit(
             key, intent, session, claim_session=True,
-            connection_generation=11, session_owner_generation=13)
+            connection_generation=11, session_owner_generation=13,
+            authorization_revision=1, configuration_revision=1)
         assert fresh and admitted.stage == "RECEIVED_DURABLE"
         started = await first.mark_possible_effect(key)
         assert started.stage == "SUBMISSION_STARTED" and started.possible_effect
@@ -218,6 +270,17 @@ async def run_journal_restart_conformance(
     async with open_journal() as second:
         resumed = await second.get_receipt(key)
         assert resumed == started, "operation/effect marker lost on reopen"
+        lease = await second.get_session_lease(
+            SessionKey(server, executor, session))
+        assert lease is not None and lease.connection_generation == 11 and (
+            lease.owner_generation == 13 and not lease.revoked), (
+            "lease fence lost on reopen")
+        advanced = await second.cas_session_lease(
+            SessionKey(server, executor, session),
+            expected_connection_generation=11, connection_generation=12,
+            owner_generation=13, authorization_revision=2,
+            configuration_revision=1, revoked=True)
+        assert advanced.revoked and advanced.connection_generation == 12
         assert await second.get_process_birth(
             SessionKey(server, executor, session)) == birth_record
         duplicate, fresh = await second.admit(
@@ -253,4 +316,9 @@ async def run_journal_restart_conformance(
         assert replay == (1, 2, 3)
         assert await third.contiguous_watermark(cursor) == 3
         assert await third.acknowledge_events(cursor, 3) == 3
-        return JournalRestartTrace(started.stage, session, replay, 3)
+        final_lease = await third.get_session_lease(
+            SessionKey(server, executor, session))
+        assert final_lease == advanced
+        return JournalRestartTrace(started.stage, session, replay, 3,
+                                   final_lease.connection_generation,
+                                   final_lease.revoked)

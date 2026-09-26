@@ -40,6 +40,12 @@ class OperationKernel:
                                                      if operation.action == "runtime.open" else None),
                                                  session_owner_generation=(
                                                      context.session_owner_generation
+                                                     if operation.action == "runtime.open" else None),
+                                                 authorization_revision=(
+                                                     context.authorization_revision
+                                                     if operation.action == "runtime.open" else None),
+                                                 configuration_revision=(
+                                                     context.configuration_revision
                                                      if operation.action == "runtime.open" else None))
         if not fresh:
             return receipt

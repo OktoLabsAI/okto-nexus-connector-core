@@ -8,7 +8,8 @@ from .models import (
     CloseOperation, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
     ExecutionContext, Inventory, LaunchIntent, OpenOperation, OperationReceipt,
     OperationKey, OwnedSlotPage, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
-    SessionKey, SessionClaimPage, ProcessBirthEvidence, ProcessBirthRecord,
+    SessionKey, SessionClaimPage, SessionLeaseState, ProcessBirthEvidence,
+    ProcessBirthRecord,
     ProcessBirthObservation,
     RuntimeSnapshot, ShutdownPolicy, ShutdownReport, StorageStatus,
     TurnOperation,
@@ -73,7 +74,17 @@ class Journal(OwnedSlotLedger, Protocol):
                     claim_session: bool = False,
                     connection_generation: int | None = None,
                     session_owner_generation: int | None = None,
+                    authorization_revision: int | None = None,
+                    configuration_revision: int | None = None,
                     ) -> tuple[OperationReceipt, bool]: ...
+    async def cas_session_lease(self, session: SessionKey, *,
+                                expected_connection_generation: int,
+                                connection_generation: int,
+                                owner_generation: int,
+                                authorization_revision: int,
+                                configuration_revision: int,
+                                revoked: bool) -> SessionLeaseState: ...
+    async def get_session_lease(self, session: SessionKey) -> SessionLeaseState | None: ...
     async def mark_possible_effect(self, key: OperationKey) -> OperationReceipt: ...
     async def record_not_sent(self, key: OperationKey, error_code: str) -> OperationReceipt: ...
     async def record_receipt(self, key: OperationKey, receipt: OperationReceipt) -> OperationReceipt: ...

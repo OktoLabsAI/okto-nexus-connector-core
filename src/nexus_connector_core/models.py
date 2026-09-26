@@ -84,6 +84,23 @@ class ClaimedSession:
 
 
 @dataclass(frozen=True, slots=True)
+class SessionLeaseState:
+    """Durable last-known lease fence for one claimed session.
+
+    Historical CAS evidence written with the session claim and updated by
+    `renew_lease`/`revoke_lease`. It is not process liveness, not a lease
+    deadline and not takeover authority.
+    """
+
+    key: SessionKey
+    connection_generation: int
+    owner_generation: int
+    authorization_revision: int
+    configuration_revision: int
+    revoked: bool
+
+
+@dataclass(frozen=True, slots=True)
 class SessionClaimPage:
     claims: tuple[ClaimedSession, ...]
     high_water_rowid: int

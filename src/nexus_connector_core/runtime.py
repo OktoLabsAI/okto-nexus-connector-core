@@ -27,7 +27,7 @@ from .models import (
     PreparedLaunch,
     ReconcileReport, ReconcileRequest, RuntimeEvent, RuntimeSnapshot,
     SessionKey, ShutdownPolicy, ShutdownReport, TurnOperation,
-    StorageStatus, SessionClaimPage, ProcessBirthRecord,
+    StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord,
     ProcessBirthObservation,
 )
 from .profiles import prepare_launch, verify_prepared
@@ -690,6 +690,23 @@ class LocalRuntimeCore:
             raise ValueError("invalid process birth session")
         return await self._journal.get_process_birth(session)
 
+    async def persisted_lease(self, session: SessionKey) -> SessionLeaseState | None:
+        """Durable last-known lease fence for one claimed session.
+
+        Written atomically with the session claim and advanced by
+        `renew_lease`/`revoke_lease` through journal CAS. This is fence
+        evidence for host reconciliation after a restart or a second Core
+        instance sharing the journal — not process liveness, not a lease
+        deadline and not takeover authority. Claims made without lease
+        evidence report None.
+        """
+        if not isinstance(session, SessionKey):
+            raise ValueError("invalid lease session")
+        validate_claim_namespace(session.server_id, session.executor_id)
+        if type(session.session_id) is not str or not session.session_id:
+            raise ValueError("invalid lease session")
+        return await self._journal.get_session_lease(session)
+
     async def observe_process_birth(
             self, session: SessionKey) -> ProcessBirthObservation:
         """Compare one historical birth to a read-only OS PID observation."""
@@ -1008,6 +1025,21 @@ class LocalRuntimeCore:
                                     context.authorization_revision == old.authorization_revision):
                                 raise CoreError("BINDING_NOT_AUTHORIZED",
                                                 "lease_renew")
+                            # Durable fence first: if another Core instance
+                            # sharing this journal already advanced or revoked
+                            # the persisted lease, this renewal loses without
+                            # ever becoming the active generation in memory.
+                            # A legacy claim without lease evidence fails
+                            # SESSION_UNKNOWN here rather than being seeded
+                            # from memory.
+                            await self._journal.cas_session_lease(
+                                session,
+                                expected_connection_generation=old.connection_generation,
+                                connection_generation=context.connection_generation,
+                                owner_generation=context.session_owner_generation,
+                                authorization_revision=context.authorization_revision,
+                                configuration_revision=context.configuration_revision,
+                                revoked=False)
                             binding.context = context
                             binding.lease_expired = False
         except TimeoutError as exc:
@@ -1046,6 +1078,18 @@ class LocalRuntimeCore:
                                     context.authorization_revision <= old.authorization_revision or
                                     context.configuration_revision < old.configuration_revision):
                                 raise CoreError("STALE_GENERATION", "lease_revoke")
+                            # The durable revocation is committed before the
+                            # in-memory one: a crash between the two leaves a
+                            # durably revoked lease, never a revoked session
+                            # whose journal row could still be renewed.
+                            await self._journal.cas_session_lease(
+                                session,
+                                expected_connection_generation=old.connection_generation,
+                                connection_generation=context.connection_generation,
+                                owner_generation=context.session_owner_generation,
+                                authorization_revision=context.authorization_revision,
+                                configuration_revision=context.configuration_revision,
+                                revoked=True)
                             binding.context = replace(
                                 context,
                                 lease_deadline_monotonic=self._clock.monotonic(),

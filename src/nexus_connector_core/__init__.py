@@ -8,6 +8,7 @@ from .models import (
     SessionKey,
     ClaimedSession,
     SessionClaimPage,
+    SessionLeaseState,
     OwnedSlotReservation,
     OwnedSlotPage,
     ProcessBirthEvidence,
@@ -42,7 +43,7 @@ __version__ = "0.1.0.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
-    "OperationReceipt", "OperationKey", "SessionKey", "ClaimedSession", "SessionClaimPage", "OwnedSlotReservation", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
+    "OperationReceipt", "OperationKey", "SessionKey", "ClaimedSession", "SessionClaimPage", "SessionLeaseState", "OwnedSlotReservation", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
     "InstallationCandidate", "LaunchIntent", "PreparedLaunch",
     "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "ReconcileRequest",

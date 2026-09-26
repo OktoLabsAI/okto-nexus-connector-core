@@ -68,6 +68,8 @@ def test_kit_detects_a_host_adapter_that_ignores_session_claim(tmp_path):
             kwargs.pop("claim_session", None)
             kwargs.pop("connection_generation", None)
             kwargs.pop("session_owner_generation", None)
+            kwargs.pop("authorization_revision", None)
+            kwargs.pop("configuration_revision", None)
             return await self.inner.admit(key, intent_hash, session_id, **kwargs)
 
     async def run():
@@ -92,6 +94,8 @@ def test_kit_detects_a_host_adapter_that_drops_open_generations(tmp_path):
         async def admit(self, key, intent_hash, session_id, **kwargs):
             kwargs.pop("connection_generation", None)
             kwargs.pop("session_owner_generation", None)
+            kwargs.pop("authorization_revision", None)
+            kwargs.pop("configuration_revision", None)
             return await self.inner.admit(key, intent_hash, session_id, **kwargs)
 
     async def run():

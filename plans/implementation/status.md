@@ -733,3 +733,25 @@ observations do not by themselves enable production launches. Evidence:
 `evidence/codex-real-turn-controls-2026-09-26.md`,
 `evidence/pi-real-controls-2026-09-26.md`,
 `evidence/claude-real-turn-controls-2026-09-26.md`.
+K04 durable lease-fence update: `runtime.open` now seeds a durable
+`session_lease_state` row atomically with the session claim, and
+`renew_lease`/`revoke_lease` advance it through journal CAS before the
+in-memory generation changes. Stale expected generations, non-monotonic
+updates, revive attempts and renewals that lose to a second Core instance
+sharing the journal fail `STALE_GENERATION` without becoming active; a
+durable revocation can never be un-revoked; legacy claims without lease
+evidence fail `SESSION_UNKNOWN` instead of being seeded from memory. The
+public `persisted_lease` query and `SessionLeaseState` export expose the
+last durable fence as reconciliation evidence, not liveness or takeover
+authority. The Journal port conformance kit now covers
+`cas_session_lease`/`get_session_lease`, including reopen and restart
+continuity. Focused lease/conformance suites passed 12 tests in each local
+Windows/WSL2 x Python 3.11-3.13 environment; full Python 3.13 suites passed
+Windows 607/73 and WSL2 666/14 (passed/skipped). Normalized artifacts are
+byte-identical (wheel `1e811d1961072af56ed1d16a0c0f036300c78b4350af3c7db427be7378e20682`,
+sdist `55688e70278f1e36cb1c7fca373fb3a15a1c546f0adb677b9689706e3a2bc9b5`);
+Twine, development release validation and offline installs with both
+consumer smoke roles passed on Windows/WSL2 Python 3.13. Hosted CI is
+blocked externally: pushes start `Core CI` but GitHub refuses the jobs over
+account billing ("payments have failed or spending limit needs to be
+increased"). See `evidence/session-lease-fence-2026-09-26.md`.

@@ -18,7 +18,7 @@ from .models import (ClaimedSession, CoreError, EventCursor, OperationKey,
                      OwnedSlotPage, OwnedSlotReservation,
                      OperationReceipt, ProcessBirthEvidence,
                      ProcessBirthRecord, RuntimeEvent, SessionClaimPage,
-                     SessionKey, StorageStatus)
+                     SessionLeaseState, SessionKey, StorageStatus)
 from .protocol import canonical_json
 
 
@@ -227,6 +227,17 @@ class SQLiteJournal:
                 pid INTEGER NOT NULL,
                 birth_token TEXT NOT NULL,
                 containment TEXT NOT NULL,
+                PRIMARY KEY(server_id, executor_id, session_id)
+            );
+            CREATE TABLE IF NOT EXISTS session_lease_state (
+                server_id TEXT NOT NULL,
+                executor_id TEXT NOT NULL,
+                session_id TEXT NOT NULL,
+                connection_generation INTEGER NOT NULL,
+                owner_generation INTEGER NOT NULL,
+                authorization_revision INTEGER NOT NULL,
+                configuration_revision INTEGER NOT NULL,
+                revoked INTEGER NOT NULL DEFAULT 0,
                 PRIMARY KEY(server_id, executor_id, session_id)
             );
             CREATE TABLE IF NOT EXISTS events (
@@ -480,6 +491,85 @@ class SQLiteJournal:
         return ProcessBirthRecord(
             session, row[0], ProcessBirthEvidence(*row[1:]))
 
+    async def get_session_lease(self, session: SessionKey) -> SessionLeaseState | None:
+        """Read the durable last-known lease fence, or None for legacy claims."""
+        if not isinstance(session, SessionKey):
+            raise ValueError("invalid lease session")
+        async with self._lock:
+            row = self._db.execute(
+                """SELECT connection_generation,owner_generation,
+                          authorization_revision,configuration_revision,revoked
+                   FROM session_lease_state
+                   WHERE server_id=? AND executor_id=? AND session_id=?""",
+                (session.server_id, session.executor_id,
+                 session.session_id)).fetchone()
+        if row is None:
+            return None
+        return SessionLeaseState(session, row[0], row[1], row[2], row[3],
+                                 bool(row[4]))
+
+    async def cas_session_lease(self, session: SessionKey, *,
+                                expected_connection_generation: int,
+                                connection_generation: int,
+                                owner_generation: int,
+                                authorization_revision: int,
+                                configuration_revision: int,
+                                revoked: bool) -> SessionLeaseState:
+        """Atomically advance the durable lease fence for one claimed session.
+
+        Compare-and-set on the current connection generation with monotonic
+        component checks. A missing row (legacy claim without lease evidence)
+        fails with SESSION_UNKNOWN rather than being silently created: a
+        durable fence cannot be seeded from memory after the fact. A revoked
+        row can never be un-revoked. This is CAS evidence, not process
+        liveness and not takeover authority.
+        """
+        if not isinstance(session, SessionKey):
+            raise ValueError("invalid lease session")
+        integers = (expected_connection_generation, connection_generation,
+                    owner_generation, authorization_revision,
+                    configuration_revision)
+        if (any(type(value) is not int or
+                not 1 <= value <= 9223372036854775807
+                for value in integers) or type(revoked) is not bool):
+            raise ValueError("invalid lease fence values")
+        async with self._lock:
+            self._db.execute("BEGIN IMMEDIATE")
+            try:
+                row = self._db.execute(
+                    """SELECT connection_generation,owner_generation,
+                              authorization_revision,configuration_revision,revoked
+                       FROM session_lease_state
+                       WHERE server_id=? AND executor_id=? AND session_id=?""",
+                    (session.server_id, session.executor_id,
+                     session.session_id)).fetchone()
+                if row is None:
+                    raise CoreError("SESSION_UNKNOWN", "lease_cas")
+                if (row[4] and not revoked):
+                    raise CoreError("STALE_GENERATION", "lease_cas")
+                if (expected_connection_generation != row[0] or
+                        connection_generation < row[0] or
+                        owner_generation < row[1] or
+                        authorization_revision < row[2] or
+                        configuration_revision < row[3]):
+                    raise CoreError("STALE_GENERATION", "lease_cas")
+                self._db.execute(
+                    """UPDATE session_lease_state
+                       SET connection_generation=?,owner_generation=?,
+                           authorization_revision=?,configuration_revision=?,revoked=?
+                       WHERE server_id=? AND executor_id=? AND session_id=?""",
+                    (connection_generation, owner_generation,
+                     authorization_revision, configuration_revision,
+                     int(revoked), session.server_id, session.executor_id,
+                     session.session_id))
+                self._db.execute("COMMIT")
+            except BaseException:
+                self._rollback_if_active()
+                raise
+        return SessionLeaseState(session, connection_generation,
+                                 owner_generation, authorization_revision,
+                                 configuration_revision, revoked)
+
     async def reserve_owned_slot(self, key: OperationKey,
                                  session_id: str) -> None:
         """Reserve one shared-journal process slot before native launch.
@@ -710,6 +800,8 @@ class SQLiteJournal:
                     claim_session: bool = False,
                     connection_generation: int | None = None,
                     session_owner_generation: int | None = None,
+                    authorization_revision: int | None = None,
+                    configuration_revision: int | None = None,
                     ) -> tuple[OperationReceipt, bool]:
         if not all((key.server_id, key.executor_id, key.operation_id, session_id)):
             raise CoreError("OPERATION_INVALID", "admission")
@@ -718,6 +810,9 @@ class SQLiteJournal:
         if ((connection_generation is None) !=
                 (session_owner_generation is None)):
             raise ValueError("opening generations must be supplied together")
+        if ((authorization_revision is None) !=
+                (configuration_revision is None)):
+            raise ValueError("lease revisions must be supplied together")
         if connection_generation is not None:
             if (not claim_session or
                     type(connection_generation) is not int or
@@ -725,6 +820,13 @@ class SQLiteJournal:
                     not 1 <= connection_generation <= 9223372036854775807 or
                     not 1 <= session_owner_generation <= 9223372036854775807):
                 raise ValueError("invalid opening generations")
+        if authorization_revision is not None:
+            if (connection_generation is None or
+                    type(authorization_revision) is not int or
+                    type(configuration_revision) is not int or
+                    not 1 <= authorization_revision <= 9223372036854775807 or
+                    not 1 <= configuration_revision <= 9223372036854775807):
+                raise ValueError("invalid opening lease revisions")
         async with self._lock:
             # Duplicate reads must remain available even while the journal is
             # under pressure. A second read inside the write transaction still
@@ -819,6 +921,14 @@ class SQLiteJournal:
                             (key.server_id, key.executor_id, session_id,
                              key.operation_id, connection_generation,
                              session_owner_generation))
+                    if authorization_revision is not None:
+                        # Durable lease fence seeded with the claim: the
+                        # last CAS winner is knowable after any restart.
+                        self._db.execute(
+                            "INSERT INTO session_lease_state VALUES (?,?,?,?,?,?,?,0)",
+                            (key.server_id, key.executor_id, session_id,
+                             connection_generation, session_owner_generation,
+                             authorization_revision, configuration_revision))
                 self._db.execute("INSERT INTO operations_v2 VALUES (?,?,?,?,?,?,?,?,?,?)",
                                  (key.server_id, key.executor_id,
                                   key.operation_id, intent_hash, session_id,
