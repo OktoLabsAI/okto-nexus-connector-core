@@ -71,6 +71,15 @@ authorization — against real Pi 0.87.1 on Windows: the steer queued
 boundary as a user message, and the turn settled only at `agent_settled`.
 Sustained-load, retry and Linux provider behavior remain unqualified.
 
+Pi `extension_ui_request` occurrences are integration noise the Core
+treats deliberately: every request is auto-answered with a native cancel
+(bypassing command correlation, which would deadlock against an in-flight
+prompt) and forwarded as a technical event carrying the native payload, so
+a host can correlate session/turn/input itself. The managed launch
+template loads no extensions by default; a host that allows user
+extensions keeps this auto-cancel contract, and text is never parsed as a
+Nexus action.
+
 Claude stream has no steer vocabulary: public `turn.steer` is refused for
 `claude_stream`, and adapter-level steer/interrupt during the fatal
 requesting window are refused before the native write (a durable safe

@@ -824,3 +824,14 @@ filesystem-full needs root/admin (unavailable), and no native Linux
 harness exists for attach/Linux provider gates. Full Python 3.13 suites
 passed Windows 622/74 and WSL2 680/16. See
 `evidence/core-engineering-closures-2026-09-26.md`.
+Matrix closure update: TK-16 (journal/kernel effect crash cuts), TK-18
+(bounded output under flood/blocked consumers) and TK-39 (adversarial JSON
+and hostile provider/configuration input) moved to PASS - every clause of
+those cases is prescribed for deterministic local environments and was
+executed on both local OSes with the cited evidence. TK-17 (attach/PID
+reuse at full scope), TK-19 (reboot), TK-38 (logout) and TK-25/TK-26
+(real out-of-order/retry) remain NOT_RUN on their unexercisable clauses.
+The Pi extension-UI contract decision is now documented in
+`docs/adapters.md`: auto-cancel reply plus technical-event forwarding with
+the native payload; the managed template loads no extensions by default
+and free text is never parsed as a Nexus action.

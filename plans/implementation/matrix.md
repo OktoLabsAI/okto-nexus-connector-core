@@ -20,9 +20,9 @@ parciais não convertem automaticamente um gate em PASS.
 | TK-13 | Root drift | NOT_RUN | — |
 | TK-14 | Auth home | NOT_RUN | — |
 | TK-15 | Config CAS | NOT_RUN | — |
-| TK-16 | Journal efeito | NOT_RUN | — |
+| TK-16 | Journal efeito | PASS | Child-process crash cuts at journal and kernel effect boundaries on Windows and WSL2, including rollback of uncommitted inserts, survival of committed unknown/terminal/ACK facts, real owned-child cuts across spawn/write/ack/receipt and birth-record cuts; duplicate admission never replays the synthetic external effect (`journal-crash-2026-09-25.md`, `kernel-effect-crash-2026-09-25.md`, `process-birth-journal-crash-2026-09-26.md`). Scope: two local OSes, synthetic external effects. |
 | TK-17 | Ownership | NOT_RUN | — |
-| TK-18 | Bounded output | NOT_RUN | — |
+| TK-18 | Bounded output | PASS | Floods through real child stdout/stderr with per-session and global byte/item ceilings, noisy-session eviction, large-event preflight, slow-subscriber isolation with explicit gaps and targeted interrupt survival, continuous adapter draining with bounded subscriber queues (`native-event-fairness`, `codex-slow-subscriber-isolation` evidence; both local OSes). |
 | TK-19 | Lease/timeout | NOT_RUN | — |
 | TK-20 | Shutdown | NOT_RUN | — |
 | TK-21 | Codex lifecycle | PASS | Real campaign Windows/x86_64, codex 0.157.0 (`codex-real-turn-controls-2026-09-26.md`): handshake, thread, three turns, native turn IDs, terminal `turn/completed` correlated before/at completion; process alive between turns ≠ active turn. Scope: one build/OS; no HITL/resume. |
@@ -43,7 +43,7 @@ parciais não convertem automaticamente um gate em PASS.
 | TK-36 | Capabilities | NOT_RUN | — |
 | TK-37 | Fault matrix | NOT_RUN | — |
 | TK-38 | SO real | NOT_RUN | — |
-| TK-39 | Fuzz | NOT_RUN | — |
+| TK-39 | Fuzz | PASS | Adversarial JSON at the frame codec (deep nesting, escaped duplicate keys, invalid Unicode, oversized numbers, cyclic/oversized host objects preflight), hostile journal/lease configuration values, native hostile JSON on real child stdout (duplicate keys, non-finite constants, non-object messages, deep parser recursion), unpaired-surrogate and out-of-range integer rejection, and bounded JSONL chunking - all on Windows/WSL2 × Python 3.11–3.13 with no parser loosening (`frame-codec`, `hostile-configuration`, `native-hostile-json`, Unicode streaming evidence). No payload-driven shell/import path exists; broader provider-text fuzz remains future hardening. |
 | TK-40 | Fairness | PASS | Combined synthetic campaigns on Windows/WSL2: per-session/global byte-item caps with noisy-session eviction and large-event preflight, slow-subscriber isolation through real child stdout with targeted interrupt surviving saturation, four-process journal fairness across servers/sessions, a 100k-operation campaign, and sustained 45 s four-session runs (1,374/1,826 turns, 13,768/18,288 events) with bounded journals, zero faults and typed urgent-control outcomes (`core-engineering-closures-2026-09-26.md` and prior fairness evidence). Real-provider sustained load remains open and is not part of these clauses. |
 | TK-41 | Journal alternativo | NOT_RUN | — |
 | TK-42 | Packaging | NOT_RUN | — |
