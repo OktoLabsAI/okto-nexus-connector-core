@@ -1,0 +1,87 @@
+{
+  "snapshot_base": "706b16a90c54a654551519cdc357bd6fedb9427e",
+  "head": "706b16a90c54a654551519cdc357bd6fedb9427e",
+  "head_matches_snapshot": true,
+  "branch": "main",
+  "working_tree": "?? =1\n?? PLANO_CORRECAO/\n?? plans/correction-c1/",
+  "python": "3.13.1 (tags/v3.13.1:0671451, Dec  3 2024, 19:06:28) [MSC v.1942 64 bit (AMD64)]",
+  "platform": "Windows-11-10.0.26200-SP0",
+  "machine": "AMD64",
+  "package_version": "0.1.0.dev0",
+  "correction_package_files": {
+    "00_ENTREGAR_AO_AGENTE.md": "sha256:fe153da9403166c59a50da0a1f8a983b2b275d5b5ffdd5d8dafa48478efee9b5",
+    "01_PLANO_CORRECAO_CORE.md": "sha256:05f43e7996e70193c1896ac72d692c620e61d638379ce014b51a66154c411dbc",
+    "02_MATRIZ_REGRESSOES.md": "sha256:82c4f3bccf64a1aed952adf9d5583fb8dcfd4cf748397121947588bee6410bff",
+    "03_HANDOFF_SERVER_CONNECTOR.md": "sha256:4922e709d28fddaa1dccd5abb924fe7656ad4994bf0537f4addc04998af880de",
+    "04_GATES_E_EVIDENCIAS.md": "sha256:e36faf086f314ab348aa7020ae44aeddcda8778d6b1c5dc9c5b44c5b8655d5c2"
+  },
+  "package_artifacts_missing_from_delivery": [
+    "BACKLOG_CORRECAO.json (recreated here from 01_PLANO_CORRECAO_CORE.md)",
+    "MATRIZ_TESTES.json (recreated as matriz_rc.md from 02_MATRIZ_REGRESSOES.md)",
+    "referencias/RELATORIO_AUDITORIA_CORE.md (referenced, not delivered)",
+    "referencias/AUDITORIA_NEXUS_CONNECTOR_CORE_706b16a.zip (referenced, not delivered)",
+    "referencias/03_PLANO_NEXUS_CONNECTOR_CORE_R3.md (the R3 plan already lives at repo root)",
+    "regressoes_originais/ nine seeds + runner (reconstructed from the finding descriptions)",
+    "templates/ (EVIDENCIA_TAREFA.json / RELATORIO_FINAL_AGENTE.md / HANDOFF_ARTEFATO.json shapes followed inline)",
+    "ferramentas/validar_plano.py (not delivered)"
+  ],
+  "preserved_state": [
+    "untracked file '=1' at repository root preserved, never committed",
+    "plans/implementation/* R3 history preserved; correction campaign lives under plans/correction-c1/",
+    "no reset/force-push; work advances on main from the audited snapshot"
+  ],
+  "findings_classification": {
+    "F01": {
+      "state": "present",
+      "evidence": "runtime.py _watch_lease acquires binding.normal_lock then control_lock before closing an expired session; a send holding normal_lock blocks containment indefinitely."
+    },
+    "F02": {
+      "state": "present",
+      "evidence": "kernel.execute checks the lease only before admit; no revalidation after admit/mark_possible_effect awaits nor at the native dispatch point (to_thread)."
+    },
+    "F03": {
+      "state": "present",
+      "evidence": "runtime._pump only faults the binding on exceptions; normal iterator exhaustion (EOF with a live process) leaves the session accepting new work."
+    },
+    "F04": {
+      "state": "present",
+      "evidence": "SQLiteJournal executes connect/execute/commit/checkpoint directly inside async methods under an asyncio lock; a held database lock blocks the event loop and its timers."
+    },
+    "F05": {
+      "state": "present",
+      "evidence": "_external_operation_id admits IDs up to 256 chars while reconcile validates 1-160; IDs of 161-256 are admitted but not reconcilable (raw ValueError)."
+    },
+    "F06": {
+      "state": "present",
+      "evidence": "self._sessions entries are never removed after close; bindings retain NativeSession/adapter references indefinitely."
+    },
+    "F07": {
+      "state": "present",
+      "evidence": "profiles.py maps LaunchIntent.model into argv only for pi_rpc; codex argv is (exe,'app-server') with no model mechanism and claude argv has no model flag."
+    },
+    "G01": {
+      "state": "present",
+      "evidence": "no public runtime factory; consumers must import CopiedAdapterFactory from the private native.runtime_bridge module; RuntimeCore Protocol lacks persisted_lease."
+    },
+    "G02": {
+      "state": "present",
+      "evidence": "qualification keys are path-bound composites for Pi (allowlist entry embeds absolute Node/CLI paths); no portable build_identity exists."
+    },
+    "G03": {
+      "state": "present",
+      "evidence": "discovery only supports explicit paths/trusted roots; no layout resolvers (Pi Node+CLI autodiscovery, known Windows shims)."
+    },
+    "G04": {
+      "state": "present",
+      "evidence": "attach mode is rejected by the managed factory (profiles.prepare_launch raises CAPABILITY_UNSUPPORTED for mode != managed); no public attach lifecycle."
+    },
+    "G05": {
+      "state": "present",
+      "evidence": "no containment preflight: managed opens do not verify backend requirements (e.g. /proc interfaces, job objects) before spawning provider work; no PROCESS_CONTAINMENT_UNAVAILABLE."
+    },
+    "G06": {
+      "state": "partially_present",
+      "evidence": "27 TK PASS with scope notes exist, but E0-E3 release levels are not formalized and several claims still exceed strictly local evidence; attach/Linux/host-integration gates remain open."
+    }
+  }
+}

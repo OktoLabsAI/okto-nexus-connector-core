@@ -1,0 +1,960 @@
+{
+  "revision": "C1",
+  "total_tasks": 100,
+  "phases": [
+    {
+      "phase": "PC00",
+      "title": "Reconciliar o HEAD, preservar evidências e criar a campanha de regressão",
+      "depends_on": [],
+      "tasks": [
+        {
+          "task_id": "PC00.01",
+          "title": "Fixar a referência da intervenção",
+          "status": "DONE",
+          "findings": [],
+          "evidence": "baseline.json (HEAD == snapshot; ambiente; hashes)",
+          "commits": []
+        },
+        {
+          "task_id": "PC00.02",
+          "title": "Classificar cada achado no HEAD",
+          "status": "DONE",
+          "findings": [],
+          "evidence": "baseline.json findings_classification (all present, code anchors)",
+          "commits": []
+        },
+        {
+          "task_id": "PC00.03",
+          "title": "Portar as regressões dirigidas",
+          "status": "DONE",
+          "findings": [],
+          "evidence": "tests/regression/test_c1_regressions.py (9 seeds: 8 xfail-strict + 1 pass)",
+          "commits": []
+        },
+        {
+          "task_id": "PC00.04",
+          "title": "Separar campanhas de teste",
+          "status": "DONE",
+          "findings": [],
+          "evidence": "evidence/PC00.md campaign table",
+          "commits": []
+        },
+        {
+          "task_id": "PC00.05",
+          "title": "Inventariar contratos e dependências",
+          "status": "DONE",
+          "findings": [],
+          "evidence": "evidence/PC00.md contract inventory",
+          "commits": []
+        },
+        {
+          "task_id": "PC00.06",
+          "title": "Criar rastreabilidade e evidência",
+          "status": "DONE",
+          "findings": [],
+          "evidence": "BACKLOG_CORRECAO.json + matriz_rc.md + evidence/ per phase",
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC01",
+      "title": "Remover I/O SQLite bloqueante do loop e preservar durabilidade",
+      "depends_on": [
+        "PC00"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC01.01",
+          "title": "Isolar a persistência em unidade serial",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC01.02",
+          "title": "Implementar filas limitadas e justiça",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC01.03",
+          "title": "Tornar cancelamento uma semântica explícita",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC01.04",
+          "title": "Preservar transações críticas",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC01.05",
+          "title": "Cobrir leituras, ledger e manutenção",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC01.06",
+          "title": "Definir abertura e encerramento assíncronos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC01.07",
+          "title": "Instrumentar latência e pressão",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC01.08",
+          "title": "Migrar fixtures e exemplos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC02",
+      "title": "Unificar contenção independente, leases e desligamento",
+      "depends_on": [
+        "PC00",
+        "PC01"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC02.01",
+          "title": "Desenhar a máquina de estados mínima",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC02.02",
+          "title": "Fechar admissões antes de esperar I/O",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC02.03",
+          "title": "Reusar coordenador único de shutdown",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC02.04",
+          "title": "Garantir força física independente",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC02.05",
+          "title": "Reconciliar renovação e revogação",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC02.06",
+          "title": "Conservar incerteza e capacidade",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC02.07",
+          "title": "Cobrir ações de segurança sem journal saudável",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC02.08",
+          "title": "Publicar política e métricas",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC03",
+      "title": "Revalidar autorização na fronteira real do efeito",
+      "depends_on": [
+        "PC01",
+        "PC02"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC03.01",
+          "title": "Mapear todos os efeitos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC03.02",
+          "title": "Introduzir guarda tipada e estado corrente",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC03.03",
+          "title": "Revalidar após persistência",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC03.04",
+          "title": "Levar a guarda ao write/spawn",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC03.05",
+          "title": "Resolver corrida com revoke/renew",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC03.06",
+          "title": "Preservar recibos e replay",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC03.07",
+          "title": "Estender fault matrix",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC04",
+      "title": "Tratar fim de stream, cancelamento do observador e falta de observabilidade",
+      "depends_on": [
+        "PC01",
+        "PC02"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC04.01",
+          "title": "Classificar conclusões do pump",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC04.02",
+          "title": "Aplicar fence antes do evento",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC04.03",
+          "title": "Persistir e notificar incidente uma vez",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC04.04",
+          "title": "Integrar com contenção",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC04.05",
+          "title": "Revisar pending requests e events",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC04.06",
+          "title": "Qualificar semântica por adaptador",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC05",
+      "title": "Uniformizar IDs, erros e leitura de histórico legado",
+      "depends_on": [
+        "PC00"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC05.01",
+          "title": "Centralizar política de identificadores",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC05.02",
+          "title": "Validar na fronteira pública",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC05.03",
+          "title": "Testar equivalência Python/wire",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC05.04",
+          "title": "Inventariar registros legados",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC05.05",
+          "title": "Oferecer consulta legada pública e limitada",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC05.06",
+          "title": "Atualizar bundle e documentação juntos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC05.07",
+          "title": "Cobrir migração e rollback",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC06",
+      "title": "Publicar composição real e contrato suportado dos consumidores",
+      "depends_on": [
+        "PC02",
+        "PC03",
+        "PC04",
+        "PC05"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC06.01",
+          "title": "Definir e implementar factory pública",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC06.02",
+          "title": "Alinhar ports e exports",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC06.03",
+          "title": "Desacoplar tipos concretos de journal",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC06.04",
+          "title": "Formalizar ownership e cleanup",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC06.05",
+          "title": "Reescrever exemplos e smokes públicos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC06.06",
+          "title": "Gerar handoff consumível",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC06.07",
+          "title": "Estabelecer política de evolução",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC07",
+      "title": "Liberar objetos de sessões encerradas sem perder histórico ou ownership",
+      "depends_on": [
+        "PC04",
+        "PC06"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC07.01",
+          "title": "Separar estruturas vivas e snapshots",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC07.02",
+          "title": "Implementar teardown seguro",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC07.03",
+          "title": "Manter replay e idempotência",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC07.04",
+          "title": "Desacoplar notificações lentas",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC07.05",
+          "title": "Preservar sessões incertas",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC07.06",
+          "title": "Executar soak e regressões",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC08",
+      "title": "Aplicar o modelo solicitado e tornar configuração efetiva verificável",
+      "depends_on": [
+        "PC06"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC08.01",
+          "title": "Mapear suporte real por adaptador",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC08.02",
+          "title": "Corrigir preparo e factory",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC08.03",
+          "title": "Tornar configuração efetiva rastreável",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC08.04",
+          "title": "Tratar erro e incompatibilidade",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC08.05",
+          "title": "Cobrir resume e mudança de perfil",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC08.06",
+          "title": "Qualificar do teste ao provider",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC09",
+      "title": "Separar qualificação portável de binding físico local",
+      "depends_on": [
+        "PC05",
+        "PC06"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC09.01",
+          "title": "Definir as duas identidades",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC09.02",
+          "title": "Implementar manifest portável de build",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC09.03",
+          "title": "Manter binding local e TOCTOU",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC09.04",
+          "title": "Atualizar catálogo de qualificação",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC09.05",
+          "title": "Expor estados e caps ao host",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC09.06",
+          "title": "Testar cache, drift e provenance",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC10",
+      "title": "Concluir discovery dos layouts suportados sem executar wrappers arbitrários",
+      "depends_on": [
+        "PC09"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC10.01",
+          "title": "Inventariar layouts-alvo",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC10.02",
+          "title": "Implementar resolução Pi Node+CLI",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC10.03",
+          "title": "Resolver wrappers conhecidos com segurança",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC10.04",
+          "title": "Gerenciar ambiguidade e drift",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC10.05",
+          "title": "Conter probes e diagnosticar",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC10.06",
+          "title": "Testar experiência de instalação normal",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC11",
+      "title": "Preflight e qualificação real dos backends de contenção",
+      "depends_on": [
+        "PC02",
+        "PC06"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC11.01",
+          "title": "Mapear requisitos por backend",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC11.02",
+          "title": "Implementar preflight passivo",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC11.03",
+          "title": "Adicionar autoteste seguro opcional",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC11.04",
+          "title": "Retornar erro e remediação tipados",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC11.05",
+          "title": "Qualificar Linux e cenários restritos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC11.06",
+          "title": "Qualificar demais plataformas-alvo",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC11.07",
+          "title": "Preservar observação e slots",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC12",
+      "title": "Integrar attach pela API pública e preservar processos externos",
+      "depends_on": [
+        "PC06",
+        "PC09",
+        "PC11"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC12.01",
+          "title": "Inventariar o adapter legado",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC12.02",
+          "title": "Definir intenção e alvo públicos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC12.03",
+          "title": "Integrar execução sem ownership",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC12.04",
+          "title": "Revalidar alvo e correlação",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC12.05",
+          "title": "Implementar detach e falhas",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC12.06",
+          "title": "Qualificar sem habilitar flags artificiais",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC13",
+      "title": "Qualificar modos gerenciados, MCP HTTP direto e integração dos dois hosts",
+      "depends_on": [
+        "PC07",
+        "PC08",
+        "PC09",
+        "PC10",
+        "PC11"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC13.01",
+          "title": "Executar campanha determinística integrada",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC13.02",
+          "title": "Qualificar um provider vertical",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC13.03",
+          "title": "Coordenar integração local e remota",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC13.04",
+          "title": "Provar MCP HTTP direto",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC13.05",
+          "title": "Qualificar demais modos gerenciados e extensão Pi",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC13.06",
+          "title": "Exercitar falhas cruzadas",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC13.07",
+          "title": "Consolidar matriz sem inflar evidência",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    },
+    {
+      "phase": "PC14",
+      "title": "Fechar migrações, documentação, artefatos e gates de liberação",
+      "depends_on": [
+        "PC06",
+        "PC07",
+        "PC08",
+        "PC09",
+        "PC10",
+        "PC11",
+        "PC13"
+      ],
+      "tasks": [
+        {
+          "task_id": "PC14.01",
+          "title": "Consolidar regressões e cobertura",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC14.02",
+          "title": "Ensaiar migração e recuperação",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC14.03",
+          "title": "Gerar e verificar wheel/sdist",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC14.04",
+          "title": "Atualizar documentação e exemplos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC14.05",
+          "title": "Entregar handoffs aos dois agentes",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC14.06",
+          "title": "Aplicar gates de liberação",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        },
+        {
+          "task_id": "PC14.07",
+          "title": "Encerrar com evidências e riscos",
+          "status": "PENDING",
+          "findings": [],
+          "evidence": null,
+          "commits": []
+        }
+      ]
+    }
+  ]
+}
