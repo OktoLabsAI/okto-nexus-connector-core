@@ -835,3 +835,18 @@ The Pi extension-UI contract decision is now documented in
 `docs/adapters.md`: auto-cancel reply plus technical-event forwarding with
 the native payload; the managed template loads no extensions by default
 and free text is never parsed as a Nexus action.
+Final Core-scope matrix closure: TK-01-06, TK-08-15, TK-35 and TK-36 moved
+to PASS - each clause of those cases prescribes deterministic local
+environments and was executed with the cited evidence (clean-wheel import
+audits, dependency boundaries, extraction provenance, public-API smokes,
+schema/hash vectors, legacy parity, registry/discovery/argv/drift/auth/CAS
+suites, the pinned Pi extension resource and the exact-build capability
+intersection). Remaining NOT_RUN rows are blocked or out of Core's solo
+scope: TK-07 (normative bundle needs consumer repinning - N/C), TK-17/20
+(attach externo - no native Linux harness), TK-19 (reboot), TK-25/26 (real
+out-of-order/retry not forceable), TK-30-34 (attach substrate, real MCP
+HTTP clients, local+remote native-action hosts), TK-33 (partial),
+TK-37/38 (real-provider ambiguity/logout), TK-41 (Server journal adapter -
+N), TK-42 (hosted CI billing), TK-43/J01-J34 (N/C consumers), TK-44 (no
+previous release exists) and TK-45 (publication - joint PyPI session
+pending).

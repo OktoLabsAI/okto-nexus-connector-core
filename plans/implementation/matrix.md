@@ -5,21 +5,21 @@ parciais não convertem automaticamente um gate em PASS.
 
 | ID | Cenário | Status | Evidência |
 |---|---|---|---|
-| TK-01 | Import puro | NOT_RUN | — |
-| TK-02 | Deps | NOT_RUN | — |
-| TK-03 | Proveniência | NOT_RUN | — |
-| TK-04 | API pública | NOT_RUN | — |
-| TK-05 | Schemas | NOT_RUN | — |
-| TK-06 | Intent hash | NOT_RUN | — |
-| TK-07 | Bundle | NOT_RUN | — |
-| TK-08 | Extração parity | NOT_RUN | — |
-| TK-09 | Registry | NOT_RUN | — |
-| TK-10 | Wheel inicial | NOT_RUN | — |
-| TK-11 | Discovery | NOT_RUN | — |
-| TK-12 | Argv | NOT_RUN | — |
-| TK-13 | Root drift | NOT_RUN | — |
-| TK-14 | Auth home | NOT_RUN | — |
-| TK-15 | Config CAS | NOT_RUN | — |
+| TK-01 | Import puro | PASS | Clean-wheel installation/import audits on Windows/WSL2 × Python 3.11–3.13: no socket/thread/process/secret-read/hidden loop on import; the wheel audit also rejects dynamic sibling imports, sys.path mutators and file-based module loading (`reproducible-build`, `runtime-sbom`, `wheel-import-audit`, `offline-six-env` evidence). |
+| TK-02 | Deps | PASS | Dependency-tree/import-boundary audit of the isolated wheel (SBOM inventory included) shows no Nexus/Connector/FastAPI/dashboard/embedding imports or undeclared externals in the Core base (`runtime-sbom`, `wheel-import-audit` evidence). |
+| TK-03 | Proveniência | PASS | Read-only source-to-Core SHA-256 inventory of the four copied adapters/helpers, excluded canonical supervisor/domain/ports, legacy tests and license text preserved, no canonical domain copied (`extraction-provenance-2026-09-25.md`). Legal license review remains a separate release gate (K11), not part of this comparison case. |
+| TK-04 | API pública | PASS | Minimal clients (embedded and remote consumer smokes) use only documented exports/ports against the installed wheel; public docs tests pin export coverage and no private-class/DB/loop access (`consumer-smoke`, `consumer-conformance`, `offline-six-env` evidence). |
+| TK-05 | Schemas | PASS | Bundled-schema frame codec validates positive/negative fixtures, closed fields, exact revision and event/inventory/unknown-receipt invariants before any effect; unknown security-relevant actions fail closed (`frame-codec`, `contract-bundle` evidence). |
+| TK-06 | Intent hash | PASS | RFC 8785 canonicalization with Unicode/order vectors, retry-generation exclusion, NaN/infinite/duplicate-key denial and same-ID/different-hash conflict detection (`jcs-2026-09-25.md`, hash-vector fixtures). |
+| TK-07 | Bundle | NOT_RUN | — (bundle remains `development-partial`; normative immutability requires consumer repinning that depends on the not-yet-started N/C projects). |
+| TK-08 | Extração parity | PASS | Adapted legacy suites rerun per adapter on both local OSes (Codex 32, Pi 27+, Claude stream 29 on Windows; attach 57 on WSL2), preserving recorded expectations; divergences were fixed as explicit regressions (e.g. `CONTENT_TOO_LARGE` extraction) (`linux-wsl2`, extraction evidence). |
+| TK-09 | Registry | PASS | Metadata-first registry: network-supplied module/factory paths are never imported; incompatible-platform and unknown-adapter selections raise typed errors with lazy static loading only (`native-registry` evidence). |
+| TK-10 | Wheel inicial | PASS | Embedded and remote synthetic consumers run the same clean installed wheel through the documented API without either application (`consumer-smoke-2026-09-25.md`, repeated for every artifact pair). |
+| TK-11 | Discovery | PASS | Fake cwd executables never execute, PATH wrappers rejected, stuck version probes fail with a bounded typed timeout, probes never read secrets (`discovery-probe` suite, both OSes). |
+| TK-12 | Argv | PASS | Typed argv realization with spaces/Unicode paths, wrapper rejection and no shell concatenation, verified for Codex/Pi/Claude templates incl. the Node+CLI compound (`profiles`, `pi-node-cli-selection` evidence). |
+| TK-13 | Root drift | PASS | Executable/symlink/config changes between prepare and open revalidate and deny with `PROFILE_DRIFT`/`NATIVE_VERSION_UNQUALIFIED` before spawn (`discovery-probe`, `profiles` suites; composite Pi fingerprint rechecks). |
+| TK-14 | Auth home | PASS | Environment resolution only through approved local refs; provider homes/hooks require explicit trust; missing capabilities fail without leaking resolver errors or secrets to any peer (`environment` suite, `mcp-capability-env` evidence). |
+| TK-15 | Config CAS | PASS | Plan/apply with adjacent cross-process lock, reread/hash CAS, backups preserving third-party entries, owned-field-only removal and explicit post-replace uncertainty (`config-persistence`, `codex-toml-merge`, `config-plan` evidence). |
 | TK-16 | Journal efeito | PASS | Child-process crash cuts at journal and kernel effect boundaries on Windows and WSL2, including rollback of uncommitted inserts, survival of committed unknown/terminal/ACK facts, real owned-child cuts across spawn/write/ack/receipt and birth-record cuts; duplicate admission never replays the synthetic external effect (`journal-crash-2026-09-25.md`, `kernel-effect-crash-2026-09-25.md`, `process-birth-journal-crash-2026-09-26.md`). Scope: two local OSes, synthetic external effects. |
 | TK-17 | Ownership | NOT_RUN | — |
 | TK-18 | Bounded output | PASS | Floods through real child stdout/stderr with per-session and global byte/item ceilings, noisy-session eviction, large-event preflight, slow-subscriber isolation with explicit gaps and targeted interrupt survival, continuous adapter draining with bounded subscriber queues (`native-event-fairness`, `codex-slow-subscriber-isolation` evidence; both local OSes). |
@@ -39,8 +39,8 @@ parciais não convertem automaticamente um gate em PASS.
 | TK-32 | Attach compatibility | NOT_RUN | — |
 | TK-33 | Ports nativas não MCP | NOT_RUN | — |
 | TK-34 | Configuração HTTP, sem MCP runtime | NOT_RUN | — |
-| TK-35 | Pi extensão | NOT_RUN | — |
-| TK-36 | Capabilities | NOT_RUN | — |
+| TK-35 | Pi extensão | PASS | Dependency-free extension with three explicit native tools shipped in wheel/sdist (offline installs verify the resource), narrow Core-owned loopback JSONL ingress, pinned local build with no fetch of `main`, structured params validated before the scoped backend, no model-text parsing (`pi-extension-2026-09-25.md`, `pi_extension_resource` tests). |
+| TK-36 | Capabilities | PASS | Effective capability is the intersection of exact-build qualification × platform × architecture × observed request contracts: steer is refused for Claude, interrupt-only advertisement, managed work/execute_work stays false without the qualified bridge, and any drift loses the grant (`compatibility` allowlist/contract tests, per-adapter steer gates). |
 | TK-37 | Fault matrix | NOT_RUN | — |
 | TK-38 | SO real | NOT_RUN | — |
 | TK-39 | Fuzz | PASS | Adversarial JSON at the frame codec (deep nesting, escaped duplicate keys, invalid Unicode, oversized numbers, cyclic/oversized host objects preflight), hostile journal/lease configuration values, native hostile JSON on real child stdout (duplicate keys, non-finite constants, non-object messages, deep parser recursion), unpaired-surrogate and out-of-range integer rejection, and bounded JSONL chunking - all on Windows/WSL2 × Python 3.11–3.13 with no parser loosening (`frame-codec`, `hostile-configuration`, `native-hostile-json`, Unicode streaming evidence). No payload-driven shell/import path exists; broader provider-text fuzz remains future hardening. |
