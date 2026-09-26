@@ -1,134 +1,222 @@
 # nexus-connector-core
 
-Independent, embeddable Python library for the native harness runtime shared by
-Nexus Server and Nexus Connector. This repository is under active extraction.
-The current `0.1.0.dev0` wheel provides immutable operation models, strict
-contract negotiation, a bounded NXL r3 frame codec backed by bundled schemas,
-a local SQLite operation journal, a minimal effect
-admission kernel, native helpers and copied Codex/Pi/Claude/attach connector
-implementations. `RuntimeCore` defines the async public contract;
-`LocalRuntimeCore` implements operation admission, technical event replay,
-inspection and reconciliation through an injected native factory. A private
-bridge adapts the copied synchronous connectors, but the real factory fails
-closed until this wheel has its own exact build/provider qualification. The
-qualification key includes native kind, observed version, real platform,
-binary architecture and executable SHA-256; a version string alone grants
-nothing. A selected Claude executable may be probed read-only with a bounded,
-secret-free `--version` call. The wheel
-does not yet qualify a managed harness or a remote Connector integration.
-The frame encoder checks definitely oversized or cyclic host objects before
-JCS allocation; exact wire size and schema validation still run before output.
+Independent, embeddable Python library that owns the **native agent-harness
+runtime** shared by the Okto Nexus products: discovering, preparing,
+launching, controlling, observing and shutting down managed harness
+processes, plus the technical journal and contracts behind those
+operations. The same wheel is consumed embedded by Nexus Server (local
+runtimes) and by the Nexus Connector daemon (remote runtimes); the Core
+imports neither application.
 
-The async facade does not make shutdown/restart fully qualified: session
-handles are process-local, and after restart it reports unknown ownership
-while retaining durable operation receipts. `SUBMITTED` proves only that a
-native call returned, not native acceptance or completion.
-Where the copied adapter emits a correlated, recognized terminal outcome, the
-event and terminal receipt are committed atomically; a late synchronous
-`SUBMITTED` update cannot replace `SUCCEEDED`, `FAILED` or `CANCELLED`.
-Operation and session lookups are scoped by `server_id` and `executor_id`;
-`inspect` takes a `SessionKey`, and `reconcile` takes those namespace IDs.
-Pre-namespace development journal rows are retained but quarantined: the Core
-raises `LEGACY_OPERATION_UNSCOPED` for a colliding ID rather than replaying it.
-The SQLite journal now enforces transactional event payload/item budgets with
-separate global, Server/executor and session accounting and a critical reserve.
-One noisy session cannot consume another session's normal event budget within
-the same Server/executor namespace. At 80% usage it
-stops admitting new work while preserving reserved slots for interrupt/close.
-Durable operation rows also have a per-session cap (10,000 by default, with
-100 reserved for critical controls); receipts are not automatically deleted,
-so a long-lived session can eventually reach that cap.
-The trusted host can record a contiguous Server durable-ingress ACK, then
-compact only ACKed event bodies in bounded batches. Persistent stream metadata
-prevents sequence reuse after compaction/restart; replay from a pruned cursor
-reports `EVENT_GAP`. These are logical payload budgets, not yet a proven bound
-on SQLite file/WAL size; automatic maintenance and disk-full fault
-qualification remain open.
-The journal additionally reports database/WAL/SHM bytes, applies a physical
-admission guard with critical headroom, limits the main SQLite page count and
-configures WAL checkpoint/retention thresholds. An explicit non-waiting WAL
-checkpoint reports when a reader prevents truncation. These measures fail
-closed for new work under observed pressure but do not constitute a strict
-cross-process filesystem quota while WAL readers can remain active.
-The wheel includes `nexus_connector_core.testing.run_journal_conformance` so
-a host-supplied Journal port can be checked against the same admission,
-uncertainty, event and ACK scenario as the reference SQLite implementation.
-An injected monotonic clock governs the local lease. Renewal uses a
-connection-generation compare-and-swap; stale generations cannot submit new
-turns, revocation is irreversible for that session, and an expired owned
-runtime is closed after the configured grace. Close only releases ownership
-when process stop is observed. Lease/session state is still process-local, so
-restart recovery and host-level reconciliation remain required.
-The runtime, effect kernel and scoped native-action bridge fail closed if an
-injected monotonic clock regresses or becomes non-finite; an apparent recovery
-does not revive the lease or capability. This is an in-process fence, not
-cross-reboot lease recovery.
-`LocalRuntimeCore` bounds concurrent opens (default 8) and locally tracked
-owned/uncertain sessions (default 32). A proven prelaunch refusal is a durable,
-retry-safe failed receipt; an ambiguous native open retains its capacity slot
-and appears as `unknown` at shutdown. These limits are per runtime instance,
-not a persisted or host-wide physical process-tree quota.
-Shutdown now bounds its observation time to the configured drain and interrupt
-windows. An unfinished native send, close or open is reported `unknown`; its
-owned capacity is not released merely because the wait expired. A late open
-starts a Core-owned close, and a later shutdown can observe a pending close.
-For an adapter that exposes active-turn state, shutdown waits through the
-drain window and journals a technical interrupt attempt before native send.
-The interrupt window then bounds observation before close. At its deadline,
-a managed Core-owned backend may request independent tree containment even
-when a native write remains pending; ownership is retained until that effect
-settles and stop is observed. This path has local peer/process tests on
-Windows and WSL2, but remains unqualified with real providers and the full
-platform matrix. Attach targets are never force-stopped by the Core.
+- Distribution `nexus-connector-core`, import `nexus_connector_core`,
+  Python ≥ 3.11, src-layout, `py.typed`, pure-Python runtime dependencies
+  (`rfc8785`, `jsonschema`).
+- Status: `0.1.0.dev0` — an unpublished development build. Importing the
+  package opens no socket, spawns no thread/process, starts no event loop
+  and reads no credentials.
 
-The library does not expose MCP services. MCP capable harnesses must connect
-directly to the Nexus Server HTTP endpoint; native stdio remains a separate
-adapter protocol.
-`direct_http_config` requires an explicit approved Server origin and an
-explicit loopback-reachability assertion for local harnesses. The pure
-`config_document` plans explicitly selected JSON or narrow Codex TOML entries
-only with host-supplied ownership evidence. The Core also has a local
-cooperative lock/backup/CAS writer, but the trusted host must choose and
-approve the target path and verify Windows ACLs. Neither planner stores a
-secret or accepts a remote path.
+## What the Core is
 
-The four native adapters are selected through a fixed Core-owned registry;
-metadata inspection does not import their modules, and real launch remains
-blocked until an exact native build is qualified. The Pi extension and its
-bounded, non-HTTP local action socket are packaged in the wheel. They require
-a trusted host to issue a scoped native capability and supply the canonical
-domain backend; this project does not implement inbox or MCP forwarding.
+| Area | Delivered by |
+| --- | --- |
+| Discovery & selection | Trusted-path/explicit candidate selection, bounded PE/ELF/Mach-O architecture parsing, sealed read-only version probes (`--version`-class, secret-free) |
+| Profiles & launch | Typed argv realization (spaces/Unicode safe, no shell), workspace/root validation, drift revalidation between prepare and open, composite Pi Node+CLI fingerprinting |
+| Managed adapters | Codex app-server (JSON-RPC), Pi RPC (JSONL over stdio), Claude Code stream-json, Claude attach (external, POSIX substrate) |
+| Process ownership | Windows Job Objects and Linux guardian/pidfd backends, birth records and read-only observation, kill-on-close containment, per-tree process limits and census |
+| Journal & kernel | SQLite technical journal (admissions, effect markers, receipts, events, ACK/compaction, quotas, hard WAL bound), minimal effect-admission kernel with honest uncertainty |
+| Session governance | Durable session-ID claims with opening generations, durable lease fence (journal CAS), lease renewal/revocation, inspect/reconcile |
+| Events | Bounded ingest/replay/ACK, per-session fairness and byte/item caps, slow-subscriber isolation, explicit gaps, redaction boundary |
+| Contracts | Core-owned NXL r3 bundle: 20 frame families, intents/events/errors/inventory/capabilities/HTTP shapes, fixtures and JCS hash vectors, offline verifier |
+| Harness integration | Declarative direct-HTTP MCP client configuration (data only), typed non-MCP native-action bridge, packaged Pi extension |
 
-The `development-partial` NXL bundle is generated entirely in this project by
-`contracts/generate.py`. It covers the 20 protocol frame families and the
-intent, event, error, inventory, capability and HTTP response shapes, with
-positive/negative fixtures. It is not yet a normative consumer contract:
-semantic cross-field checks and consumer conformance remain incomplete. A
-pure `receipt_reducer` handles duplicate, out-of-order, terminal and uncertain
-receipt evidence without inventing missing ACKs. The pure `event_reducer`
-provides bounded batch/gap/ACK projection only after host-durable ingress.
-`inventory_reducer` requires gap-free deltas and uses snapshots for
-resynchronization. `lease_reducer` correlates grant to a fresh per-attempt
-lease ID and computes a conservative monotonic deadline; this ID convention
-and consumer integration remain pending qualification. The
-canonicalizer uses the pinned, pure-Python `rfc8785` runtime dependency.
-Consumers can run `python -m nexus_connector_core.conformance` with a pinned
-manifest SHA-256 to verify installed schemas, fixtures and vectors offline.
-The current partial development bundle requires explicit opt-in.
+## What the Core is not
+
+- **No MCP implementation.** No MCP server, proxy, relay, stdio facade or
+  SDK helper exists here. MCP-capable harnesses connect directly to the
+  Nexus Server HTTP endpoint; the Core only *configures* those native
+  clients. Stdio of the native adapter protocols is not MCP.
+- **No Nexus application.** No canonical identity, inbox, handoffs,
+  grants, HTTP/WSS routes, dashboard or user store. The trusted host
+  supplies authority (`ExecutionContext`) and canonical backends.
+- **No daemon.** The host owns startup/shutdown and the event loop.
+
+## Layout
+
+```text
+src/nexus_connector_core/
+  contracts/nxl/v1/     # generated schema bundle, manifest, fixtures, vectors
+  native/adapters/      # codex.py, pi.py, claude_code_stream.py, claude_code_attach.py
+  native/process/       # owned process backends, birth records, census
+  journal.py kernel.py  # SQLite technical journal + effect-admission kernel
+  runtime.py            # LocalRuntimeCore: the async public facade
+  discovery.py profiles.py environment.py harness_config.py
+  native_action_bridge.py native_action_socket.py pi_extension_resource.py
+  testing/              # Journal / owned-slot conformance kits
+contracts/              # generator sources for the bundled NXL artifacts
+docs/                   # api, adapters, compatibility, lifecycle, security
+plans/implementation/   # status, acceptance matrix, evidence log
+tools/                  # build/verify/probe and campaign scripts
+```
+
+## Managed adapters and production qualification
+
+Qualification is **exact**: native kind, observed version, real platform,
+parsed architecture and the selected file fingerprint (for Pi, a composite
+binding the trusted Node executable *and* the installed CLI JavaScript).
+Any drift — version, OS, architecture, file bytes — loses the grant; a
+version string or synthetic peer grants nothing. The allowlist lives in
+`native/adapters/compatibility.py`.
+
+| Adapter | Qualified builds (production) | Controls | HITL |
+| --- | --- | --- | --- |
+| `codex_app_server` | 0.157.0, win32/x86_64, exact `codex.exe` fingerprint | steer + interrupt with expected native turn ID; concurrent threads verified | `item/commandExecution/requestApproval` (decline + tardy refusal verified) |
+| `pi_rpc` | 0.87.1, win32/x86_64, composite Node+CLI fingerprint | ID-less queued steer (next-turn-boundary) + abort; settle-before-ack wire order verified | extension UI auto-cancel contract (see docs/adapters.md) |
+| `claude_stream` | 2.1.282, win32/x86_64, exact `claude.exe` fingerprint | interrupt while generating (no steer vocabulary — refused honestly) | `can_use_tool/Write` (forged-kind refusal + decline verified) |
+| `claude_attach` | — (unqualified; POSIX substrate) | attach lifecycle gated | — |
+
+All qualification evidence (real campaigns, contained peers, fault cuts)
+is recorded under `plans/implementation/evidence/`; the acceptance matrix
+in `plans/implementation/matrix.md` states exactly what ran and what
+remains blocked.
+
+## Quickstart (embedded host shape)
+
+```python
+from nexus_connector_core import (
+    CloseOperation, ExecutionContext, LaunchIntent, LocalRuntimeCore,
+    OpenOperation, ShutdownPolicy, TurnOperation,
+)
+from nexus_connector_core.journal import SQLiteJournal
+from nexus_connector_core.native.runtime_bridge import CopiedAdapterFactory
+
+journal = SQLiteJournal("executor-journal.db")
+
+async def environment(prepared):     # trusted host resolves the overlay
+    return {"CODEX_HOME": "..."}     # essentials + provider auth refs
+
+runtime = LocalRuntimeCore(
+    journal, CopiedAdapterFactory(environment),
+    candidates={"codex_app_server": selected_candidate},
+    workspace_roots={"ws": "/abs/root"})
+
+context = ExecutionContext(
+    "server", "executor", "binding", "agent", "ws",
+    authorization_revision=1, configuration_revision=1,
+    connection_generation=1,
+    lease_deadline_monotonic=now + 90,          # host monotonic clock
+    allowed_actions=frozenset({"runtime.open", "turn.submit",
+                                "turn.interrupt", "runtime.close"}))
+
+prepared = await runtime.prepare(
+    LaunchIntent("agent", "ws", "codex_app_server"), context)
+await runtime.open(OpenOperation("open-1", "session", "epoch", prepared), context)
+await runtime.submit(TurnOperation("turn-1", "session", "hello"), context)
+async for event in runtime.events(EventCursor(
+        "server", "executor", "session", "epoch")):
+    if event.payload.get("delivery_phase") == "terminal":
+        break
+await runtime.close(CloseOperation("close-1", "session"), context)
+report = await runtime.shutdown(ShutdownPolicy(5, 5))
+```
+
+A runnable end-to-end reference (real selection → probe → prepare →
+allowlisted factory → real turn → correlated receipt → bounded shutdown)
+is `tools/probe_managed_factory.py`.
+
+## Operational guarantees, and their honest limits
+
+- **Receipts never lie.** Every mutable intent gets a durable
+  `operation_id` and semantic `intent_hash` before any effect; duplicates
+  return the known receipt, conflicting hashes raise `OPERATION_CONFLICT`.
+  `SUBMITTED` proves only that the native call returned — terminals
+  (`SUCCEEDED`/`FAILED`/`CANCELLED`) come from correlated native evidence
+  and commit atomically with the event. A rejected or ambiguous outcome
+  stays `OUTCOME_UNKNOWN` with `possible_effect` rather than being retried
+  automatically.
+- **Bounded journal.** Transactional event/operation budgets with global,
+  Server/executor and session accounting plus a critical reserve for
+  interrupt/close; ACKed-only compaction; page-count cap; and a **hard WAL
+  admission ceiling** (`max_wal_bytes`/`reserved_wal_bytes`) with automatic
+  bounded-truncate maintenance — a pinned reader stops admissions with a
+  typed `JOURNAL_FULL` instead of unbounded WAL growth. These are logical
+  quotas, not an OS filesystem quota. Host journal adapters must pass the
+  bundled conformance kits (`nexus_connector_core.testing`).
+- **Durable session governance.** `runtime.open` atomically claims the
+  session ID (with opening generations) in the journal namespace;
+  `renew_lease`/`revoke_lease` advance a durable lease fence via journal
+  CAS before any in-memory change — a stale or competing renewal fails
+  `STALE_GENERATION`, durable revocation is irreversible, and
+  `persisted_lease()` exposes the last fence as reconciliation evidence
+  (never liveness or takeover authority).
+- **Owned processes only.** Managed children run inside Windows Job
+  Objects (kill-on-close) or the Linux guardian; birth records allow
+  read-only post-restart identity comparison. Launches may set
+  `max_tree_processes` — kernel-enforced via the job object on Windows,
+  reported as unenforced on Linux — and `owned_tree_census` provides a
+  bounded PID census. Force-stop reaches only Core-owned trees; attach
+  targets are external and never killed by the Core.
+- **Bounded lifecycle.** Concurrent opens and owned sessions are capped
+  per installation (owned-slot ledger, default 8); shutdown observation is
+  finite with honest per-session outcomes (`graceful`/`forced`/`unknown`);
+  a regressing or non-finite monotonic clock fails closed. After a host
+  restart, ownership is reported unknown while receipts, claims, births and
+  lease fences survive — hosts reconcile rather than guess.
+
+## Tools/MCP boundary and the native-action bridge
+
+`harness_config` generates **declarative direct-HTTP MCP client
+configuration** for harnesses (URL + environment-bound `mcp-cap:` secret
+refs, never literal tokens) and composes with third-party entries under
+host-supplied ownership proof. Harnesses without an MCP HTTP client get an
+explicit unsupported-transport diagnostic — there is no stdio fallback.
+For harnesses without MCP, the typed **non-MCP native-action bridge**
+(context/handoff actions against an injected canonical backend) and the
+packaged **Pi extension** (offline, pinned build, three explicit tools,
+loopback JSONL ingress) provide structured integration; free model text is
+never parsed as a Nexus action.
+
+## Contract bundle and conformance
+
+`contracts/generate.py` produces the NXL r3 bundle shipped in the wheel:
+schemas for all 20 frame families plus intent/event/error/inventory/
+capability/HTTP shapes, positive/negative fixtures, JCS hash vectors and a
+hashed manifest. The bundle is currently `development-partial` (explicit
+opt-in) until consumers pin it as normative. Verify an installation
+offline:
+
+```bash
+python -m nexus_connector_core.conformance --manifest-sha256 <sha>
+```
 
 ## Development
 
-```text
+```bash
 python -m pip install -e .[test]
 python -m pytest -q
-python tools/build_artifacts.py
-python tools/verify_wheel.py
+python tools/build_artifacts.py            # normalized wheel + sdist
+python tools/verify_wheel.py               # clean-wheel import/resources
+python tools/verify_offline_artifacts.py --wheelhouse <dir>
+python tools/validate_release.py --version 0.1.0.dev0 --allow-development
 ```
 
-See `plans/implementation/status.md` for gates and limits. Distribution and
-publication require review of the inherited LICENSE and release evidence.
-Public guides: [API](docs/api.md), [lifecycle and errors](docs/lifecycle.md),
-[compatibility](docs/compatibility.md), [adapter provenance](docs/adapters.md)
-and [security limits](docs/security.md). These guides are included in the
-source distribution; the wheel keeps runtime resources without application
-documentation imports.
+The local verification matrix is Windows and WSL2 (Ubuntu) × Python
+3.11–3.13, including offline installs of both artifacts. Hosted CI and the
+protected release workflow are staged in `.github/workflows/` but remain
+unexecuted (GitHub Actions billing); publication requires the joint
+review described in `docs/security.md`.
+
+Guides: [API](docs/api.md) · [adapters & provenance](docs/adapters.md) ·
+[compatibility matrix](docs/compatibility.md) ·
+[lifecycle & errors](docs/lifecycle.md) · [security limits](docs/security.md).
+Implementation gates, the acceptance matrix and the evidence log live in
+[plans/implementation/](plans/implementation/status.md).
+
+## License
+
+Elastic License 2.0 with the *SaaS and Competing Service Definition*
+addendum — Copyright 2026 Okto Labs. The text is based on the
+`okto-pulse-core` license by licensor decision; internal use, single-tenant
+deployment and integration with your own agents and harnesses are
+permitted, while offering the software as a hosted/managed or competing
+service is not. See [LICENSE](LICENSE); commercial clarification at
+dev@oktolabs.ai.

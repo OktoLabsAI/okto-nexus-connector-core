@@ -850,3 +850,16 @@ TK-37/38 (real-provider ambiguity/logout), TK-41 (Server journal adapter -
 N), TK-42 (hosted CI billing), TK-43/J01-J34 (N/C consumers), TK-44 (no
 previous release exists) and TK-45 (publication - joint PyPI session
 pending).
+License/documentation update (2026-09-26, licensor decision): the project
+LICENSE was rebased on the okto-pulse-core license - Elastic License 2.0
+plus the concise "SaaS and Competing Service Definition" addendum,
+replacing the longer Nexus-inherited branding addendum (which referenced
+Okto Nexus product branding surfaces not present in a library). The
+permitted-use clause about MCP-tool integration was adapted to this
+library's context ("integrating the software with AI agents and native
+agent harnesses"). `pyproject.toml` now declares `license = "Elastic-2.0"`
+(SPDX expression, PEP 639). README.md was rewritten as project
+documentation (positioning, architecture, qualification table, quickstart,
+guarantees/limits, MCP boundary, development and license). Human legal
+review of the final license text remains a release gate before any
+publication.
