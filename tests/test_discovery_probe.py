@@ -239,6 +239,33 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
     assert compatibility.control_observation(
         "pi", "0.87.1", platform="win32", architecture="x86_64",
         fingerprint="sha256:" + "0" * 64)["compatible_controls"] == []
+
+
+def test_native_request_contracts_advertise_only_campaign_proven_shapes():
+    """HITL advertisement is exactly what the real campaigns exercised."""
+    assert compatibility.CODEX_NATIVE_REQUEST_CONTRACTS["0.157.0"] == (
+        "item/commandExecution/requestApproval",)
+    assert compatibility.CLAUDE_NATIVE_REQUEST_CONTRACTS["2.1.282"] == (
+        "control_request:can_use_tool/Write",)
+    codex_caps = compatibility.qualified_capabilities("codex", "managed", {
+        "native_version": "0.157.0", "platform": "win32",
+        "architecture": "x86_64",
+        "fingerprint": "sha256:ed1c7b36e44536809c868864c833af8a857f56599a7a7fe23b908a1ba1093b1f",
+        "compatible_native_requests": ["item/commandExecution/requestApproval"],
+        "compatible_controls": ["steer", "interrupt"],
+    })
+    assert codex_caps.conversation and codex_caps.approvals
+    assert codex_caps.steer_timing == "IMMEDIATE" and codex_caps.interrupt
+    claude_caps = compatibility.qualified_capabilities("claude_code", "managed", {
+        "native_version": "2.1.282", "platform": "win32",
+        "architecture": "x86_64",
+        "fingerprint": "sha256:fc0e3af017705624b9e1bce913f72761864ff994804514da1f5e41380fca4484",
+        "compatible_native_requests": ["control_request:can_use_tool/Write"],
+        "compatible_controls": ["interrupt"],
+    })
+    assert claude_caps.conversation and claude_caps.approvals
+    # Claude has no steer vocabulary: timing stays None, interrupt stands.
+    assert claude_caps.steer_timing is None and claude_caps.interrupt
     assert not compatibility.qualified_capabilities("claude_code", "managed", {
         "native_version": "2.1.282", "platform": sys.platform,
         "architecture": "x86_64",

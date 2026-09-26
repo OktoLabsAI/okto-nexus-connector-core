@@ -26,14 +26,14 @@ parciais não convertem automaticamente um gate em PASS.
 | TK-19 | Lease/timeout | NOT_RUN | — |
 | TK-20 | Shutdown | NOT_RUN | — |
 | TK-21 | Codex lifecycle | PASS | Real campaign Windows/x86_64, codex 0.157.0 (`codex-real-turn-controls-2026-09-26.md`): handshake, thread, three turns, native turn IDs, terminal `turn/completed` correlated before/at completion; process alive between turns ≠ active turn. Scope: one build/OS; no HITL/resume. |
-| TK-22 | Codex control | NOT_RUN | — |
-| TK-23 | Codex HITL | NOT_RUN | — |
+| TK-22 | Codex control | PASS | Real Windows/x86_64 campaign (`real-control-hitl-closures-2026-09-26.md`): concurrent two-thread turns on one app-server, steer with the live expected turn ID, stale-ID steer refused before write, interrupt hit only its target turn (`completed` vs `interrupted`). Scope: one build/OS. |
+| TK-23 | Codex HITL | PASS | Real provider (`real-control-hitl-closures-2026-09-26.md`): `item/commandExecution/requestApproval` declined through the checked host reply path (mapped to native `cancel`, no execpolicy amendment) and a tardy reply refused after turn end. Input elicitation denied/tardy paths remain synthetic contained-peer evidence (combined closure, noted). |
 | TK-24 | Pi framing | PASS | Bounded byte/LF framing with fragmented UTF-8/CRLF/U+2028/U+2029 inside JSON and separated stderr proven against real contained child processes on Windows/WSL2 × Python 3.11–3.13 (`pi-byte-framing-2026-09-26.md`). Real-Pi sustained-load backpressure is outside this case's clauses. |
 | TK-25 | Pi correlation | NOT_RUN | — |
 | TK-26 | Pi settled | NOT_RUN | — |
-| TK-27 | Claude stream | NOT_RUN | — |
+| TK-27 | Claude stream | PASS | Combined (`claude-real-turn-controls-2026-09-26.md` + `real-control-hitl-closures-2026-09-26.md`): real multi-turn/deltas/system/result terminals, plus a slow consumer (25 ms/event) with continuous adapter drain — terminal preserved and last, no silent loss. Scope: one build/OS. |
 | TK-28 | Claude control | PASS | Requesting-phase steer/interrupt refusal proven pre-write synthetically (`claude-control-2026-09-25.md`); generating-phase interrupt verified against real Claude 2.1.282 with `control_response:success` and honest `result:error_during_execution`, no no-op positive; queue-less interrupt-then-reprompt semantics published in `docs/adapters.md` (`claude-real-turn-controls-2026-09-26.md`). Scope: one build/OS. |
-| TK-29 | Claude HITL/erros | NOT_RUN | — |
+| TK-29 | Claude HITL/erros | PASS | Real provider (`real-control-hitl-closures-2026-09-26.md`): `control_request:can_use_tool` (Write) surfaced, forged tool kind refused before write, decline delivered via the checked reply path, `result:success` after denial; error terminal from the interrupt campaign. AskUserQuestion remains synthetic (combined closure, noted). |
 | TK-30 | Attach target | NOT_RUN | — |
 | TK-31 | Attach detach | NOT_RUN | — |
 | TK-32 | Attach compatibility | NOT_RUN | — |

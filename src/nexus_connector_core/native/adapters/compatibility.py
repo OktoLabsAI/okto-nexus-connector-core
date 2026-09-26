@@ -84,6 +84,13 @@ CODEX_NATIVE_REQUEST_CONTRACTS = {
         "item/commandExecution/requestApproval", "item/fileChange/requestApproval",
         "item/tool/requestUserInput", "mcpServer/elicitation/request",
     ),
+    # 0.157.0: only what the authorized 2026-09-26 real campaign exercised —
+    # a command-execution approval surfaced, declined through the checked
+    # host reply path (mapped to the native "cancel" decision) and a tardy
+    # reply refused after the turn ended. No other request shape is claimed.
+    "0.157.0": (
+        "item/commandExecution/requestApproval",
+    ),
 }
 
 # One-shot permissions and explicit questions exercised in the isolated native
@@ -94,6 +101,14 @@ CLAUDE_NATIVE_REQUEST_CONTRACTS = {
                      for tool in ("Write", "Edit", "Bash", "AskUserQuestion")),
     # Only the two flows actually qualified after the local binary updated.
     "2.1.281": ("control_request:can_use_tool/Write", "control_request:can_use_tool/AskUserQuestion"),
+    # 2.1.282: only what the authorized 2026-09-26 real campaign exercised —
+    # a Write permission request surfaced, a forged tool kind refused before
+    # the wire write, and the decline delivered through the checked host
+    # reply path. Bash was auto-allowed by the host settings and is not
+    # claimed; AskUserQuestion remains unexercised on this build.
+    "2.1.282": (
+        "control_request:can_use_tool/Write",
+    ),
 }
 
 # Current installed versions qualified by the isolated control campaign. Pi's
@@ -120,11 +135,13 @@ def claude_version_observation(command, *, cwd, env, timeout=3.0):
     output = _version_output(command, cwd=cwd, env=env, timeout=timeout)
     match = re.fullmatch(rb"(\d{1,4}\.\d{1,4}\.\d{1,4}) \(Claude Code\)\r?\n?", output) if len(output) <= 1024 else None
     version = match.group(1).decode("ascii") if match else None
+    contracts = CLAUDE_NATIVE_REQUEST_CONTRACTS.get(version, ())
     return {"schema_version": 1, "native_version": version,
         "observation": "executable_version" if version else "version_not_observed",
         "capabilities_verified": False,
-        "compatible_native_requests": [],
-        "native_request_basis": "unverified",
+        "compatible_native_requests": list(contracts),
+        "native_request_basis": ("tested_version_contract" if contracts
+                                  else "unverified"),
         **control_observation("claude_code", version)}
 
 
@@ -145,10 +162,14 @@ def codex_version_observation(command, *, cwd, env):
         rb"codex-cli (\d{1,4}\.\d{1,4}\.\d{1,4})\r?\n?", output,
     ) if len(output) <= 1024 else None
     version = match.group(1).decode("ascii") if match else None
+    contracts = CODEX_NATIVE_REQUEST_CONTRACTS.get(version, ())
     return {"schema_version": 1, "native_version": version,
             "observation": "executable_version" if version else "version_not_observed",
-            "capabilities_verified": False, "compatible_native_requests": [],
-            "native_request_basis": "unverified", **control_observation("codex", version)}
+            "capabilities_verified": False,
+            "compatible_native_requests": list(contracts),
+            "native_request_basis": ("tested_version_contract" if contracts
+                                      else "unverified"),
+            **control_observation("codex", version)}
 
 
 def _version_output(command, *, cwd, env, timeout=3.0):
