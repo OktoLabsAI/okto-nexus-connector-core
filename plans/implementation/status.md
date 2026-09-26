@@ -785,3 +785,21 @@ AskUserQuestion remains synthetic). Capability advertisement now carries
 exactly the exercised request contracts for 0.157.0/2.1.282, with a focused
 test pinning them and the derived capabilities. See
 `evidence/real-control-hitl-closures-2026-09-26.md`.
+K11/TK-42 artifact-pair update: the current wheel/sdist pair (wheel
+`bc6b993de05b68dd9eb3a5d58b0655797ed15d10b843f29c7f1c264c16bb273c`, sdist
+`6168475fb2e9b838b26902495dc440613813c5aab6a678c92f5e849c1c7bd0a8`)
+passed offline wheel/sdist installation, bundled-resource checks and both
+consumer smoke roles in all six local Windows/WSL2 x Python 3.11-3.13
+environments (Windows 3.11/3.12 used freshly downloaded wheelhouses). The
+row stays NOT_RUN pending hosted CI, native non-WSL Linux and real
+consumers.
+
+K08/Linux external blocker: the WSL2 host has no native Linux Claude,
+Codex or Pi installation - only Windows interop wrappers on PATH, which
+Core discovery rejects by design. Real attach qualification (TK-30/31/32)
+and Linux provider behavior therefore remain externally blocked until a
+native Linux harness installation exists; the POSIX attach suite itself
+passes on WSL2. TK-25 (real out-of-order responses) and the retry clause
+of TK-26 remain blocked: the real providers cannot be forced into
+out-of-order replies or provider-side failures on demand, and the
+synthetic coverage is already recorded.
