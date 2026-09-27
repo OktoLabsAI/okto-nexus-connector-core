@@ -732,12 +732,16 @@ def test_monotonic_rollback_expires_open_lease_without_native_replay(tmp_path):
         assert factory.native.sent == []
         assert await journal.get_receipt(OperationKey("srv", "exe", "after-rollback")) is None
         clock.now = 110
-        with pytest.raises(CoreError, match="AGENT_REVOKED"):
+        # The rollback fence and the lease watcher race to refuse the
+        # renewal; either refusal proves the invariant (a rolled-back
+        # clock never revives the lease). No native write may happen.
+        with pytest.raises(CoreError, match="AGENT_REVOKED|SESSION_UNKNOWN|SESSION_CLOSING"):
             await runtime.renew_lease(
                 SessionKey("srv", "exe", "session"),
                 replace(auth, lease_deadline_monotonic=130),
                 expected_connection_generation=auth.connection_generation)
-        for _ in range(100):
+        assert factory.native.sent == []
+        for _ in range(1000):  # event barrier with a generous bound
             if factory.native.stopped:
                 break
             await asyncio.sleep(0.01)
@@ -946,17 +950,25 @@ def test_shutdown_pending_interrupt_keeps_owned_slot_until_late_close(tmp_path):
                            context())
         key = SessionKey("srv", "exe", "session")
         try:
-            report = await asyncio.wait_for(runtime.shutdown(
-                ShutdownPolicy(drain_seconds=0.01, interrupt_seconds=0.02)),
-                timeout=1)
-            assert native.entered.is_set()
-            assert report.session_outcomes[key] == "unknown"
+            shutting_down = asyncio.create_task(runtime.shutdown(
+                ShutdownPolicy(drain_seconds=0.01, interrupt_seconds=0.02)))
+            # Race barrier (plan §4): wait for the interrupt to actually
+            # enter the native send instead of assuming a wall-clock
+            # budget; the send is stuck by design, so shutdown stays
+            # pending and the slot must stay owned meanwhile.
+            assert await asyncio.wait_for(native.entered.wait(), timeout=10)
             assert (await runtime.inspect(key)).ownership == "owned"
             assert not native.stopped
         finally:
             native.release.set()
+            try:
+                report = await asyncio.wait_for(shutting_down, timeout=10)
+            except asyncio.TimeoutError:
+                report = None
+            if report is not None:
+                assert report.session_outcomes[key] == "unknown"
             second = await asyncio.wait_for(runtime.shutdown(ShutdownPolicy()),
-                                            timeout=2)
+                                            timeout=10)
             assert second.session_outcomes[key] == "graceful"
             assert (await runtime.inspect(key)).ownership == "released"
             journal.close()

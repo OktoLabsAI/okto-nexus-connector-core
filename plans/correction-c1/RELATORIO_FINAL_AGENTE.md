@@ -59,7 +59,7 @@ disponível; E2/E3 explicitamente não declarados — ver
 - Handoff: `HANDOFF_ARTEFATO.md` (breaking changes: reconcile
   CoreError; journal `aclose`; `create_runtime`).
 - Rastreabilidade: `BACKLOG_CORRECAO.json` (100 tarefas: 94 DONE, 6
-  BLOCKED com dono), `matriz_rc.md` (129 RCs: 119 PASS, 10 BLOCKED — detalhe por
+  BLOCKED com dono), `matriz_rc.md` (129 RCs: 120 PASS, 9 BLOCKED — detalhe por
   linha na matriz), evidências por fase em
   `evidence/`.
 
@@ -75,7 +75,8 @@ disponível; E2/E3 explicitamente não declarados — ver
 ## 6. Pendências por dono
 
 - **Usuário**: billing GitHub; sessão PyPI conjunta; decisão de iniciar
-  N/C.
+  N/C; logoff assistido do Windows (procedimento preparado; lado Linux
+  do RC-11-09 já executado e PASS).
 - **Hosts N/C**: integração E2 (pin do wheel 0.2.0.dev0), campanhas J.
 - **Core (futuro)**: attach qualificado; campaign logout/SO; bundle
   normativo quando consumidores fixarem revisão.

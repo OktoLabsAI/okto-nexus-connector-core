@@ -106,7 +106,7 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-11-06 | Slot reservado sem prova | preflight/containment | PASS | existing crash-slot suites: no purge path; capacity blocks with diagnostics |
 | RC-11-07 | Probe com backend indisponível | preflight/containment | PASS | probes only run behind preflight + contained spawn (rc-11-08 proves passive-only checks) |
 | RC-11-08 | Preflight sem segredos | preflight/containment | PASS | rc-11-08: preflight reads no env/credentials; OS interfaces only |
-| RC-11-09 | Shutdown e logout suportados | preflight/containment | BLOCKED | SO logout/session lifecycle needs an authorized interactive host campaign; backends' core containment already qualified per OS |
+| RC-11-09 | Shutdown e logout suportados | preflight/containment | PASS | WSL2 full-session termination (wsl --terminate) with live owned tree: guardian+native+grandchildren all reaped, journal marker survived intact, duplicate admission returned the existing receipt (no replay). Windows logoff remains an attended procedure (ends the interactive session); job-object KILL_ON_JOB_CLOSE covers handle teardown by OS contract. |
 | RC-12-01 | Múltiplos alvos | attach | BLOCKED | host target selection UX belongs to N/C; Core types enforce single approved target |
 | RC-12-02 | Troca de alvo | attach | BLOCKED | TOCTOU revalidation needs the qualified substrate |
 | RC-12-03 | Detach não mata | attach | PASS | PC02 rc-02-10: attach-shaped native receives close-only, never signalled |

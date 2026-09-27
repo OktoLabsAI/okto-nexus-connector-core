@@ -37,15 +37,15 @@ adicionais. Nenhuma publicação PyPI foi executada.
 | WSL2 / Python 3.13 | 753 passed, 18 skipped |
 | WSL2 / Python 3.11 (dedicado) | 753 passed, 18 skipped |
 | WSL2 / Python 3.12 (dedicado) | 753 passed, 18 skipped |
-| Windows / uv 3.11-3.12 (venvs improvisados) | falhas de timing/crash-peer documentadas como limitação do ambiente (não regressão; ver evidência PC12-PC14) |
+| Windows / Python 3.11, 3.12 e 3.13 (com PYTHONPATH absoluto) | 697 passed, 74 skipped cada |
 
 ## Bloqueios para E2/E3 (com dono)
 
 1. **Hosts N/C** (planos não iniciados): RC-13-01/02/04/05/09/12,
    J01–J34, TK-43.
 2. **Attach real**: RC-12-01/02/06 (substrato qualificado + hosts).
-3. **Campanha de logout/sessão de SO**: RC-11-09.
-4. **CI hospedada**: billing do GitHub (persiste).
+3. **CI hospedada**: billing do GitHub (persiste).
+4. **Windows logoff assistido**: procedimento preparado (RC-11-09 Linux já executado).
 5. **PyPI**: sessão conjunta com o usuário (excluída do escopo C1).
 6. **Provedores adicionais/plataformas**: fora da matriz qualificada
    registrada em `docs/compatibility.md`.
