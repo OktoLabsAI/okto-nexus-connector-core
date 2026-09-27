@@ -151,10 +151,10 @@ def test_two_processes_cannot_claim_same_session(tmp_path):
             outcomes.append(json.loads(stdout))
         assert sorted(item["result"] for item in outcomes) == ["admitted", "conflict"]
         journal = SQLiteJournal(path)
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM session_claims").fetchone()[0] == 1
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM operations_v2").fetchone()[0] == 1
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM session_claims").fetchone())[0] == 1
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM operations_v2").fetchone())[0] == 1
         winner = next(item["operation_id"] for item in outcomes
                       if item["result"] == "admitted")
         claim = asyncio.run(journal.claimed_sessions("srv", "exe")).claims[0]
@@ -192,20 +192,20 @@ def test_existing_journal_session_history_is_backfilled_as_claim(tmp_path):
 def test_failed_operation_insert_rolls_back_session_claim(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
-        journal._db.execute("""CREATE TRIGGER fail_open_operation
+        journal._run_sync(lambda db: db.execute("""CREATE TRIGGER fail_open_operation
             BEFORE INSERT ON operations_v2 BEGIN
             SELECT RAISE(ABORT, 'injected operation insert failure');
-            END""")
+            END"""))
         key = OperationKey("srv", "exe", "open-1")
         with pytest.raises(sqlite3.IntegrityError, match="injected"):
             await journal.admit(key, "intent", "session", claim_session=True,
                                 connection_generation=5,
                                 session_owner_generation=7)
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM session_claims").fetchone()[0] == 0
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM session_open_generations").fetchone()[0] == 0
-        journal._db.execute("DROP TRIGGER fail_open_operation")
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM session_claims").fetchone())[0] == 0
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM session_open_generations").fetchone())[0] == 0
+        journal._run_sync(lambda db: db.execute("DROP TRIGGER fail_open_operation"))
         _, fresh = await journal.admit(key, "intent", "session",
                                        claim_session=True,
                                        connection_generation=5,

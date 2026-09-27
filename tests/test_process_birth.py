@@ -128,12 +128,12 @@ def test_birth_insert_failure_rolls_back_without_phantom_record(tmp_path):
         await journal.admit(key, "intent", session.session_id,
                             claim_session=True)
         await journal.mark_possible_effect(key)
-        journal._db.execute("""CREATE TRIGGER fail_birth BEFORE INSERT ON process_births
-                            BEGIN SELECT RAISE(FAIL, 'injected birth failure'); END""")
+        journal._run_sync(lambda db: db.execute("""CREATE TRIGGER fail_birth BEFORE INSERT ON process_births
+                            BEGIN SELECT RAISE(FAIL, 'injected birth failure'); END"""))
         with pytest.raises(sqlite3.IntegrityError, match="injected"):
             await journal.record_process_birth(key, session.session_id, evidence)
         assert await journal.get_process_birth(session) is None
-        journal._db.execute("DROP TRIGGER fail_birth")
+        journal._run_sync(lambda db: db.execute("DROP TRIGGER fail_birth"))
         assert (await journal.record_process_birth(
             key, session.session_id, evidence)).evidence == evidence
         journal.close()
@@ -155,7 +155,7 @@ def test_birth_record_rejects_malformed_evidence_before_storage(tmp_path, eviden
             await journal.record_process_birth(
                 OperationKey("server", "executor", "open"),
                 "session", evidence)
-        assert journal._db.execute("SELECT COUNT(*) FROM process_births").fetchone()[0] == 0
+        assert journal._run_sync(lambda db: db.execute("SELECT COUNT(*) FROM process_births").fetchone())[0] == 0
         journal.close()
 
     asyncio.run(run())

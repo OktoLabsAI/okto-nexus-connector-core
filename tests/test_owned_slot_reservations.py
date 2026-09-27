@@ -60,9 +60,9 @@ def test_shared_journal_slot_budget_survives_reopen_and_requires_explicit_releas
             await reopened.reserve_owned_slot(third, "three")
             with pytest.raises(CoreError, match="SESSION_CONFLICT"):
                 await reopened.reserve_owned_slot(first, "one")
-            assert reopened._db.execute(
+            assert reopened._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 2
+            ).fetchone())[0] == 2
         finally:
             reopened.close()
 
@@ -85,9 +85,9 @@ def test_two_journal_connections_cannot_exceed_last_shared_slot(tmp_path):
             assert sum(isinstance(result, CoreError) and
                        result.code == "CAPACITY_EXCEEDED"
                        for result in results) == 1
-            assert first._db.execute(
+            assert first._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 1
+            ).fetchone())[0] == 1
         finally:
             first.close()
             second.close()
@@ -101,14 +101,14 @@ def test_slot_policy_mismatch_and_insert_failure_fail_closed(tmp_path):
         two = replace(JournalLimits(), max_owned_slots=2)
         first = SQLiteJournal(path, limits=two)
         key = await claimed_open(first, "one")
-        first._db.execute("""CREATE TRIGGER reject_slot BEFORE INSERT
+        first._run_sync(lambda db: db.execute("""CREATE TRIGGER reject_slot BEFORE INSERT
             ON owned_slot_reservations BEGIN
-            SELECT RAISE(ABORT, 'injected slot failure'); END""")
+            SELECT RAISE(ABORT, 'injected slot failure'); END"""))
         with pytest.raises(sqlite3.IntegrityError, match="injected"):
             await first.reserve_owned_slot(key, "one")
-        assert first._db.execute(
-            "SELECT COUNT(*) FROM owned_slot_policy").fetchone()[0] == 0
-        first._db.execute("DROP TRIGGER reject_slot")
+        assert first._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM owned_slot_policy").fetchone())[0] == 0
+        first._run_sync(lambda db: db.execute("DROP TRIGGER reject_slot"))
         await first.reserve_owned_slot(key, "one")
         different = SQLiteJournal(
             path, limits=replace(JournalLimits(), max_owned_slots=3))
@@ -120,9 +120,9 @@ def test_slot_policy_mismatch_and_insert_failure_fail_closed(tmp_path):
                 await different.release_owned_slot(key, "one")
             with pytest.raises(CoreError, match="PROFILE_DRIFT"):
                 await different.owned_slot_page()
-            assert first._db.execute(
+            assert first._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 1
+            ).fetchone())[0] == 1
         finally:
             different.close()
             first.close()

@@ -294,7 +294,7 @@ def test_codex_peer_approval_decision_is_durable_authorized_and_correlated(
             assert receipt.stage == "SUBMITTED" and receipt.possible_effect
             if response is not None:
                 assert "operator-secret-answer-marker" not in "\n".join(
-                    journal._db.iterdump())
+                    journal._run_sync(lambda db: "".join(db.iterdump())))
 
             async def completed_and_logged():
                 while True:

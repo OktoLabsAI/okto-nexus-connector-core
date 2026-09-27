@@ -67,65 +67,65 @@
         {
           "task_id": "PC01.01",
           "title": "Isolar a persistência em unidade serial",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "offloop.py OffLoopExecutor; journal/_open_database; ledger/_open_database; all SQL in worker units",
           "commits": []
         },
         {
           "task_id": "PC01.02",
           "title": "Implementar filas limitadas e justiça",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "bounded normal(256)/urgent(64) queues + byte budget (payload_bytes on event writes); ExecutorFull -> JOURNAL_BUSY before effect",
           "commits": []
         },
         {
           "task_id": "PC01.03",
           "title": "Tornar cancelamento uma semântica explícita",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "cancel-safe delivery (no InvalidStateError); cancelled await still completes the durable unit (tests/test_offloop_executor.py)",
           "commits": []
         },
         {
           "task_id": "PC01.04",
           "title": "Preservar transações críticas",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "same SQL/transactions on worker; conformance+restart kits pass; multiprocess fairness passes",
           "commits": []
         },
         {
           "task_id": "PC01.05",
           "title": "Cobrir leituras, ledger e manutenção",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "reads/storage_status/ledger/claims/pages via worker; events() pages without holding a transaction across yields",
           "commits": []
         },
         {
           "task_id": "PC01.06",
           "title": "Definir abertura e encerramento assíncronos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "aclose()/close() with drain+proof (close timeout raises); worker stop wakes via wake-queue; stopped executor refuses work (JOURNAL_CLOSED)",
           "commits": []
         },
         {
           "task_id": "PC01.07",
           "title": "Instrumentar latência e pressão",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "OffLoopExecutor.metrics()/SQLiteJournal.worker_metrics(): queue depths, bytes, thread id, stopped - no payloads/secrets",
           "commits": []
         },
         {
           "task_id": "PC01.08",
           "title": "Migrar fixtures e exemplos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "46 test/tool _db usages migrated to _run_sync; consumer smoke/verify scripts unchanged API; regression seed F04 now passes",
           "commits": []
         }
       ]

@@ -41,9 +41,9 @@ def test_separate_handles_share_one_installation_slot_budget(tmp_path):
 
         reopened = SQLiteOwnedSlotLedger(path, max_slots=1)
         try:
-            assert reopened._db.execute(
+            assert reopened._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 1
+            ).fetchone())[0] == 1
         finally:
             reopened.close()
 
@@ -74,9 +74,9 @@ def test_slot_ledger_rejects_relative_path_limits_and_policy_drift(tmp_path):
                     OperationKey("srv", "exe", "open-a"), "session-a")
             with pytest.raises(CoreError, match="PROFILE_DRIFT"):
                 await second.owned_slot_page()
-            assert first._db.execute(
+            assert first._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 1
+            ).fetchone())[0] == 1
             assert await first.release_owned_slot(
                 OperationKey("srv", "exe", "open-a"), "session-a") is True
         finally:

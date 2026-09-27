@@ -810,10 +810,12 @@ class LocalRuntimeCore:
         if (binding.adapter_id == "claude_attach" or binding.force_requested or
                 not callable(getattr(binding.native, "force_stop", None))):
             return
-        if (immediate and binding.force_task is not None and
-                not binding.force_task.done()):
-            binding.force_task.cancel()
-            binding.force_task = None
+        if binding.force_task is not None and not binding.force_task.done():
+            # A force task that already started its physical request is
+            # never cancelled: its durable receipt must land (PC01 ordering).
+            # A tighter deadline only replaces a task that has not run yet,
+            # which cannot happen once scheduled - so keep the running one.
+            return
         if binding.force_task is None or binding.force_task.done():
             binding.force_started = asyncio.Event()
             binding.force_task = asyncio.create_task(
@@ -855,6 +857,18 @@ class LocalRuntimeCore:
             started.set()
             try:
                 await force_stop()
+            except asyncio.CancelledError:
+                # The containment call completed-or-was-cancelled after the
+                # physical request was issued: the honest outcome stays a
+                # possible effect, but a completed force_stop must still get
+                # its durable receipt even when the surrounding task is
+                # being cancelled (PC01 ordering: receipt writes now land
+                # on the worker and can race the cancellation).
+                if admitted:
+                    await asyncio.shield(self._journal.record_receipt(key, OperationReceipt(
+                        operation_id, digest, "OUTCOME_UNKNOWN", True, False,
+                        session.session_id, error_code="OUTCOME_UNKNOWN")))
+                raise
             except BaseException:
                 if admitted:
                     await self._journal.record_receipt(key, OperationReceipt(
@@ -862,9 +876,9 @@ class LocalRuntimeCore:
                         session.session_id, error_code="OUTCOME_UNKNOWN"))
                 return
             if admitted:
-                await self._journal.record_receipt(key, OperationReceipt(
+                await asyncio.shield(self._journal.record_receipt(key, OperationReceipt(
                     operation_id, digest, "SUBMITTED", True, False,
-                    session.session_id))
+                    session.session_id)))
         except BaseException:
             # Neither an attempted force nor an exception proves tree stop.
             # The normal shutdown task retains the effect slot and observes

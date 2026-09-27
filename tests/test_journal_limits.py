@@ -444,15 +444,15 @@ def test_global_operation_counter_reserve_duplicate_and_upgrade(tmp_path):
         old, fresh = await journal.admit(
             OperationKey("server-0", "exe", "op-0"), "hash-0", "session-0")
         assert not fresh and old.operation_id == "op-0"
-        assert journal._db.execute(
-            "SELECT operation_rows FROM operation_usage").fetchone()[0] == 4
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT operation_rows FROM operation_usage").fetchone())[0] == 4
         journal.close()
 
         with sqlite3.connect(path) as db:
             db.execute("DROP TABLE operation_usage")
         journal = SQLiteJournal(path, limits=limits)
-        assert journal._db.execute(
-            "SELECT operation_rows FROM operation_usage").fetchone()[0] == 4
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT operation_rows FROM operation_usage").fetchone())[0] == 4
         with pytest.raises(CoreError, match="JOURNAL_FULL"):
             await journal.admit(OperationKey("new", "exe", "after-upgrade"),
                                 "hash", "session", critical=True)
@@ -474,8 +474,8 @@ def test_global_operation_counter_serializes_two_connections(tmp_path):
             return_exceptions=True)
         assert len([item for item in results if isinstance(item, tuple)]) == 3
         assert len([item for item in results if isinstance(item, CoreError)]) == 5
-        assert first._db.execute(
-            "SELECT operation_rows FROM operation_usage").fetchone()[0] == 3
+        assert first._run_sync(lambda db: db.execute(
+            "SELECT operation_rows FROM operation_usage").fetchone())[0] == 3
         first.close()
         second.close()
 

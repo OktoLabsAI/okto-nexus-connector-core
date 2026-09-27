@@ -825,18 +825,18 @@ def test_shutdown_drains_active_turn_then_journals_interrupt_before_close(tmp_pa
             assert not native.stopped
             assert not native.interrupted.is_set()
             await asyncio.wait_for(native.interrupted.wait(), timeout=1)
-            receipt = journal._db.execute(
+            receipt = journal._run_sync(lambda db: db.execute(
                 "SELECT stage,possible_effect FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_interrupt.%'"
-            ).fetchone()
+            ).fetchone())
             assert receipt == ("SUBMISSION_STARTED", 1)
             assert not native.stopped
         finally:
             native.release.set()
             report = await asyncio.wait_for(shutting_down, timeout=2)
             assert report.session_outcomes[SessionKey("srv", "exe", "session")] == "graceful"
-            receipt = journal._db.execute(
+            receipt = journal._run_sync(lambda db: db.execute(
                 "SELECT stage FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_interrupt.%'"
-            ).fetchone()
+            ).fetchone())
             assert receipt == ("SUBMITTED",)
             journal.close()
 
@@ -872,9 +872,9 @@ def test_shutdown_active_turn_settles_during_drain_without_interrupt(tmp_path):
         report = await asyncio.wait_for(shutting_down, timeout=1)
         assert report.session_outcomes[SessionKey("srv", "exe", "session")] == "graceful"
         assert not any(verb == "interrupt" for verb, _, _ in native.sent)
-        assert journal._db.execute(
+        assert journal._run_sync(lambda db: db.execute(
             "SELECT COUNT(*) FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_interrupt.%'"
-        ).fetchone()[0] == 0
+        ).fetchone())[0] == 0
         journal.close()
 
     asyncio.run(run())
@@ -907,9 +907,9 @@ def test_shutdown_interrupt_refusal_records_safe_failure_and_closes(tmp_path):
         report = await runtime.shutdown(ShutdownPolicy(
             drain_seconds=0.01, interrupt_seconds=0.1))
         assert report.session_outcomes[SessionKey("srv", "exe", "session")] == "graceful"
-        assert journal._db.execute(
+        assert journal._run_sync(lambda db: db.execute(
             "SELECT stage,possible_effect,retry_safe,error_code FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_interrupt.%'"
-        ).fetchone() == ("FAILED", 0, 1, "NATIVE_CONTROL_UNSAFE")
+        ).fetchone()) == ("FAILED", 0, 1, "NATIVE_CONTROL_UNSAFE")
         journal.close()
 
     asyncio.run(run())
@@ -982,9 +982,9 @@ def test_shutdown_force_request_does_not_release_pending_native_effect(tmp_path)
                                expected_turn_id=expected_turn_id)
 
         async def force_stop(self):
-            self.stage_at_force = self.journal._db.execute(
+            self.stage_at_force = self.journal._run_sync(lambda db: db.execute(
                 "SELECT stage FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_force.%'"
-            ).fetchone()
+            ).fetchone())
             self.forced.set()
             self.stopped = True
             await self.queue.put(None)
@@ -1022,9 +1022,17 @@ def test_shutdown_force_request_does_not_release_pending_native_effect(tmp_path)
                                             timeout=2)
             assert second.session_outcomes[key] in {"unknown", "already_closed"}
             assert (await runtime.inspect(key)).ownership == "released"
-            assert journal._db.execute(
-                "SELECT stage FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_force.%'"
-            ).fetchone() == ("SUBMITTED",)
+            # The force bookkeeping runs as a background task; wait for its
+            # durable receipt instead of racing it with a synchronous read.
+            async def force_receipt_settled():
+                while True:
+                    row = await asyncio.to_thread(journal._run_sync, lambda db: db.execute(
+                        "SELECT stage FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_force.%'"
+                    ).fetchone())
+                    if row == ("SUBMITTED",):
+                        return row
+                    await asyncio.sleep(0)
+            assert await asyncio.wait_for(force_receipt_settled(), timeout=2)
             journal.close()
 
     asyncio.run(run())
@@ -1334,9 +1342,9 @@ def test_installation_ledger_fences_distinct_executor_journals(tmp_path):
                 "open-c", "session-c", "epoch-c", prepared_b), context())).stage == "SUBMITTED"
             assert factory_b.open_count == 1
             await second.shutdown(ShutdownPolicy())
-            assert ledger_a._db.execute(
+            assert ledger_a._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 0
+            ).fetchone())[0] == 0
         finally:
             journal_a.close()
             journal_b.close()
@@ -1382,9 +1390,9 @@ def test_installation_ledger_retains_ambiguous_launch_across_journals(tmp_path):
                 await second.open(OpenOperation(
                     "open-b", "session-b", "epoch-b", prepared_b), context())
             assert factory_b.open_count == 0
-            assert ledger_b._db.execute(
+            assert ledger_b._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 1
+            ).fetchone())[0] == 1
         finally:
             journal_b.close()
             ledger_b.close()
@@ -1420,9 +1428,9 @@ def test_uncertain_open_pins_shared_journal_slot_across_reopen(tmp_path):
                 await second.open(OpenOperation(
                     "open-b", "session-b", "epoch-b", prepared), context())
             assert factory_b.open_count == 0
-            assert journal_b._db.execute(
+            assert journal_b._run_sync(lambda db: db.execute(
                 "SELECT COUNT(*) FROM owned_slot_reservations WHERE released=0"
-            ).fetchone()[0] == 1
+            ).fetchone())[0] == 1
         finally:
             journal_b.close()
 
@@ -1446,9 +1454,9 @@ def test_proven_prelaunch_refusal_releases_shared_slot(tmp_path):
             with pytest.raises(CoreError, match="NATIVE_VERSION_UNQUALIFIED"):
                 await first.open(OpenOperation(
                     "open-a", "session-a", "epoch-a", prepared), context())
-            assert journal_a._db.execute(
+            assert journal_a._run_sync(lambda db: db.execute(
                 "SELECT released FROM owned_slot_reservations"
-            ).fetchone() == (1,)
+            ).fetchone()) == (1,)
             assert SessionKey("srv", "exe", "session-a") not in first._uncertain_opens
         finally:
             journal_a.close()
@@ -1835,9 +1843,9 @@ def test_lease_renewal_fences_old_generation_and_expiry_closes(tmp_path):
         assert factory.native.stopped
         assert snapshot.lease_state == "CLOSED"
         assert snapshot.ownership == "released"
-        internal = journal._db.execute(
+        internal = journal._run_sync(lambda db: db.execute(
             "SELECT stage,possible_effect,retry_safe FROM operations_v2 WHERE operation_id LIKE 'core.internal.lease_close.%'"
-        ).fetchall()
+        ).fetchall())
         assert internal == [("SUCCEEDED", 1, 0)]
         journal.close()
 
@@ -2178,7 +2186,7 @@ def test_native_approval_is_authorized_deduped_and_journals_no_answer(tmp_path):
             assert (await runtime.decide_native_approval(
                 answer, authority)).stage == "SUBMITTED"
             assert factory.native.replies[-1][2] == answer.operator_response
-            assert secret not in "\n".join(journal._db.iterdump())
+            assert secret not in "\n".join(journal._run_sync(lambda db: "".join(db.iterdump())))
             assert await journal.get_receipt(
                 OperationKey("srv", "exe", "missing-answer")) is None
             assert await journal.get_receipt(

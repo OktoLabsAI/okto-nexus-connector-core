@@ -105,13 +105,13 @@ def test_pressure_compacts_only_acked_events_before_new_admission(tmp_path):
                                        reserved_storage_bytes=4096)
         same, fresh = await journal.admit(existing, "hash", "session")
         assert not fresh and same.operation_id == "existing"
-        assert journal._db.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 3
+        assert journal._run_sync(lambda db: db.execute("SELECT COUNT(*) FROM events").fetchone())[0] == 3
         try:
             await journal.admit(OperationKey("srv", "exe", "new"), "hash", "session")
         except CoreError as exc:
             assert exc.code == "JOURNAL_FULL" and exc.retry_safe
-        assert journal._db.execute(
-            "SELECT sequence FROM events ORDER BY sequence").fetchall() == [(3,)]
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT sequence FROM events ORDER BY sequence").fetchall()) == [(3,)]
         assert [item.sequence async for item in journal.events(
             EventCursor("srv", "exe", "session", "epoch", 2))] == [3]
         journal.close()
@@ -140,8 +140,8 @@ def test_event_write_recovers_only_acked_rows_under_storage_pressure(
             cursor, after_sequence=10))] == [11, 12, 13, 14, 15, 16]
         with pytest.raises(CoreError, match="EVENT_GAP"):
             [item async for item in journal.events(cursor)]
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM events").fetchone()[0] == 6
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM events").fetchone())[0] == 6
         journal.close()
 
     asyncio.run(run())
@@ -175,8 +175,8 @@ def test_logical_quota_recovery_prioritizes_the_pressured_session(
             cursor, after_sequence=1))] == [2, 3]
         with pytest.raises(CoreError, match="EVENT_GAP"):
             [item async for item in journal.events(cursor)]
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM events WHERE server_id='zzz'").fetchone()[0] == 2
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM events WHERE server_id='zzz'").fetchone())[0] == 2
         journal.close()
 
     asyncio.run(run())

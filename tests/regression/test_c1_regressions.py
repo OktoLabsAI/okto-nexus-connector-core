@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import asyncio
 import gc
+import os
 import shutil
 import sqlite3
 import tempfile
@@ -258,16 +259,15 @@ def test_f03_eof_with_live_process_blocks_new_submits(tmp_path):
 
 
 # ---------------------------------------------------------------- F04
-@pytest.mark.xfail(strict=True, reason="C1/PC01 pending: SQLite I/O must leave the event loop (F04)")
 def test_f04_sqlite_lock_does_not_block_event_loop_timers(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
         sql_threads = []
         original = journal._storage_status
 
-        def probing_status():
+        def probing_status(db=None):
             sql_threads.append(threading.get_ident())
-            return original()
+            return original(db)
 
         journal._storage_status = probing_status
         blocker = sqlite3.connect(tmp_path / "journal.db")
@@ -283,17 +283,19 @@ def test_f04_sqlite_lock_does_not_block_event_loop_timers(tmp_path):
 
             ticker_task = asyncio.create_task(ticker())
             from nexus_connector_core import OperationKey
-            await journal.admit(OperationKey("srv", "exe", "blocked-op"),
-                                "sha256:" + "1" * 64, "session")
-            ticker_task.cancel()
-            try:
-                await ticker_task
-            except asyncio.CancelledError:
-                pass
+            admit_task = asyncio.create_task(journal.admit(
+                OperationKey("srv", "exe", "blocked-op"),
+                "sha256:" + "1" * 64, "session"))
+            await asyncio.sleep(0.05)  # the unit is enqueued, awaiting the lock
+            await ticker_task
             # Timers progressed while another writer held the database...
             assert len(ticks) >= 15, "event loop stalled behind SQLite"
             # ...and the SQL ran off the loop thread.
             assert sql_threads and sql_threads[0] != threading.get_ident()
+            # Releasing the writer lets the queued write commit faithfully.
+            blocker.rollback()
+            receipt, fresh = await asyncio.wait_for(admit_task, timeout=5)
+            assert fresh and receipt.stage == "RECEIVED_DURABLE"
         finally:
             blocker.rollback()
             blocker.close()
@@ -468,6 +470,8 @@ def test_pi_binding_fingerprint_is_path_sensitive():
                 "// synthetic pi cli\n", encoding="utf-8")
             node = root / node_name
             node.write_bytes(b"synthetic node binary")
+            if os.name != "nt":
+                node.chmod(0o755)  # POSIX candidates must be executable
         def candidate_for(root):
             return candidate_pi_node_cli(
                 str(root / node_name),

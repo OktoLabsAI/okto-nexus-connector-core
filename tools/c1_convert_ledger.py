@@ -1,39 +1,18 @@
-"""Installation-scoped durable owned-slot ledger shared across journals.
-
-The trusted host must inject the same absolute local file path into every
-Core instance belonging to one installation. A reservation is not proof that
-its process is live; it remains occupied until the owning Core proves a
-prelaunch refusal or observes stop through its native containment handle.
-"""
-
-from __future__ import annotations
-
+"""PC01: convert slot_ledger.py to the off-loop executor (hand-verified)."""
 from pathlib import Path
-import sqlite3
-import time
 
-from .offloop import (ExecutorClosed, ExecutorFull, OffLoopExecutor)
-from .journal import validate_claim_namespace, validate_claim_page
-from .models import (CoreError, OperationKey, OwnedSlotPage,
-                     OwnedSlotReservation, SessionKey)
+path = Path("src/nexus_connector_core/slot_ledger.py")
+source = path.read_text(encoding="utf-8")
 
+source = source.replace(
+    "from .journal import validate_claim_namespace, validate_claim_page",
+    "from .offloop import (ExecutorClosed, ExecutorFull, OffLoopExecutor)\n"
+    "from .journal import validate_claim_namespace, validate_claim_page", 1)
+source = source.replace("import asyncio\n", "", 1)
 
-class SQLiteOwnedSlotLedger:
-    """A cross-process slot cap independent of per-executor journal files."""
-
-    def __init__(self, path: str | Path, *, max_slots: int = 8,
-                 max_storage_bytes: int = 64 * 1024 * 1024):
-        path = Path(path)
-        if not path.is_absolute():
-            raise ValueError("owned-slot ledger needs an absolute local path")
-        if (type(max_slots) is not int or not 1 <= max_slots <= 9223372036854775807 or
-                type(max_storage_bytes) is not int or
-                not 65536 <= max_storage_bytes <= 9223372036854775807):
-            raise ValueError("invalid owned-slot ledger limits")
-        self.path = path
-        self.max_slots = max_slots
-        self.max_storage_bytes = max_storage_bytes
-        self._executor = OffLoopExecutor(name="core-slot-ledger-worker")
+init_start = source.index("        self._lock = asyncio.Lock()")
+init_end = source.index("    def close(self) -> None:")
+new_init = '''        self._executor = OffLoopExecutor(name="core-slot-ledger-worker")
         self._storage_identity = None
         self._executor.start(self._open_database)
 
@@ -82,7 +61,14 @@ class SQLiteOwnedSlotLedger:
             db.close()
             raise
         return db
-    async def _run(self, impl, *, urgent: bool = True):
+'''
+source = source[:init_start] + new_init + source[init_end:]
+
+source = source.replace('''    def close(self) -> None:
+        self._db.close()
+
+    def _check_storage_identity(self) -> None:''',
+'''    async def _run(self, impl, *, urgent: bool = True):
         try:
             future = self._executor.submit(impl, urgent=urgent)
         except ExecutorFull as exc:
@@ -102,28 +88,20 @@ class SQLiteOwnedSlotLedger:
     def close(self) -> None:
         self._executor.close(timeout=15.0)
 
-    def _check_storage_identity(self, db) -> None:
-        try:
-            info = self.path.stat()
-        except OSError as exc:
-            raise CoreError("JOURNAL_UNAVAILABLE", "slot_ledger") from exc
-        if (info.st_dev, info.st_ino) != self._storage_identity:
-            raise CoreError("PROFILE_DRIFT", "slot_ledger")
+    def _check_storage_identity(self, db) -> None:''')
+source = source.replace(
+    "    def _rollback_if_active(self) -> None:\n"
+    "        if self._db.in_transaction:\n"
+    '            self._db.execute("ROLLBACK")',
+    "    def _rollback_if_active(self, db) -> None:\n"
+    "        if db.in_transaction:\n"
+    '            db.execute("ROLLBACK")')
 
-    @staticmethod
-    def _validate(key: OperationKey, session_id: str) -> None:
-        if not isinstance(key, OperationKey):
-            raise ValueError("invalid owned-slot identity")
-        validate_claim_namespace(key.server_id, key.executor_id)
-        if (type(key.operation_id) is not str or not key.operation_id or
-                type(session_id) is not str or not session_id):
-            raise ValueError("invalid owned-slot identity")
-
-    def _rollback_if_active(self, db) -> None:
-        if db.in_transaction:
-            db.execute("ROLLBACK")
-
-    async def reserve_owned_slot(self, key: OperationKey,
+# reserve_owned_slot
+reserve_start = source.index('    async def reserve_owned_slot(')
+reserve_end = source.index('    async def release_owned_slot(')
+source = (source[:reserve_start] +
+'''    async def reserve_owned_slot(self, key: OperationKey,
                                  session_id: str) -> None:
         """Reserve before native launch; ambiguity leaves the slot pinned."""
         self._validate(key, session_id)
@@ -169,7 +147,12 @@ class SQLiteOwnedSlotLedger:
                 raise
         return await self._run(_worker_impl)
 
-    async def release_owned_slot(self, key: OperationKey,
+''' + source[reserve_end:])
+
+release_start = source.index('    async def release_owned_slot(')
+release_end = source.index('    async def owned_slot_page(')
+source = (source[:release_start] +
+'''    async def release_owned_slot(self, key: OperationKey,
                                  session_id: str) -> bool:
         """Trusted caller releases only after non-effect or observed stop."""
         self._validate(key, session_id)
@@ -206,7 +189,11 @@ class SQLiteOwnedSlotLedger:
             return not bool(row[1])
         return await self._run(_worker_impl)
 
-    async def owned_slot_page(self, *, after_rowid: int = 0,
+''' + source[release_end:])
+
+page_start = source.index('    async def owned_slot_page(')
+source = (source[:page_start] +
+'''    async def owned_slot_page(self, *, after_rowid: int = 0,
                               high_water_rowid: int | None = None,
                               limit: int = 128) -> OwnedSlotPage:
         """Read a bounded active-reservation page, not live process proof."""
@@ -239,3 +226,7 @@ class SQLiteOwnedSlotLedger:
                 high_water_rowid,
                 page_rows[-1][0] if len(rows) > limit else None)
         return await self._run(_worker_impl)
+''')
+
+path.write_text(source, encoding="utf-8")
+print("slot_ledger converted")

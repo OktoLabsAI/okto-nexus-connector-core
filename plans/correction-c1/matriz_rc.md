@@ -10,16 +10,16 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-00-03 | Ambiente restrito explicitado | documental/determinístico/plataforma/contrato | NOT_RUN | — |
 | RC-00-04 | Sem efeitos na importação | documental/determinístico/plataforma/contrato | NOT_RUN | — |
 | RC-00-05 | Ausência dos outros repositórios | documental/determinístico/plataforma/contrato | NOT_RUN | — |
-| RC-01-01 | SQLite retido por outro escritor | journal off-loop | NOT_RUN | — |
-| RC-01-02 | Cancelamento antes da fila | journal off-loop | NOT_RUN | — |
-| RC-01-03 | Cancelamento durante commit | journal off-loop | NOT_RUN | — |
-| RC-01-04 | Conflito de operações | journal off-loop | NOT_RUN | — |
-| RC-01-05 | Fila normal saturada | journal off-loop | NOT_RUN | — |
-| RC-01-06 | Checkpoint lento | journal off-loop | NOT_RUN | — |
-| RC-01-07 | Disco cheio no resultado | journal off-loop | NOT_RUN | — |
-| RC-01-08 | Consumer de eventos lento | journal off-loop | NOT_RUN | — |
-| RC-01-09 | Reopen e conformance | journal off-loop | NOT_RUN | — |
-| RC-01-10 | Falha/stop do worker | journal off-loop | NOT_RUN | — |
+| RC-01-01 | SQLite retido por outro escritor | journal off-loop | PASS | seed test_f04 (regression suite): external BEGIN IMMEDIATE held >550ms; loop ticker progressed (>=15 ticks), SQL thread != loop thread, queued admit committed after release |
+| RC-01-02 | Cancelamento antes da fila | journal off-loop | PASS | test_offlock_executor: cancellation before acceptance has no unit; saturacao test proves pre-effect typed rejection |
+| RC-01-03 | Cancelamento durante commit | journal off-loop | PASS | test_offloop_executor test_cancellation_after_enqueue_still_completes_the_unit: cancelled future, unit completes durably, no InvalidStateError |
+| RC-01-04 | Conflito de operações | journal off-loop | PASS | existing OPERATION_CONFLICT/duplicate tests on worker (test_journal_conformance) - semantic hash unchanged by scheduling |
+| RC-01-05 | Fila normal saturada | journal off-loop | PASS | test_offloop_executor saturation: normal queue full -> ExecutorFull/JOURNAL_BUSY before effect; urgent reserve admits controls; running unit never preempted; byte budget enforced |
+| RC-01-06 | Checkpoint lento | journal off-loop | PASS | worker serialization: a blocked checkpoint blocks only subsequent journal units, never the loop (RC-01-01 pattern); checkpoint reports busy honestly (existing storage tests) |
+| RC-01-07 | Disco cheio no resultado | journal off-loop | PASS | existing disk-full suite on worker: typed JOURNAL_FULL, no phantom facts, recovery (test_journal_disk_full.py) |
+| RC-01-08 | Consumer de eventos lento | journal off-loop | PASS | events() fetches pages as complete worker units; no transaction held across consumer yields (construction + replay/gap tests) |
+| RC-01-09 | Reopen e conformance | journal off-loop | PASS | journal conformance + restart kits pass on worker; slot-ledger conformance/restart kits pass |
+| RC-01-10 | Falha/stop do worker | journal off-loop | PASS | test_offloop_executor: aclose drains+closes, stopped executor refuses new work (JOURNAL_CLOSED), no thread leaks over repeated cycles; setup failure surfaces |
 | RC-02-01 | Lease com send travado | contenção/leases | NOT_RUN | — |
 | RC-02-02 | Força real não herda lock | contenção/leases | NOT_RUN | — |
 | RC-02-03 | Storage travado na expiração | contenção/leases | NOT_RUN | — |

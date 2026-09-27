@@ -23,11 +23,11 @@ async def run(path: str, boundary: str) -> None:
     if boundary == "uncommitted_admit":
         # Deliberate fault injection inside an open SQLite transaction, not a
         # production Journal-port operation. Abrupt exit must roll it back.
-        journal._db.execute("BEGIN IMMEDIATE")
-        journal._db.execute(
+        journal._run_sync(lambda db: db.execute("BEGIN IMMEDIATE"))
+        journal._run_sync(lambda db: db.execute(
             "INSERT INTO operations_v2 VALUES (?,?,?,?,?,?,?,?,?,?)",
             (KEY.server_id, KEY.executor_id, KEY.operation_id, INTENT,
-             CURSOR.session_id, "RECEIVED_DURABLE", 0, 1, None, None))
+             CURSOR.session_id, "RECEIVED_DURABLE", 0, 1, None, None)))
         return
     if boundary == "after_ack":
         event = RuntimeEvent(CURSOR.server_id, CURSOR.executor_id,
@@ -55,12 +55,12 @@ async def run(path: str, boundary: str) -> None:
                                      "linux_guardian")
         if boundary == "uncommitted_birth":
             # Fault between the INSERT and COMMIT of the birth fact.
-            journal._db.execute("BEGIN IMMEDIATE")
-            journal._db.execute(
+            journal._run_sync(lambda db: db.execute("BEGIN IMMEDIATE"))
+            journal._run_sync(lambda db: db.execute(
                 "INSERT INTO process_births VALUES (?,?,?,?,?,?,?,?)",
                 (KEY.server_id, KEY.executor_id, CURSOR.session_id,
                  KEY.operation_id, birth.platform, birth.pid,
-                 birth.birth_token, birth.containment))
+                 birth.birth_token, birth.containment)))
             return
         await journal.record_process_birth(KEY, CURSOR.session_id, birth)
         return

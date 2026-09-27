@@ -74,8 +74,8 @@ async def run(path: Path, *, normal_rows: int = 99_000,
             "intent-0", "session-0")
         if fresh or duplicate.operation_id != "normal-0":
             raise AssertionError("duplicate not available at saturation")
-        count = journal._db.execute(
-            "SELECT operation_rows FROM operation_usage").fetchone()[0]
+        count = journal._run_sync(lambda db: db.execute(
+            "SELECT operation_rows FROM operation_usage").fetchone())[0]
         if count != expected_rows:
             raise AssertionError(f"global counter drifted: {count}")
         status = await journal.storage_status()
@@ -85,8 +85,8 @@ async def run(path: Path, *, normal_rows: int = 99_000,
     reopened_at = time.perf_counter()
     journal = SQLiteJournal(path, limits=selected_limits)
     try:
-        reopened_count = journal._db.execute(
-            "SELECT operation_rows FROM operation_usage").fetchone()[0]
+        reopened_count = journal._run_sync(lambda db: db.execute(
+            "SELECT operation_rows FROM operation_usage").fetchone())[0]
         if reopened_count != expected_rows:
             raise AssertionError(f"reopen counter drifted: {reopened_count}")
         replay, fresh = await journal.admit(

@@ -67,12 +67,12 @@ def test_noisy_server_cannot_take_quiet_servers_normal_or_critical_slots(tmp_pat
     async def verify():
         journal = SQLiteJournal(path, limits=limits)
         try:
-            assert journal._db.execute(
-                "SELECT operation_rows FROM operation_usage").fetchone()[0] == 6
-            assert journal._db.execute(
-                "SELECT operation_rows FROM server_operation_usage WHERE server_id='noisy'").fetchone()[0] == 4
-            assert journal._db.execute(
-                "SELECT operation_rows FROM server_operation_usage WHERE server_id='quiet'").fetchone()[0] == 2
+            assert journal._run_sync(lambda db: db.execute(
+                "SELECT operation_rows FROM operation_usage").fetchone())[0] == 6
+            assert journal._run_sync(lambda db: db.execute(
+                "SELECT operation_rows FROM server_operation_usage WHERE server_id='noisy'").fetchone())[0] == 4
+            assert journal._run_sync(lambda db: db.execute(
+                "SELECT operation_rows FROM server_operation_usage WHERE server_id='quiet'").fetchone())[0] == 2
             _, fresh = await journal.admit(
                 OperationKey("noisy", "executor", "noisy-critical"),
                 "critical", "noisy-0", critical=True)
@@ -112,10 +112,10 @@ def test_four_processes_cannot_oversubscribe_global_slots(tmp_path):
     assert sum(item["denied"] for item in results) == 29
     journal = SQLiteJournal(path, limits=limits)
     try:
-        assert journal._db.execute(
-            "SELECT operation_rows FROM operation_usage").fetchone()[0] == 3
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM operations_v2").fetchone()[0] == 3
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT operation_rows FROM operation_usage").fetchone())[0] == 3
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM operations_v2").fetchone())[0] == 3
     finally:
         journal.close()
 
@@ -140,9 +140,9 @@ def test_critical_writers_share_hard_global_server_and_session_caps(tmp_path):
                for server in range(2))
     journal = SQLiteJournal(path, limits=limits)
     try:
-        assert journal._db.execute(
-            "SELECT operation_rows FROM operation_usage").fetchone()[0] == 6
-        assert journal._db.execute(
-            "SELECT COUNT(*) FROM operations_v2").fetchone()[0] == 6
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT operation_rows FROM operation_usage").fetchone())[0] == 6
+        assert journal._run_sync(lambda db: db.execute(
+            "SELECT COUNT(*) FROM operations_v2").fetchone())[0] == 6
     finally:
         journal.close()
