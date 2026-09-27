@@ -39,6 +39,16 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
     executable = Path(candidate.executable)
     if selected_fingerprint(candidate) != candidate.fingerprint:
         raise CoreError("PROFILE_DRIFT", "prepare")
+    if candidate.build_identity is not None:
+        from .build_identity import (executable_build_identity,
+                                     pi_build_identity)
+        if candidate.launch_script is not None and candidate.adapter_id == "pi_rpc":
+            current_identity = pi_build_identity(
+                candidate.executable, Path(candidate.launch_script).parents[3])
+        else:
+            current_identity = executable_build_identity(candidate.executable)
+        if current_identity != candidate.build_identity:
+            raise CoreError("PROFILE_DRIFT", "prepare")
     if intent.adapter_id == "codex_app_server":
         argv = (str(executable), "app-server")
     elif intent.adapter_id == "pi_rpc":

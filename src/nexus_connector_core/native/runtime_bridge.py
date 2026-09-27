@@ -384,7 +384,8 @@ class CopiedAdapterFactory:
         kind = spec.native_kind
         if not qualified_build(
                 kind, prepared.candidate.version, sys.platform,
-                prepared.candidate.architecture, prepared.candidate.fingerprint):
+                prepared.candidate.architecture, prepared.candidate.fingerprint,
+                build_identity=prepared.candidate.build_identity):
             raise CoreError("NATIVE_VERSION_UNQUALIFIED", "open", retry_safe=True)
         if (self._native_approvals_enabled and
                 not {"approval.decide", "input.provide"}.issubset(

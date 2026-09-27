@@ -587,49 +587,49 @@
         {
           "task_id": "PC09.01",
           "title": "Definir as duas identidades",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "build_identity.py documents both identities (algorithm core.build_identity.v1, content-only, bounded manifests); all fingerprint uses inventoried (qualification/drift/resume/caches keep local binding)",
           "commits": []
         },
         {
           "task_id": "PC09.02",
           "title": "Implementar manifest portável de build",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "executable_build_identity + pi_build_identity (node content + bounded package manifest with relative paths only); InstallationCandidate.build_identity populated by discovery",
           "commits": []
         },
         {
           "task_id": "PC09.03",
           "title": "Manter binding local e TOCTOU",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "binding_fingerprint stays path-bound (seed observation passes); prepare revalidates BOTH identities before open (RC-09-04 test)",
           "commits": []
         },
         {
           "task_id": "PC09.04",
           "title": "Atualizar catálogo de qualificação",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "QUALIFIED_BUILD_IDENTITIES records portable digests of the three authorized campaign builds; qualified_build accepts identity fallback; fingerprint keys unchanged (no reinterpretation)",
           "commits": []
         },
         {
           "task_id": "PC09.05",
           "title": "Expor estados e caps ao host",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "three states remain distinct: candidate found / locally approved binding / build-qualified (identity set never approves a path)",
           "commits": []
         },
         {
           "task_id": "PC09.06",
           "title": "Testar cache, drift e provenance",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "RC-09-01/02/03 tests: same bytes two paths -> same identity + different fingerprints; material change alters digest; faked version strings never merge",
           "commits": []
         }
       ]

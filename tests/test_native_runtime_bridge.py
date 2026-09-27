@@ -80,7 +80,8 @@ def test_copied_factory_open_persists_real_owned_child_birth(tmp_path, monkeypat
             return {"stop_observed": self._proc is not None and
                     self._proc.poll() is not None}
 
-    monkeypatch.setattr(bridge_module, "qualified_build", lambda *args: True)
+    monkeypatch.setattr(bridge_module, "qualified_build",
+                         lambda *args, **kwargs: True)
     monkeypatch.setattr(codex_module, "CodexAppServerConnector", SyntheticCodex)
 
     async def run():
@@ -940,7 +941,8 @@ def test_factory_passes_only_preapproved_capability_env_to_adapter(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(bridge_module, "qualified_build", lambda *args: True)
+    monkeypatch.setattr(bridge_module, "qualified_build",
+                         lambda *args, **kwargs: True)
     monkeypatch.setattr(codex_module, "CodexAppServerConnector", StubCodex)
 
     async def run():
@@ -1025,7 +1027,8 @@ def test_factory_pi_native_action_launch_is_scoped_and_adds_local_extension(monk
         def close(self):
             pass
 
-    monkeypatch.setattr(bridge_module, "qualified_build", lambda *args: True)
+    monkeypatch.setattr(bridge_module, "qualified_build",
+                         lambda *args, **kwargs: True)
     monkeypatch.setattr(pi_module, "PiRpcConnector", StubPi)
 
     async def run():

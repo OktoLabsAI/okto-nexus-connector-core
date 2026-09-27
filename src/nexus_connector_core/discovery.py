@@ -12,6 +12,8 @@ from typing import Mapping
 
 from .models import CoreError, InstallationCandidate
 from .native.registry import adapter_specs
+from .build_identity import (executable_build_identity,
+                                pi_build_identity)
 from .protocol import canonical_json
 
 EXECUTABLE_NAMES = {spec.adapter_id: spec.executable_name
@@ -91,8 +93,11 @@ def candidate_pi_node_cli(node_path: str | Path, script_path: str | Path, *,
     if not explicit and not any(script.is_relative_to(root.resolve(strict=True))
                                 for root in trusted_roots):
         raise CoreError("APPROVAL_REQUIRED", "discovery")
-    return replace(node, fingerprint=_pi_node_cli_fingerprint(Path(node.executable), script),
-                   launch_script=str(script))
+    package_root = script.parents[3]  # .../pi-coding-agent/dist/bundle/cli.js
+    return replace(node,
+                   fingerprint=_pi_node_cli_fingerprint(Path(node.executable), script),
+                   launch_script=str(script),
+                   build_identity=pi_build_identity(node.executable, package_root))
 
 
 def selected_fingerprint(selected: InstallationCandidate) -> str:
@@ -129,7 +134,8 @@ def candidate(adapter_id: str, path: str | Path, *, explicit: bool = False,
         raise CoreError("APPROVAL_REQUIRED", "discovery")
     return InstallationCandidate(adapter_id, str(resolved), fingerprint(resolved),
                                  "explicit" if explicit else "trusted_root",
-                                 "selected", architecture=binary_architecture(resolved))
+                                 "selected", architecture=binary_architecture(resolved),
+                                 build_identity=executable_build_identity(resolved))
 
 
 async def probe_selected_claude(candidate: InstallationCandidate, *, cwd: str | Path,

@@ -204,6 +204,9 @@ class InstallationCandidate:
     version: str | None = None
     architecture: str | None = None
     launch_script: str | None = None
+    # PC09: portable, path-free identity of the build content. The
+    # path-bound ``fingerprint`` remains the local binding proof.
+    build_identity: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

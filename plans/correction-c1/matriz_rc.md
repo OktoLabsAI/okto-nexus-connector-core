@@ -82,14 +82,14 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-08-06 | Resume conflitante | modelo efetivo | PASS | resume params share overrides; conflicting model governed by profile fingerprint/resume grant (existing seam tests) |
 | RC-08-07 | Observado versus solicitado | modelo efetivo | PASS | no fabricated effective_model anywhere; observed-model remains provider-event evidence only (earlier authorized campaigns) |
 | RC-08-08 | Entrada especial e redaction | modelo efetivo | PASS | rc-08-08: Unicode/spaces/metachars travel as one structured token; invalid types/lengths refused |
-| RC-09-01 | Build igual em paths diferentes | build/binding | NOT_RUN | — |
-| RC-09-02 | Pi dependência alterada | build/binding | NOT_RUN | — |
-| RC-09-03 | Version string falsificada | build/binding | NOT_RUN | — |
-| RC-09-04 | Drift após prepare | build/binding | NOT_RUN | — |
-| RC-09-05 | Três estados separados | build/binding | NOT_RUN | — |
-| RC-09-06 | Capacidade por interseção | build/binding | NOT_RUN | — |
-| RC-09-07 | Qualificação antiga | build/binding | NOT_RUN | — |
-| RC-09-08 | Cache stale e plugins | build/binding | NOT_RUN | — |
+| RC-09-01 | Build igual em paths diferentes | build/binding | PASS | test_pc09 rc-09-01: identical trees in two roots -> equal build_identity, unequal binding fingerprints |
+| RC-09-02 | Pi dependência alterada | build/binding | PASS | rc-09-02: dependency/cli change alters the portable digest |
+| RC-09-03 | Version string falsificada | build/binding | PASS | rc-09-03: same version string, different bytes -> different identities; qualification never merges them |
+| RC-09-04 | Drift após prepare | build/binding | PASS | rc-09-04: content tamper between selection and prepare -> PROFILE_DRIFT before spawn (identity revalidation) |
+| RC-09-05 | Três estados separados | build/binding | PASS | discovery/selection/approval/qualification remain separate states (existing suites + identity fallback never approves paths) |
+| RC-09-06 | Capacidade por interseção | build/binding | PASS | capability intersection tests (allowlist) + identity fallback bounded to build content |
+| RC-09-07 | Qualificação antiga | build/binding | PASS | existing fingerprint-keyed entries preserved verbatim; identity set is additive - no historical grant reinterpreted |
+| RC-09-08 | Cache stale e plugins | build/binding | PASS | identity recomputed on every prepare (no stale cache); plugin/dependency changes alter the manifest digest |
 | RC-10-01 | Pi layout usual | discovery | NOT_RUN | — |
 | RC-10-02 | Windows path com espaços/Unicode | discovery | NOT_RUN | — |
 | RC-10-03 | Wrapper hostil | discovery | NOT_RUN | — |

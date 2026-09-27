@@ -51,9 +51,44 @@ QUALIFIED_CONTROL_BUILDS |= _QUALIFIED_PRODUCTION_BUILDS
 ATTACH_QUALIFIED = False
 
 
-def qualified_build(kind, version, platform, architecture, fingerprint, *, control=False):
+def qualified_build(kind, version, platform, architecture, fingerprint,
+                    *, control=False, build_identity=None):
+    """Exact-build qualification (PC09): fingerprint OR portable identity.
+
+    The path-bound fingerprint key remains the strongest grant (a moved
+    installation never inherits it). A portable ``build_identity`` key
+    lets an *equivalent* installation - same bytes, different directory -
+    conserve the qualification of the same build, while the caller's
+    local binding checks still apply independently.
+    """
+    sets = (QUALIFIED_CONTROL_BUILDS if control else QUALIFIED_BUILDS,
+           QUALIFIED_CONTROL_BUILD_IDENTITIES if control
+           else QUALIFIED_BUILD_IDENTITIES)
     key = (kind, version, platform, architecture, fingerprint)
-    return key in (QUALIFIED_CONTROL_BUILDS if control else QUALIFIED_BUILDS)
+    if key in sets[0]:
+        return True
+    if build_identity is not None:
+        identity_key = (kind, version, platform, architecture, build_identity)
+        return identity_key in sets[1]
+    return False
+
+
+#: Portable identity grants recorded from the same authorized campaigns
+#: as the fingerprint entries above (content digests, no paths). A host
+#: approves the *local binding* separately; this set never authorizes a
+#: path, only conserves qualification of identical bytes.
+QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
+    # Portable content digests of the same three authorized builds above
+    # (PC09): identical bytes in a different directory conserve the
+    # qualification; the local binding approval still applies separately.
+    ("codex", "0.157.0", "win32", "x86_64",
+     "sha256:df63d86e72bc1a27f13899ad0467c4b312d8ee2cb67ae3a09e37f734d9f0edcb"),
+    ("pi", "0.87.1", "win32", "x86_64",
+     "sha256:d4f09928e4a7043d1d6bd742a4ead3344d3b18b3990410b797ba65169a0cf583"),
+    ("claude_code", "2.1.282", "win32", "x86_64",
+     "sha256:b9c8e2e61cc523f4d78630d6141e843c41fbe530cd297e7d4af8acd44841bed9"),
+}
+QUALIFIED_CONTROL_BUILD_IDENTITIES = set(QUALIFIED_BUILD_IDENTITIES)
 
 
 def qualified_capabilities(kind, substrate, report):

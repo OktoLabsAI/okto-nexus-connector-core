@@ -141,7 +141,8 @@ def test_codex_resume_grant_validated_before_native_open(monkeypatch):
         def close(self):
             pass
 
-    monkeypatch.setattr(bridge_module, "qualified_build", lambda *args: True)
+    monkeypatch.setattr(bridge_module, "qualified_build",
+                         lambda *args, **kwargs: True)
     monkeypatch.setattr(codex_module, "CodexAppServerConnector", StubCodex)
 
     async def run():
