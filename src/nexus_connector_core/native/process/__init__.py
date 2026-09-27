@@ -6,6 +6,8 @@ import os
 import subprocess
 
 from .birth import observe_recorded_process_birth, snapshot_owned_process_birth
+from .preflight import (containment_preflight,
+                       containment_requirements, require_containment)
 import sys
 from typing import Sequence
 

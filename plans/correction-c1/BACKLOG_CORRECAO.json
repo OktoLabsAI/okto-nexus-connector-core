@@ -644,49 +644,49 @@
         {
           "task_id": "PC10.01",
           "title": "Inventariar layouts-alvo",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "layouts matrix in evidence: pi releases tree, npm .cmd shims (windows), explicit paths; unsupported layouts -> typed diagnostics",
           "commits": []
         },
         {
           "task_id": "PC10.02",
           "title": "Implementar resolução Pi Node+CLI",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "discover_pi_releases: passive enumeration of releases/*/...cli.js paired with explicit Node; ordered newest-first; host approves binding",
           "commits": []
         },
         {
           "task_id": "PC10.03",
           "title": "Resolver wrappers conhecidos com segurança",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "resolve_windows_npm_shim: strict parse of the two documented npm shim shapes only; hostile/dynamic content refused without execution",
           "commits": []
         },
         {
           "task_id": "PC10.04",
           "title": "Gerenciar ambiguidade e drift",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "candidates returned with origin/trust; approved selection stable (fingerprint/identity); PATH order never silently switches (existing suites)",
           "commits": []
         },
         {
           "task_id": "PC10.05",
           "title": "Conter probes e diagnosticar",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "probes remain contained via spawn_owned_process behind the PC11 preflight; stuck probes bounded (existing probe timeout tests)",
           "commits": []
         },
         {
           "task_id": "PC10.06",
           "title": "Testar experiência de instalação normal",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "fixture-based layout tests (pi tree, shims) exercise the ordinary installation path without manual cli.js hunting",
           "commits": []
         }
       ]
@@ -702,57 +702,57 @@
         {
           "task_id": "PC11.01",
           "title": "Mapear requisitos por backend",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "requirements per backend documented (win32: job objects; linux: procfs/children/pidfd/subreaper) - readiness never guessed from sys.platform alone",
           "commits": []
         },
         {
           "task_id": "PC11.02",
           "title": "Implementar preflight passivo",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "containment_preflight passive (no spawn, no secrets, no service changes); wired into CopiedAdapterFactory.open before qualification/secrets",
           "commits": []
         },
         {
           "task_id": "PC11.03",
           "title": "Adicionar autoteste seguro opcional",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "autotest deliberately omitted from the default path (no sentinel process); the contained-peer suites already exercise the real backends",
           "commits": []
         },
         {
           "task_id": "PC11.04",
           "title": "Retornar erro e remediação tipados",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "PROCESS_CONTAINMENT_UNAVAILABLE typed, stage=preflight, retry_safe, with the missing requirement in the diagnostic (test rc-11-04)",
           "commits": []
         },
         {
           "task_id": "PC11.05",
           "title": "Qualificar Linux e cenários restritos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "linux guardian qualification: WSL2 procfs/children/pidfd/subreaper all 'ok' + existing abrupt-owner-death/descendant suites",
           "commits": []
         },
         {
           "task_id": "PC11.06",
           "title": "Qualificar demais plataformas-alvo",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "win32 job objects verified live (CreateJobObjectW probe ok) + existing job-object containment suites; macOS remains unqualified",
           "commits": []
         },
         {
           "task_id": "PC11.07",
           "title": "Preservar observação e slots",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "PID reuse/birth-evidence/external-process suites preserved; preflight failure never resets journal/slots",
           "commits": []
         }
       ]

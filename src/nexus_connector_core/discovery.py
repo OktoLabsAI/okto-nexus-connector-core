@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
+import re
 import struct
 from dataclasses import replace
 from pathlib import Path
@@ -184,6 +185,86 @@ def _probe_selected_version(candidate: InstallationCandidate, adapter_id: str, *
     if selected_fingerprint(candidate) != candidate.fingerprint:
         raise CoreError("PROFILE_DRIFT", "version_probe")
     return replace(candidate, version=report["native_version"])
+
+
+def discover_pi_releases(install_root: str | Path, node_path: str | Path,
+                         *, trusted_roots: tuple[Path, ...] = ()) \
+        -> tuple[InstallationCandidate, ...]:
+    """Discover Pi Node+CLI pairs from a releases directory (PC10).
+
+    Passive: enumerates ``releases/*/node_modules/@earendil-works/
+    pi-coding-agent/dist/bundle/cli.js`` under ``install_root`` and pairs
+    each with the explicitly supplied Node executable. Nothing is
+    executed, no wrapper is interpreted, and candidates outside
+    ``trusted_roots`` (when supplied) are not auto-trusted - the host
+    approves the binding. Ordered newest-first by directory name.
+    """
+    root = Path(install_root)
+    if not root.is_absolute():
+        raise CoreError("BINARY_NOT_FOUND", "discovery")
+    releases = root / "releases"
+    if not releases.is_dir():
+        return ()
+    cli_suffix = Path("node_modules") / "@earendil-works" / \
+        "pi-coding-agent" / "dist" / "bundle" / "cli.js"
+    candidates = []
+    for release in sorted(releases.iterdir(), reverse=True):
+        if not release.is_dir():
+            continue
+        cli = release / cli_suffix
+        try:
+            selected = candidate_pi_node_cli(node_path, cli,
+                                             trusted_roots=trusted_roots)
+        except (CoreError, OSError):
+            continue
+        candidates.append(selected)
+    return tuple(candidates)
+
+
+_SHIM_TARGET = re.compile(
+    r'"([^"]+)"\s+%\*\s*\Z')
+_SHIM_NODE = re.compile(
+    r'SET\s+"_prog=(node(?:\.exe)?)"', re.IGNORECASE)
+
+
+def resolve_windows_npm_shim(shim_path: str | Path) -> Path:
+    """Resolve a known npm ``.cmd`` shim to its target script, passively.
+
+    Parses only the two documented npm-cmd-shim shapes (node.exe beside
+    the shim, or ``node`` from PATH, launching one quoted ``.js`` target
+    with `` %*``). Any other content - extra commands, URLs, dynamic
+    expansion - is refused with ``NATIVE_VERSION_UNQUALIFIED``: the
+    wrapper is never executed during discovery (RC-10-03).
+    """
+    if os.name != "nt":
+        raise CoreError("NATIVE_VERSION_UNQUALIFIED", "discovery")
+    path = Path(shim_path)
+    if path.suffix.lower() != ".cmd" or not path.is_file():
+        raise CoreError("NATIVE_VERSION_UNQUALIFIED", "discovery")
+    try:
+        text = path.read_text(encoding="utf-8", errors="strict")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise CoreError("NATIVE_VERSION_UNQUALIFIED", "discovery") from exc
+    if len(text) > 8192:
+        raise CoreError("NATIVE_VERSION_UNQUALIFIED", "discovery")
+    target = None
+    for line in text.splitlines():
+        match = _SHIM_TARGET.search(line)
+        if match:
+            candidate_target = match.group(1)
+            if not candidate_target.lower().endswith(".js"):
+                raise CoreError("NATIVE_VERSION_UNQUALIFIED", "discovery")
+            if "%" in candidate_target:
+                raise CoreError("NATIVE_VERSION_UNQUALIFIED", "discovery")
+            target = candidate_target
+    if target is None:
+        raise CoreError("NATIVE_VERSION_UNQUALIFIED", "discovery")
+    resolved = Path(target)
+    if not resolved.is_absolute():
+        resolved = (path.parent / resolved).resolve(strict=True)
+    if not resolved.is_file():
+        raise CoreError("BINARY_NOT_FOUND", "discovery")
+    return resolved
 
 
 def discover_path(adapter_id: str, *, path_env: str | None = None,

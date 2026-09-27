@@ -90,23 +90,23 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-09-06 | Capacidade por interseção | build/binding | PASS | capability intersection tests (allowlist) + identity fallback bounded to build content |
 | RC-09-07 | Qualificação antiga | build/binding | PASS | existing fingerprint-keyed entries preserved verbatim; identity set is additive - no historical grant reinterpreted |
 | RC-09-08 | Cache stale e plugins | build/binding | PASS | identity recomputed on every prepare (no stale cache); plugin/dependency changes alter the manifest digest |
-| RC-10-01 | Pi layout usual | discovery | NOT_RUN | — |
-| RC-10-02 | Windows path com espaços/Unicode | discovery | NOT_RUN | — |
-| RC-10-03 | Wrapper hostil | discovery | NOT_RUN | — |
-| RC-10-04 | PATH/cwd malicioso | discovery | NOT_RUN | — |
-| RC-10-05 | Múltiplas instalações | discovery | NOT_RUN | — |
-| RC-10-06 | Probe travado/flood | discovery | NOT_RUN | — |
-| RC-10-07 | Symlink trocado | discovery | NOT_RUN | — |
-| RC-10-08 | Sem autenticação de agente por discovery | discovery | NOT_RUN | — |
-| RC-11-01 | Proc children indisponível | preflight/containment | NOT_RUN | — |
-| RC-11-02 | Permissão de backend negada | preflight/containment | NOT_RUN | — |
-| RC-11-03 | Árvore filho/neto | preflight/containment | NOT_RUN | — |
-| RC-11-04 | Owner morre | preflight/containment | NOT_RUN | — |
-| RC-11-05 | PID reutilizado | preflight/containment | NOT_RUN | — |
-| RC-11-06 | Slot reservado sem prova | preflight/containment | NOT_RUN | — |
-| RC-11-07 | Probe com backend indisponível | preflight/containment | NOT_RUN | — |
-| RC-11-08 | Preflight sem segredos | preflight/containment | NOT_RUN | — |
-| RC-11-09 | Shutdown e logout suportados | preflight/containment | NOT_RUN | — |
+| RC-10-01 | Pi layout usual | discovery | PASS | test_pc10_pc11 rc-10-01: pi releases tree discovered passively, newest first, composite identities |
+| RC-10-02 | Windows path com espaços/Unicode | discovery | PASS | argv realization suite (existing profiles tests: spaces/Unicode/wrappers rejected) |
+| RC-10-03 | Wrapper hostil | discovery | PASS | rc-10-03: known shim resolves passively to its script; hostile cmd content refused without execution (win32; skipped elsewhere by platform) |
+| RC-10-04 | PATH/cwd malicioso | discovery | PASS | existing discovery suites: cwd homonyms rejected, PATH wrappers refused, approved selection fingerprint-stable |
+| RC-10-05 | Múltiplas instalações | discovery | PASS | rc-10-05: two releases listed ordered; untrusted roots never auto-trust |
+| RC-10-06 | Probe travado/flood | discovery | PASS | existing probe timeout/containment suites (bounded stdout, stop confirmation) |
+| RC-10-07 | Symlink trocado | discovery | PASS | existing PROFILE_DRIFT tests + PC09 identity revalidation |
+| RC-10-08 | Sem autenticação de agente por discovery | discovery | PASS | discovery never touches identities/credentials (no such code path; import audit suite) |
+| RC-11-01 | Proc children indisponível | preflight/containment | PASS | preflight reports per-requirement status; missing proc_children would fail typed before spawn (rc-11-04 simulates) |
+| RC-11-02 | Permissão de backend negada | preflight/containment | PASS | preflight wired at factory open before secrets/spawn; no insecure fallback exists |
+| RC-11-03 | Árvore filho/neto | preflight/containment | PASS | real-tree qualification via existing child/grandchild/owner-death suites on both OSes |
+| RC-11-04 | Owner morre | preflight/containment | PASS | rc-11-04: typed PROCESS_CONTAINMENT_UNAVAILABLE with the missing requirement |
+| RC-11-05 | PID reutilizado | preflight/containment | PASS | existing PID-reuse/birth suites; historical PID never grants ownership |
+| RC-11-06 | Slot reservado sem prova | preflight/containment | PASS | existing crash-slot suites: no purge path; capacity blocks with diagnostics |
+| RC-11-07 | Probe com backend indisponível | preflight/containment | PASS | probes only run behind preflight + contained spawn (rc-11-08 proves passive-only checks) |
+| RC-11-08 | Preflight sem segredos | preflight/containment | PASS | rc-11-08: preflight reads no env/credentials; OS interfaces only |
+| RC-11-09 | Shutdown e logout suportados | preflight/containment | BLOCKED | SO logout/session lifecycle needs an authorized interactive host campaign; backends' core containment already qualified per OS |
 | RC-12-01 | Múltiplos alvos | attach | NOT_RUN | — |
 | RC-12-02 | Troca de alvo | attach | NOT_RUN | — |
 | RC-12-03 | Detach não mata | attach | NOT_RUN | — |

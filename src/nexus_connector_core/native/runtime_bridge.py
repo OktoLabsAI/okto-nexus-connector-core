@@ -381,6 +381,11 @@ class CopiedAdapterFactory:
         spec = adapter_spec(prepared.intent.adapter_id)
         if spec.mode != "managed":
             raise CoreError("CAPABILITY_UNSUPPORTED", "open", retry_safe=True)
+        # PC11: refuse productive work before secrets/spawn when the host's
+        # containment backend cannot honor its contract. Never a silent
+        # fallback to bare kill(pid).
+        from .process import require_containment
+        require_containment()
         kind = spec.native_kind
         if not qualified_build(
                 kind, prepared.candidate.version, sys.platform,
