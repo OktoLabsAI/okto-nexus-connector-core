@@ -1,0 +1,65 @@
+# PENDÊNCIAS — okto-nexus-connector-core (pós-correção C1, 2026-09-26/27)
+
+Estado de entrega: **E1** (Core corrigido em escopo delimitado). Wheel
+`0.2.0.dev0` (wheel `63348370…3d8e253`, sdist `a73d4954…a6bb88ba`),
+byte-idêntico Windows/WSL2, não publicado. HEAD de referência:
+`15772d3`. Nenhuma pendência abaixo é executável dentro deste
+repositório sem a ação do dono correspondente.
+
+## A. Requer os projetos irmãos N (okto-nexus Server) e C (Connector) — não iniciados
+
+| Item | O que falta | Desbloqueio |
+|---|---|---|
+| RC-13-01 | Core+Server local (runtime gerenciado pela API pública dentro do Server) | Início do plano N |
+| RC-13-02 | Core+Connector remoto em dois hosts (mesmo wheel/hash nos dois) | Planos N+C; hosts distintos autorizados |
+| RC-13-04 | MCP HTTP real: tráfego harness→Server observado | Plano N (endpoint MCP) |
+| RC-13-05 | Tools-only sem Connector (harness independente + MCP HTTP) | Plano N + harness com MCP HTTP |
+| RC-13-09 | Queda/reconexão de canal (WSS/NXL pertence aos hosts) | Planos N+C |
+| RC-13-12 | Consumo exclusivo/handoff (domínio canônico do Server) | Plano N |
+| RC-12-01 | Seleção de alvo attach na UI dos hosts (tipos Core prontos) | Planos N/C |
+| TK-43 | Dois consumidores reais com o mesmo wheel | Planos N+C |
+| J01–J34 | Campanha conjunta (N12+C10+K11 → N13/C11) | Planos N+C concluídos até seus gates |
+| Bundle NXL normativo (TK-07) | Re-pin dos consumidores ao sair de `development-partial` | Consumidores integrando (N/C) |
+| TK-44 | Compatibilidade atual/anterior | Exige um release anterior publicado |
+| E2 / E3 | Gates de integração local+remota / escopo R3 completo | Tudo acima |
+
+**Handoff pronto**: `plans/correction-c1/HANDOFF_ARTEFATO.md` (factory
+`create_runtime`, breaking changes, callbacks, erros novos).
+
+## B. Requer ambiente/substrato autorizado específico
+
+| Item | O que falta | Desbloqueio |
+|---|---|---|
+| RC-12-02 | Revalidação TOCTOU do alvo attach | Substrato attach qualificado (attach é POSIX; sem Claude nativo Linux nesta máquina) |
+| RC-12-06 | Eventos/correlação reais do substrato attach | Idem |
+| Attach real (K08/E3) | Qualificação ATTACH_QUALIFIED | Idem; tipos `AttachTarget`/`AttachPolicy` públicos; sem flag |
+| Windows logoff assistido | Logoff real encerra a sessão do próprio agente | Procedimento preparado (RC-11-09 Linux já PASS com `wsl --terminate`; script `tools/rc1109_owner.py`); executar com presença do usuário e conferir no re-login |
+| Providers/plataformas fora da matriz | Ex.: provedores em Linux nativo, macOS, builds não qualificados | Ambientes autorizados; matriz em `docs/compatibility.md` |
+
+## C. Requer ação do usuário
+
+| Item | Ação |
+|---|---|
+| CI hospedada (TK-42) + workflow de release | Corrigir billing do GitHub ("recent account payments have failed or your spending limit needs to be increased") |
+| Publicação PyPI (TK-45) | Sessão conjunta já preparada (runbook em `release_decision.md`/histórico): versão estável, revisão legal, environment `pypi` + trusted publisher, secrets de aprovação, dispatch com hashes |
+| Decisão N/C | Iniciar os planos irmãos para desbloquear a Seção A |
+
+## D. Itens internos menores (não bloqueiam E1)
+
+- Campanha de logout do Windows (lado B acima) quando houver janela
+  assistida.
+- `PLANO_CORRECAO/` (pacote original de entrega do usuário) agora
+  preservado no repositório como referência imutável; a campanha
+  executável vive em `plans/correction-c1/`.
+- O arquivo `=1` (pré-existente, não rastreado) permanece **preservado e
+  fora de commits**, conforme instrução permanente.
+
+## Fontes de verdade
+
+- Matriz RC: `plans/correction-c1/matriz_rc.md` (129 cenários: 120 PASS,
+  9 BLOCKED — detalhe por linha).
+- Backlog: `plans/correction-c1/BACKLOG_CORRECAO.json` (100 tarefas: 94
+  DONE, 6 BLOCKED).
+- Decisão de release: `plans/correction-c1/release_decision.md`.
+- Relatório final: `plans/correction-c1/RELATORIO_FINAL_AGENTE.md`.
+- Matriz TK/J original: `plans/implementation/matrix.md`.
