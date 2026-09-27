@@ -338,57 +338,57 @@
         {
           "task_id": "PC05.01",
           "title": "Centralizar política de identificadores",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "identifiers.py single policy (1-160 exact string; legacy <=256); bundle already fixes ID=160 (contracts/generate.py) - no schema change needed",
           "commits": []
         },
         {
           "task_id": "PC05.02",
           "title": "Validar na fronteira pública",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "typed CoreError(OPERATION_INVALID/VALIDATION_ERROR) before journal/effects on open/submit/control/close/reconcile/legacy; no coercion (types tested)",
           "commits": []
         },
         {
           "task_id": "PC05.03",
           "title": "Testar equivalência Python/wire",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "bundle ID definition is the wire source and matches the Python validator (RC-05-01 boundary tests both sides via existing schema suite)",
           "commits": []
         },
         {
           "task_id": "PC05.04",
           "title": "Inventariar registros legados",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "legacyOperationReceipt read-only exact-key query documents 161-256 history without rekey (RC-05-06/07 tests)",
           "commits": []
         },
         {
           "task_id": "PC05.05",
           "title": "Oferecer consulta legada pública e limitada",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "public legacy_operation_receipt on LocalRuntimeCore: namespace-scoped, bounded, no mutation/re-execution; new long IDs refused",
           "commits": []
         },
         {
           "task_id": "PC05.06",
           "title": "Atualizar bundle e documentação juntos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "no wire change: schemas already at 160; manifest/bundle unchanged (verified by existing bundle tests passing)",
           "commits": []
         },
         {
           "task_id": "PC05.07",
           "title": "Cobrir migração e rollback",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "dev0 journals with long IDs reopen unchanged (legacy test admits via journal, reads via public API); reconcile ValueError->CoreError migration covered",
           "commits": []
         }
       ]

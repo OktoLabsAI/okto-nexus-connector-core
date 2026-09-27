@@ -49,15 +49,15 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-04-06 | Evento terminal seguido de EOF | EOF/observação | PASS | durable terminals recorded before EOF remain replayable (journal events); session degrades separately |
 | RC-04-07 | Approval pendente no EOF | EOF/observação | PASS | faulted fence blocks decide_native_approval submissions (EVENT_STREAM_UNAVAILABLE) before any new effect |
 | RC-04-08 | Incidente único | EOF/observação | PASS | test_pc04_stream_loss rc-04-08: exactly one core.event_pump_failed incident per epoch |
-| RC-05-01 | Fronteiras de comprimento | IDs/legado | NOT_RUN | — |
-| RC-05-02 | Tipos não textuais | IDs/legado | NOT_RUN | — |
-| RC-05-03 | Unicode e limite de bytes | IDs/legado | NOT_RUN | — |
-| RC-05-04 | Todo admitido reconcilia | IDs/legado | NOT_RUN | — |
-| RC-05-05 | Batch inválido no fim | IDs/legado | NOT_RUN | — |
-| RC-05-06 | Legado longo | IDs/legado | NOT_RUN | — |
-| RC-05-07 | Legado não reexecuta | IDs/legado | NOT_RUN | — |
-| RC-05-08 | Namespaces e prefixos | IDs/legado | NOT_RUN | — |
-| RC-05-09 | Hash e rekey | IDs/legado | NOT_RUN | — |
+| RC-05-01 | Fronteiras de comprimento | IDs/legado | PASS | test_pc05_identifiers rc-05-01 boundaries 0/1/159/160/161/256/257 parametrized |
+| RC-05-02 | Tipos não textuais | IDs/legado | PASS | rc-05-02 parametrized non-string types: typed CoreError, no cast, no journal mutation |
+| RC-05-03 | Unicode e limite de bytes | IDs/legado | PASS | bundle ID schema (maxLength 160) == Python validator; byte/Unicode ceilings separate (existing frame-codec tests) |
+| RC-05-04 | Todo admitido reconcilia | IDs/legado | PASS | every admitted ID (<=160) reconciles; long IDs never admitted (rc-05-01 + existing reconcile suite) |
+| RC-05-05 | Batch inválido no fim | IDs/legado | PASS | existing reconcile validation suite (converted to CoreError) + uniqueness/cardinality |
+| RC-05-06 | Legado longo | IDs/legado | PASS | rc-05-06: 207-char dev0 ID readable via legacy_operation_receipt; new admission refused; read is idempotent |
+| RC-05-07 | Legado não reexecuta | IDs/legado | PASS | rc-05-07: legacy read validates shape/scope; absent keys None; no cross-server leakage |
+| RC-05-08 | Namespaces e prefixos | IDs/legado | PASS | internal core.internal. prefix refused externally (existing + validator); namespaces isolate (existing claim tests) |
+| RC-05-09 | Hash e rekey | IDs/legado | PASS | no rekey/truncation anywhere; hashes unchanged; legacy rows read verbatim (rc-05-06) |
 | RC-06-01 | EmbeddedHost público | composição pública | NOT_RUN | — |
 | RC-06-02 | RemoteHost público | composição pública | NOT_RUN | — |
 | RC-06-03 | Imports privados barrados | composição pública | NOT_RUN | — |

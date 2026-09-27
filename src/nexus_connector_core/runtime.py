@@ -381,6 +381,7 @@ class LocalRuntimeCore:
     async def submit(self, operation: TurnOperation,
                      context: ExecutionContext) -> OperationReceipt:
         self._external_operation_id(operation.operation_id)
+        self._external_session_id(operation.session_id, "submit")
         if not operation.text or len(operation.text.encode("utf-8")) > 1024 * 1024:
             raise CoreError("VALIDATION_ERROR", "submit")
         semantic = Operation(operation.operation_id, operation.session_id,
@@ -392,6 +393,7 @@ class LocalRuntimeCore:
     async def control(self, operation: ControlOperation,
                       context: ExecutionContext) -> OperationReceipt:
         self._external_operation_id(operation.operation_id)
+        self._external_session_id(operation.session_id, "control")
         if operation.verb == "interrupt" and operation.text is None:
             semantic = Operation(operation.operation_id, operation.session_id,
                                  "turn.interrupt", {}, operation.expected_turn_id)
@@ -619,6 +621,7 @@ class LocalRuntimeCore:
     async def close(self, operation: CloseOperation,
                     context: ExecutionContext) -> OperationReceipt:
         self._external_operation_id(operation.operation_id)
+        self._external_session_id(operation.session_id, "close")
         semantic = Operation(operation.operation_id, operation.session_id,
                              "runtime.close")
         self._authorize(context, semantic.action)
@@ -727,6 +730,27 @@ class LocalRuntimeCore:
             raise ValueError("invalid process birth session")
         return await self._journal.get_process_birth(session)
 
+    async def legacy_operation_receipt(
+            self, server_id: str, executor_id: str,
+            legacy_operation_id: str) -> OperationReceipt | None:
+        """Read-only legacy lookup for development-journal IDs of 161-256.
+
+        PC05/F05: new external IDs are admitted only up to 160 characters,
+        matching the bundled schemas. Older development journals may hold
+        longer IDs; this bounded, namespace-scoped, exact-key query makes
+        that history inspectable without re-admitting, re-keying or
+        re-executing anything. It never mutates state and grants no
+        authority; hosts export diagnostics from it under their own
+        approval. Batches stay on the ordinary reconcile path (1-160).
+        """
+        from .identifiers import validate_legacy_id
+        if type(server_id) is not str or type(executor_id) is not str:
+            raise CoreError("VALIDATION_ERROR", "legacy_query")
+        validate_legacy_id(legacy_operation_id)
+        validate_claim_namespace(server_id, executor_id)
+        return await self._journal.get_receipt(OperationKey(
+            server_id, executor_id, legacy_operation_id))
+
     async def persisted_lease(self, session: SessionKey) -> SessionLeaseState | None:
         """Durable last-known lease fence for one claimed session.
 
@@ -757,16 +781,16 @@ class LocalRuntimeCore:
 
     async def reconcile(self, request: ReconcileRequest) -> ReconcileReport:
         if not isinstance(request, ReconcileRequest):
-            raise ValueError("invalid reconcile request")
+            raise CoreError("VALIDATION_ERROR", "reconcile")
         identifiers = (request.server_id, request.executor_id)
         if any(type(value) is not str or not 1 <= len(value) <= 160
                for value in identifiers):
-            raise ValueError("invalid reconcile namespace")
+            raise CoreError("VALIDATION_ERROR", "reconcile")
         for ids in (request.operation_ids, request.session_ids):
             if (type(ids) is not tuple or len(ids) > 256 or
                     any(type(value) is not str or not 1 <= len(value) <= 160
                         for value in ids) or len(set(ids)) != len(ids)):
-                raise ValueError("invalid reconcile identifiers")
+                raise CoreError("VALIDATION_ERROR", "reconcile")
         receipts = tuple([await self._journal.get_receipt(OperationKey(
             request.server_id, request.executor_id, operation_id))
                           for operation_id in request.operation_ids])
@@ -1475,9 +1499,16 @@ class LocalRuntimeCore:
 
     @staticmethod
     def _external_operation_id(operation_id: str) -> None:
-        if (not operation_id or len(operation_id) > 256 or
-                operation_id.startswith("core.internal.")):
-            raise CoreError("OPERATION_INVALID", "admission")
+        # PC05: exact 1-160 policy shared with the bundled schemas; typed
+        # refusal before any mutable persistence. Longer historical IDs
+        # remain readable only through legacy_operation_receipt.
+        from .identifiers import validate_external_id
+        validate_external_id(operation_id)
+
+    @staticmethod
+    def _external_session_id(session_id: str, stage: str = "admission") -> None:
+        from .identifiers import validate_external_session_id
+        validate_external_session_id(session_id, stage=stage)
 
     async def _existing(self, semantic: Operation,
                         context: ExecutionContext) -> OperationReceipt | None:

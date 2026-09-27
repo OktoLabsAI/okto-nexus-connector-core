@@ -6,7 +6,7 @@ from importlib.resources import files
 
 import pytest
 
-from nexus_connector_core.models import ReconcileRequest
+from nexus_connector_core.models import CoreError, ReconcileRequest
 from nexus_connector_core.runtime import LocalRuntimeCore
 
 
@@ -50,7 +50,7 @@ def test_reconcile_rejects_noncontract_requests_before_journal_io(candidate):
         journal = _JournalSpy()
         runtime = LocalRuntimeCore(journal, object(), candidates={},
                                    workspace_roots={})
-        with pytest.raises(ValueError):
+        with pytest.raises(CoreError, match="VALIDATION_ERROR"):
             await runtime.reconcile(candidate)
         assert journal.lookups == []
 

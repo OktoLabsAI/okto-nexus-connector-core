@@ -307,7 +307,6 @@ def test_f04_sqlite_lock_does_not_block_event_loop_timers(tmp_path):
 
 
 # ---------------------------------------------------------------- F05
-@pytest.mark.xfail(strict=True, reason="C1/PC05 pending: admitted IDs must be reconcilable (F05)")
 def test_f05_every_admitted_operation_id_is_reconcilable(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
