@@ -33,7 +33,7 @@ from .models import (
 from .profiles import prepare_launch, verify_prepared
 from .protocol import intent_hash
 from .protocol import canonical_json
-from .ports import Clock, OwnedSlotLedger
+from .ports import Journal, Clock, OwnedSlotLedger
 
 
 def _finite_timing(value: object) -> bool:
@@ -148,7 +148,7 @@ class LocalRuntimeCore:
     operation receipts remain queryable but process ownership is UNKNOWN.
     """
 
-    def __init__(self, journal: SQLiteJournal, native_factory: NativeFactory,
+    def __init__(self, journal: "Journal", native_factory: NativeFactory,
                  *, candidates: Mapping[str, InstallationCandidate],
                  workspace_roots: Mapping[str, str],
                  owned_slot_ledger: OwnedSlotLedger | None = None,

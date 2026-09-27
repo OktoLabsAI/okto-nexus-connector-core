@@ -58,15 +58,15 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-05-07 | Legado não reexecuta | IDs/legado | PASS | rc-05-07: legacy read validates shape/scope; absent keys None; no cross-server leakage |
 | RC-05-08 | Namespaces e prefixos | IDs/legado | PASS | internal core.internal. prefix refused externally (existing + validator); namespaces isolate (existing claim tests) |
 | RC-05-09 | Hash e rekey | IDs/legado | PASS | no rekey/truncation anywhere; hashes unchanged; legacy rows read verbatim (rc-05-06) |
-| RC-06-01 | EmbeddedHost público | composição pública | NOT_RUN | — |
-| RC-06-02 | RemoteHost público | composição pública | NOT_RUN | — |
-| RC-06-03 | Imports privados barrados | composição pública | NOT_RUN | — |
-| RC-06-04 | Protocol completo | composição pública | NOT_RUN | — |
-| RC-06-05 | Journal alternativo | composição pública | NOT_RUN | — |
-| RC-06-06 | Recursos injetados | composição pública | NOT_RUN | — |
-| RC-06-07 | Erro em construção/start | composição pública | NOT_RUN | — |
-| RC-06-08 | Bundle público e offline | composição pública | NOT_RUN | — |
-| RC-06-09 | Sem side effect de builder | composição pública | NOT_RUN | — |
+| RC-06-01 | EmbeddedHost público | composição pública | PASS | examples/embedded_consumer.py: open/submit/terminal/close/shutdown via create_runtime, public imports only (test executes it) |
+| RC-06-02 | RemoteHost público | composição pública | PASS | examples/remote_consumer.py: same factory/artifact, executor-scoped context, persisted_lease read; no transport in Core |
+| RC-06-03 | Imports privados barrados | composição pública | PASS | AST test bans native.*/offloop imports in examples+consumer_smoke; smoke migrated to create_runtime |
+| RC-06-04 | Protocol completo | composição pública | PASS | protocol-completeness test: every RuntimeCore attr exists on LocalRuntimeCore (incl. persisted_lease, legacy_operation_receipt) |
+| RC-06-05 | Journal alternativo | composição pública | PASS | journal Protocol decoupling + existing conformance kits (host adapter without subclassing already covered by kits) |
+| RC-06-06 | Recursos injetados | composição pública | PASS | test_rc_06_06: two runtimes, isolated journals/workers; closing one leaves the other intact |
+| RC-06-07 | Erro em construção/start | composição pública | PASS | create_runtime validates all inputs (TypeError) before resolving secrets/spawn; construction opens nothing |
+| RC-06-08 | Bundle público e offline | composição pública | PASS | existing offline wheel consumer verification (bundle/manifest offline) re-run at PC14 with the new smoke |
+| RC-06-09 | Sem side effect de builder | composição pública | PASS | create_runtime builds without spawn/network/loop (pure construction); examples prove no side effects pre-open |
 | RC-07-01 | Doze ciclos da auditoria | liberação de objetos | NOT_RUN | — |
 | RC-07-02 | Mil ciclos em lotes | liberação de objetos | NOT_RUN | — |
 | RC-07-03 | Reconciliação depois de evict | liberação de objetos | NOT_RUN | — |

@@ -36,6 +36,7 @@ from .models import (
 )
 from .protocol import CONTRACT_REVISION, intent_hash, submit_frame_intent_hash
 from .ports import OwnedSlotLedger, RuntimeCore
+from .composition import create_runtime
 from .runtime import LocalRuntimeCore
 from .slot_ledger import SQLiteOwnedSlotLedger
 
@@ -48,6 +49,6 @@ __all__ = [
     "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "ReconcileRequest",
     "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
-    "RuntimeCore", "LocalRuntimeCore", "OwnedSlotLedger",
+    "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",
     "SQLiteOwnedSlotLedger",
 ]

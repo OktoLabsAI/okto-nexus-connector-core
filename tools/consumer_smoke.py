@@ -17,8 +17,8 @@ import nexus_connector_core as core_package
 from nexus_connector_core import (
     CloseOperation, ControlOperation, CoreError, ExecutionContext,
     InstallationCandidate, LaunchIntent,
-    LocalRuntimeCore, OpenOperation, OperationReceipt, RuntimeEvent,
-    SessionKey, ShutdownPolicy, TurnOperation,
+    OpenOperation, OperationReceipt, RuntimeEvent,
+    SessionKey, ShutdownPolicy, TurnOperation, create_runtime,
 )
 from nexus_connector_core.conformance import verify_contract_bundle
 from nexus_connector_core.discovery import fingerprint
@@ -76,10 +76,11 @@ async def _embedded_host() -> None:
             "codex_app_server", str(binary), fingerprint(binary),
             "explicit", "selected")
         journal = SQLiteJournal(root / "journal.db")
-        factory = _Factory()
-        runtime = LocalRuntimeCore(
-            journal, factory, candidates={"codex_app_server": candidate},
-            workspace_roots={"workspace": str(root)})
+        runtime = create_runtime(
+            journal=journal, environment=lambda prepared: {},
+            candidates={"codex_app_server": candidate},
+            workspace_roots={"workspace": str(root)},
+            native_factory=_Factory())
         context = ExecutionContext(
             "server", "executor", "binding", "agent", "workspace",
             1, 1, 1, time.monotonic() + 60,

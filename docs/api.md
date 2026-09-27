@@ -8,7 +8,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 
 | Export | Use |
 | --- | --- |
-| `RuntimeCore`, `LocalRuntimeCore` | Async port and local implementation. Construct with a `SQLiteJournal`, injected native factory, selected candidates and workspace roots. |
+| `RuntimeCore`, `LocalRuntimeCore`, `create_runtime` | Async port, local implementation and the supported composition factory. `create_runtime(journal=…, environment=…, candidates=…, workspace_roots=…, …)` builds the real runtime from typed host inputs (trusted callbacks for Codex client identity/resume/Pi native action, budgets, optional installation ledger, clock and event sink); hosts never import the private adapter bridge. A `native_factory` parameter exists for contract-level smokes with fakes. |
 | `ExecutionContext` | Host-issued server/executor/binding/agent/workspace identity, revisions, generations, monotonic lease deadline and allowed actions. Never derive it from a peer payload. |
 | `DiscoveryRequest`, `Inventory`, `InstallationCandidate` | Discover or pass explicitly selected local native candidates; discovery is not qualification. |
 | `LaunchIntent`, `PreparedLaunch`, `OpenOperation` | Prepare a selected managed launch and open a session. `open` revalidates binary/profile/root before native effect. |

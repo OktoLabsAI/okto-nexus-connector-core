@@ -7,12 +7,12 @@ from collections.abc import Awaitable, Callable
 from .clock import RollbackFencedClock, SystemClock
 from .journal import SQLiteJournal
 from .models import CoreError, EffectNotSent, ExecutionContext, Operation, OperationKey, OperationReceipt
-from .ports import Clock
+from .ports import Journal, Clock
 from .protocol import intent_hash
 
 
 class OperationKernel:
-    def __init__(self, journal: SQLiteJournal, clock: Clock | None = None):
+    def __init__(self, journal: "Journal", clock: Clock | None = None):
         self.journal = journal
         self.clock = (clock if isinstance(clock, RollbackFencedClock)
                       else RollbackFencedClock(clock or SystemClock()))

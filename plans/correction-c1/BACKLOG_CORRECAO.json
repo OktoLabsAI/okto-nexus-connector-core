@@ -406,57 +406,57 @@
         {
           "task_id": "PC06.01",
           "title": "Definir e implementar factory pública",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "composition.create_runtime: typed factory (journal/environment/candidates/roots/callbacks/budgets); validation before secrets/spawn; native_factory param only for contract-level fakes",
           "commits": []
         },
         {
           "task_id": "PC06.02",
           "title": "Alinhar ports e exports",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "RuntimeCore Protocol gains persisted_lease/legacy_operation_receipt/claimed_sessions/process_birth/observe_process_birth; completeness test; exports include create_runtime",
           "commits": []
         },
         {
           "task_id": "PC06.03",
           "title": "Desacoplar tipos concretos de journal",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "LocalRuntimeCore/OperationKernel depend on the Journal Protocol, not SQLiteJournal; host adapters pass kits without subclassing",
           "commits": []
         },
         {
           "task_id": "PC06.04",
           "title": "Formalizar ownership e cleanup",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "injected journals are never closed by the Core; two-runtime isolation test (RC-06-06); ownership documented in evidence",
           "commits": []
         },
         {
           "task_id": "PC06.05",
           "title": "Reescrever exemplos e smokes públicos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "consumer_smoke uses create_runtime; examples/embedded_consumer.py + examples/remote_consumer.py run with public imports only (RC-06-01/02)",
           "commits": []
         },
         {
           "task_id": "PC06.06",
           "title": "Gerar handoff consumível",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "plans/correction-c1/HANDOFF_ARTEFATO.md emitted with API/callbacks/breaking changes; final wheel hashes land at PC14",
           "commits": []
         },
         {
           "task_id": "PC06.07",
           "title": "Estabelecer política de evolução",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "no wire change; factory is additive; evolution policy recorded in handoff (preview development until E-gates)",
           "commits": []
         }
       ]
