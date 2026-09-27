@@ -577,9 +577,11 @@ def test_r07b_active_version_probe_must_refuse_before_observer_if_containment_un
         candidate = InstallationCandidate(
             "codex_app_server", str(binary),
             discovery_fingerprint(binary), "explicit", "selected")
-        with pytest.raises(CoreError,
-                           match="PROCESS_CONTAINMENT_UNAVAILABLE"):
+        with pytest.raises(CoreError) as excinfo:
             await probe_selected_codex(candidate, cwd=str(tmp_path), env={})
+        # C3/S07: the typed code is the stable contract; details live in
+        # the message field (fixture adapted to the coordinated contract).
+        assert excinfo.value.code == "PROCESS_CONTAINMENT_UNAVAILABLE"
         assert not reached["observer"], (
             "an active probe spawned before the containment gate refused")
 

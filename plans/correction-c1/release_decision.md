@@ -78,3 +78,19 @@ apagada/trocada/xfailada; nenhuma gate de contenção removida para ficar
 verde; unknown conservador segue válido; sem promessa exactly-once. E2/E3
 continuam bloqueados pelos mesmos donos externos (hosts N/C, attach,
 billing, PyPI conjunta).
+
+
+## Adendo C3 (2026-09-27) — reavaliação independente de `7a7a248`
+
+Segunda reauditoria (`FIX_UPDATE_PLAN/`): 8 achados (S01–S08, 11
+sementes), **E1 rejeitado para 0.2.1.dev0**. Correção C3 executada
+(A00–A08): 11 sementes + 2 guardas de recuperação verdes; 14 sementes
+C2 preservadas; inventário automático confirma zero awaits de I/O sob o
+lock global; suítes em 6 ambientes (Windows/WSL2 × 3.11–3.13: 726/74 e
+781/19); artefato normalizado **0.2.2.dev0** byte-idêntico (wheel
+`sha256:08b2fe7f…551a1d98`, sdist `sha256:e76014c4…fddb87d7`), twine/
+offline verdes, **não publicado**. Pi requalificado sob o algoritmo v2
+(`sha256:bc3b22f8…4284914`). Evidência: `plans/correction-c3/evidence/
+S01-S08.md`. **E1 declarado para 0.2.2.dev0**; E2/E3 seguem bloqueados
+pelos hosts reais (N/C), backend Linux compatível para campanha de
+backend, attach, billing e PyPI conjunta.

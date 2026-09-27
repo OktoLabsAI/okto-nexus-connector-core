@@ -95,3 +95,27 @@ códigos preservados.
    spawnar.
 8. **Semântica do manifesto NXL `core_version`** documentada como
    "introduced in" (0.1.0.dev0) — não é a versão do pacote produtor.
+
+
+## Mudanças que os hosts absorvem (C3 — reauditoria S01–S08)
+
+1. **Fonte temporal única**: `create_runtime` sem clock usa o
+   `SystemClock` real compartilhado runtime/kernel/factory — a proteção
+   temporal NUNCA depende de parâmetro de teste (S01).
+2. **`CoreError.message`**: campo novo aditivo; `code` é o enum estável
+   (ex.: `PROCESS_CONTAINMENT_UNAVAILABLE`); detalhes redigidos vão na
+   mensagem — CLI/Server classificam por `code` (S07).
+3. **Guarda no efeito físico**: spawn revalida dentro da thread;
+   respostas permissivas de aprovação/input compartilham o
+   `EffectFence` (negações seguem permitidas pós-prazo) (S02/S03).
+4. **CAS de lease**: fora dos locks de contenção; commit tardio após
+   cancelamento é aplicado conservadoramente; timeout = `RECONNECT_BUSY`
+   / `REVOKE_BUSY` — nunca prova de ausência de efeito (S04).
+5. **Capacidade de força dedicada** (`nexus-core-force`) + observações
+   coalescidas por sessão; shutdown público dispõe os executores da
+   factory quando tudo está resolvido (idempotente) e RETÉM sob
+   ownership incerto (S05/S08).
+6. **Identidade Pi v2**: cobertura completa por dependência
+   (manifesto de conteúdo); nova qualificação real
+   `sha256:bc3b22f8…4284914`; digests v1 não qualificam (S06).
+7. Versão mínima esperada pelos hosts: **0.2.2.dev0**.

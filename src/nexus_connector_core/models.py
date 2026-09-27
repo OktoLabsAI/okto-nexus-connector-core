@@ -8,13 +8,18 @@ from typing import Any, Mapping
 
 class CoreError(Exception):
     def __init__(self, code: str, stage: str, *, possible_effect: bool = False,
-                 retry_safe: bool = False, operation_id: str | None = None):
-        super().__init__(code)
+                 retry_safe: bool = False, operation_id: str | None = None,
+                 message: str | None = None):
+        # C3/S07: ``code`` stays a stable machine-readable enum;
+        # ``message`` carries human diagnostics (redacted by the raiser)
+        # without being concatenated into the classification field.
+        super().__init__(message if message is not None else code)
         self.code = code
         self.stage = stage
         self.possible_effect = possible_effect
         self.retry_safe = retry_safe
         self.operation_id = operation_id
+        self.message = message if message is not None else code
 
 
 class EffectNotSent(Exception):

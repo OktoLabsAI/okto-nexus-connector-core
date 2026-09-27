@@ -1,111 +1,124 @@
-# Ações para o agente do Core — reavaliação de C1
+# Próxima rodada de correção — achados S01–S08
 
-Base auditada: `e6b630543a6f8b2723347d2f8cf605be86b200d6`. Confronte o HEAD antes de editar; preserve mudanças posteriores e não faça reset.
+## Instrução ao agente
 
-O objetivo é corrigir os achados e produzir evidência, não elaborar outro plano. Não reescrever o Core, não alterar os aplicativos, não reintroduzir MCP stdio/proxy.
+Trabalhe sobre o HEAD atual do `okto-nexus-connector-core`. O snapshot auditado foi `7a7a248db695296bb92b3f681791cc6eb2dea8c7`, versão `0.2.1.dev0`. Não faça reset para esse commit nem apague trabalho posterior. Leia o relatório, a decisão C1 e as evidências C2. Confronte cada achado com o código atual antes de alterar.
 
-## R01 — P1 — Journal sob lock global ainda bloqueia contenção e fechamento do fence por EOF
+Implemente as correções, não outro plano em substituição à execução. Preserve o trabalho válido: composição pública, DTO de resume, discovery Pi por parâmetros públicos, recibos idempotentes, sinalização coalescida, guarda de send, preflight ativo e cleanup cooperativo. As novas falhas não justificam reescrever a biblioteca.
 
-C1: PC01, PC02, PC04.
+Não reintroduza MCP stdio, proxy ou servidor MCP. Harnesses capazes de MCP acessam diretamente o Nexus Server por HTTP. Identidade continua centrada no agente. Os hosts não devem copiar adapters nem importar a factory privada para contornar pendências.
 
-Não manter o lock de estado/segurança durante await de journal, callbacks ou comandos nativos. Separar snapshot/mutação atômica de memória, I/O e reconciliação com revalidação de geração. O latch de contenção precisa poder fechar independentemente das operações duráveis. Não mover o mesmo deadlock para outro lock.
+## A00 — Reproduzir, mapear e preservar
 
-**Aceite obrigatório:** Com get_receipt, admit, record_event e release de slot retidos separadamente, o fence fecha e a contenção física é solicitada no orçamento previsto. Persistência e recibos são reconciliados depois, sem inventar parada nem liberar slot incerto.
+1. Registre HEAD, branch, dirty state e versão do wheel. Identifique correções posteriores ao snapshot sem sobrescrevê-las.
+2. Execute as 14 sementes C2 e as 11 regressões deste pacote. Preserve os resultados anteriores em vez de substituí-los.
+3. As novas regressões começam com expectativas corretas e falham no snapshot. Corrija o produto; não inverta asserções, remova caminhos ou crie skips para declarar êxito.
+4. Mudanças justificadas de API/fixtures são permitidas: registre antes/depois e mantenha a mesma condição causal. Os testes devem começar autorizados, atravessar a espera e vencer durante a espera — não nascer com fence fechado.
+5. Separe unitário, fault injection, backend real do SO, provider real e integração de hosts. Uma camada não concede qualificação automática à outra.
+6. Crie matriz S01–S08 com `PENDING`, commits, testes, evidências e risco residual. Um cenário já corrigido no HEAD precisa de evidência, não retrabalho.
 
-**Testes de partida:** `test_r01_storage_read_under_global_lock_must_not_block_lease_containment`, `test_r01b_eof_fence_must_not_wait_for_journal_read_lock`.
+**Saída:** baseline rastreável e todas as alegações correlacionadas com testes/requisitos.
 
-## R02 — P1 — Força e observação usam o mesmo pool de threads dos envios e leituras normais
+## A01 — Fonte temporal única e default seguro (S01)
 
-C1: PC02, PC11.
+- Resolva o relógio efetivo na composição pública antes de criar a factory e o runtime. Sem argumento de teste, utilize a fonte real apropriada ao mesmo contrato.
+- Compartilhe deadline/tempo entre kernel, runtime e native bridge, sem conversões de relógios incompatíveis.
+- Elimine a interpretação de `None` como “desligar a proteção de validade”. A segurança do default deve ser igual à de uma instância com relógio injetado.
+- Reavalie depois de environment, resume e ação nativa. Teste tanto callbacks rápidos quanto atrasados.
+- Não converta erro posterior a possível spawn em `retry_safe=True`. Preserve estágio, recibo e desconhecimento quando houver efeito possível.
 
-Separar capacidade reservada de controle/observação do pool usado por dados e streams. Dar orçamento explícito à solicitação e à observação de contenção, com recursos limitados e ownership claro. Não resolver criando threads ilimitadas nem prometendo que cancelamento de await encerra uma thread.
+**Aceite obrigatório:** S01 passa com composição pública sem clock, e os cenários com clock injetado continuam passando. Inclua testes reais de passagem do prazo usando margem/temporização estável, além de relógios controlados.
 
-**Aceite obrigatório:** Saturar totalmente os executores de envio e stream; ainda assim, a chamada física de força deve ser alcançada sem liberar os workers normais. Testar também shutdown e a ausência de confirmação de parada.
+## A02 — Guarda no efeito físico e não só no enfileiramento (S02–S03)
 
-**Testes de partida:** `test_r02_force_must_have_capacity_independent_of_default_thread_pool`.
+- Crie uma política comum para cada operação com efeito: spawn, submit, steer, input, resposta permissiva de aprovação e demais writes realmente expostos.
+- Passe a guarda até a unidade de trabalho síncrona que efetua o write/spawn. Verifique-a quando a thread começar, e após esperas adicionais que existam antes do efeito.
+- A guarda deve considerar deadline atual, revogação, geração de owner/conexão, sessão/turno esperado e configuração/autorizações pertinentes. Não utilize somente flags atualizadas por um watcher periódico.
+- Diferencie efeitos que concedem trabalho/permissão das ações necessárias para negar, interromper e conter. Defina explicitamente o que continua permitido após expiração.
+- Revalide correlação do pedido de aprovação e turno na escrita. Não permita que um callback antigo autorize uma execução nova.
+- Trate a janela inevitável entre observação e efeito conservadoramente; não prometa atomicidade com um provider externo nem execução exatamente uma vez.
+- Teste worker ocupado antes do despacho, callback tardio, mudança de geração enquanto a unidade aguarda, expiração com watcher atrasado e fechamento concorrente.
 
-## R03 — P1 — A guarda não consulta o prazo real na thread e não cobre o spawn após callbacks
+**Aceite obrigatório:** S02 e S03 passam; testes R03 antigos continuam passando; matriz de cada write identifica sua fronteira real. Nenhuma proteção depende de aumentar o polling do watcher.
 
-C1: PC03.
+## A03 — Remover armazenamento das travas de contenção (S04)
 
-Criar uma guarda tipada vinculada à operação/sessão, com relógio monotônico corrente, deadline, gerações/revisões pertinentes e latch de contenção. Consultá-la depois de callbacks/filas e na fronteira efetiva de write/spawn. Formalizar a linearização da corrida com revoke/renew; distinguir comprovadamente não enviado de efeito possível.
+- Faça inventário de todos os `async with self._lock`, locks de sessão e caminhos que podem impedir a entrada da força. Inspecione chamadas indiretas, não apenas nomes contendo `journal`.
+- Retire CAS de renovação/revogação das seções críticas de segurança. Faça reserva/revisão em memória curta, I/O fora da trava e revalidação de estado ao aplicar o resultado.
+- Preserve a decisão conservadora enquanto o CAS está pendente. Não expanda permissões antes da confirmação necessária; não reabra um fence já fechado por outra operação.
+- Especifique a corrida: CAS aceito pelo worker, chamador cancelado, commit tardio, expiração/contenção concorrentes. A resposta não pode alegar ausência de efeito apenas porque o `await` foi cancelado.
+- Mantenha recuperação a partir do journal, mas não torne a solicitação de força dependente de uma gravação bem-sucedida.
+- Teste concorrência entre renew/revoke, CAS retido, cancelamento, shutdown e nova tentativa com a mesma ou outra geração.
 
-**Aceite obrigatório:** Cobrir vencimento durante journal, reserva de slot, ambiente, resume callback, action callback, espera de worker e imediatamente antes de write/spawn. A guarda deve começar válida e tornar-se inválida durante a execução do teste, não nascer previamente fechada.
+**Aceite obrigatório:** ambas as parametrizações S04 passam, com CAS retido durante toda a observação da entrada física de força. Não basta esperar pelo timeout de reconexão configurado. Adicione fault point de commit tardio e teste de recuperação.
 
-**Testes de partida:** `test_r03_late_dispatch_checks_clock_not_only_watcher_flags`, `test_r03b_factory_must_revalidate_after_environment_resolution`.
+## A04 — Capacidade de força não consumível por observação/close (S05)
 
-## R04 — P2 — Fence novo esconde recibos já persistidos em repetições idempotentes
+- Mantenha limites de recursos e o pool de dados separado. Reprojete as classes de trabalho de controle para que consultas de estado e fechamento gracioso não ocupem toda a capacidade de força.
+- Reserve mecanismo/capacidade de dispatch para força com orçamento independente; uma prioridade na fila não resolve workers que já estão executando chamadas bloqueadas.
+- Coalesça observações por sessão, evite acúmulo de polls obsoletos e limite filas/concorrência.
+- Não use thread ilimitada por timeout, tentativa ou sessão. Defina limites de sessões compatíveis com a capacidade física do backend.
+- O bloqueio real da chamada de força no SO deve gerar estado incerto explícito e contenção/reconciliação posterior; não inventar comprovação de parada.
+- Teste pool default saturado, todos os observers ocupados, vários closes bloqueados, força repetida e fechamento do host.
 
-C1: PC03, PC05.
+**Aceite obrigatório:** S05 e a semente R02 passam. A evidência deve observar a função física de força começar, não somente a coroutine que pretende chamá-la.
 
-Separar leitura autorizada de recibo/deduplicação da autorização para um efeito novo, validando identidade e hash. Não reabrir a execução só para responder ao retry nem reintroduzir I/O sob o lock de contenção ao reorganizar a ordem.
+## A05 — Lifecycle público dos executores (S08)
 
-**Aceite obrigatório:** Mesmos ID/hash retornam o recibo conhecido após EOF/closing/stop; hash divergente continua sendo conflito; nenhuma segunda escrita ocorre. A resposta não deve depender da evicção já ter acontecido.
+- Declare propriedade: recursos criados pela composição pública são encerrados por um lifecycle público; recursos injetados pelo host seguem contrato explícito de ownership.
+- Feche/disponha o executor interno após shutdown completamente resolvido, de modo idempotente, sem acesso a atributos privados pelo consumidor.
+- Não descarte capacidade de força/observação ainda necessária a sessões incertas. Defina shutdown parcial, retry, reconciliação e final disposal separadamente quando necessário.
+- Teste sem sessões, com sessões confirmadas, com ownership incerto, dois shutdowns, cancelamento do shutdown e ciclos repetidos create/shutdown.
+- Verifique a ordem da flag `_closed` em sessões que possuem pool próprio: a decisão de descarte deve usar o resultado recém-observado, não um estado anterior inadvertido.
 
-**Testes de partida:** `test_r04_duplicate_known_submit_survives_stream_fault`.
+**Aceite obrigatório:** S08 passa sem o host chamar `_native_factory.close()`. Testes de estados incertos demonstram que a correção não destrói o supervisor prematuramente.
 
-## R05 — P2 — Fila de notificações do worker cresce sem limite sob carga sustentada
+## A06 — Código de erro estável e diagnóstico separado (S07)
 
-C1: PC01.
+- Preserve `CoreError.code == "PROCESS_CONTAINMENT_UNAVAILABLE"` em qualquer host.
+- Transporte o mapa de requisitos/causas em mensagem ou campo estruturado documentado, com redaction. Não concatene detalhes no enum de código.
+- Atualize o contrato público e os consumidores de serialização de forma coordenada, caso precise ampliar o modelo de erro.
+- Teste igualdade exata, conversão para JSON/recibo/erro NXL aplicável, apresentação da CLI e ausência de caminhos/segredos desnecessários.
+- Preserve a recusa antes do probe e a ABI corrigida. Não remover o gate para satisfazer este teste.
 
-Usar notificação coalescida, Condition/Event ou contabilização limitada coerente com as filas, sem perder wakeups na corrida enqueue/sleep. Verificar também justiça entre filas e reservar recursos para controles; esses últimos pontos são revisão recomendada, não novos defeitos reproduzidos nesta contagem.
+**Aceite obrigatório:** S07 e R07/R07b passam; detalhes continuam úteis sem quebrar a classificação programática.
 
-**Aceite obrigatório:** Ensaio sustentado sem esvaziar filas por longos intervalos mantém notificações e memória proporcionais à capacidade configurada, não ao total processado. Testar wakeup concorrente e shutdown.
+## A07 — Conteúdo do build Pi realmente qualificado (S06)
 
-**Testes de partida:** `test_r05_wake_notifications_are_bounded_under_sustained_load`.
+- Defina o layout suportado e o que constitui seu fechamento de conteúdo executável. Escolha entre bundle comprovadamente autocontido ou cobertura limitada e completa do pacote/dependências necessárias.
+- Cubra resolução implícita, exports, imports relativos, arquivos auxiliares e artefatos nativos quando fizerem parte do layout suportado. Não tratar `main`/`bin` como todo o código de uma dependência.
+- Preserve limites de bytes/entradas/profundidade/pacotes e diagnóstico de layout não suportado. Não execute pacotes desconhecidos para “descobrir” o conteúdo com permissões amplas.
+- Mantenha a separação: identidade portátil de build versus fingerprint de binding/caminho local. Pacote irmão não utilizado continua fora da identidade.
+- Versione o algoritmo quando a semântica mudar. Requalifique deliberadamente a allowlist e documente o efeito sobre candidatos preparados/configurações antigas.
+- A qualificação não pode usar version string ou digest parcial como substituto silencioso quando não consegue representar o layout.
 
-## R06 — P2 — Identidade de build Pi usa raiz errada e omite dependências resolvíveis fora dela
+**Aceite obrigatório:** as três parametrizações S06 passam; alterar arquivo realmente carregado muda identidade; mudar somente diretório preserva identidade portátil; binding físico continua detectando drift; package irmão irrelevante não muda o build. Execute e registre a requalificação real do Pi antes de anunciar suporte ao build.
 
-C1: PC09.
+## A08 — Evidência de fechamento e integração dos consumidores
 
-Corrigir a raiz e definir o conjunto de artefatos carregáveis: entrypoint, manifesto, dependências transitivas ou bundle autocontido comprovado. Impor limites durante enumeração e leitura. Separar esse digest portátil do binding local. Rever aceitação por fingerprint legado para que ela não contorne a cobertura nova.
+1. Preserve os 14 cenários C2 e acrescente os 11 novos sem duplicar contagens no relatório da suíte.
+2. Execute o conjunto completo em backend Linux compatível e na matriz de SO/Python realmente declarada. Separe incompatibilidade do sandbox de falha do produto.
+3. Gere wheel/sdist, instale fora da árvore-fonte e execute consumidores sintéticos e import público. Isso não substitui os hosts reais.
+4. Teste o contrato de erro, callbacks, relógio e disposal sem import privado nos consumidores de contrato.
+5. Revise as afirmações C2 “nenhum I/O sob lock”, “guarda na fronteira de spawn”, “build completo” e “pool disposto”. Cada uma precisa apontar para testes dos caminhos relevantes.
+6. E1 só pode ser emitido para um escopo com S01–S08 tratados, qualificações pertinentes e evidências coerentes. E2 exige Server local sem Connector e fluxo remoto real; E3 inclui demais capacidades prometidas.
+7. Entregue commits, diff, regressões, comandos, XMLs, hashes, limites de suporte, alterações de contrato e decisão explícita. Não declare “concluído” somente por 14 testes verdes.
 
-**Aceite obrigatório:** Mesmo conteúdo em diretório diferente preserva a identidade; pacote irrelevante não a altera; modificar dependência executável a altera; alteração depois de prepare é detectada antes do efeito; qualificação não vira autorização de versões desconhecidas.
+## Prompt pronto para iniciar
 
-**Testes de partida:** `test_r06_pi_build_ignores_unrelated_sibling_package`, `test_r06b_pi_build_covers_resolvable_dependencies_outside_scope`.
+```text
+Leia 01_RELATORIO_REAVALIACAO.md, 02_ACOES_PARA_O_AGENTE.md e os testes
+regressoes/test_review3.py deste pacote. A referência auditada é 7a7a248,
+mas trabalhe sobre o HEAD atual sem reset nem perda de alterações.
 
-## R07 — P1 — Preflight Linux consulta ABI incorreta e probes ativos não passam pelo gate
+Implemente A00–A08. Priorize S01–S05, preserve as correções válidas C2 e
+não contorne problemas nos consumidores. Execute as regressões, documente
+mudanças de fixture necessárias sem enfraquecer invariantes e registre
+evidência de cada achado. Não crie MCP stdio/proxy. Não use testes
+sintéticos como prova de provider real ou integração de dois hosts.
 
-C1: PC10, PC11.
-
-Usar ABI correta, ctypes com tipos e ponteiro apropriados, validação de retorno e erros. Passar probes ativos pelo mesmo gate de contenção antes do spawn. Preservar diagnóstico estruturado/redigido. Qualificar Win32 separadamente, sem inferir validade a partir de um teste Linux.
-
-**Aceite obrigatório:** Teste verifica número da operação e ponteiro, não apenas status textual. Negar cada requisito de backend impede qualquer observer/spawn ativo. Rodar campanha real no SO qualificado; ambiente limitado resulta em recusa antecipada e não em cascata de processos incertos.
-
-**Testes de partida:** `test_r07_preflight_queries_actual_subreaper_abi`, `test_r07b_active_version_probe_must_refuse_before_observer_if_containment_unavailable`.
-
-## R08 — P2 — Helpers novos de discovery não alimentam a descoberta pública do runtime
-
-C1: PC10.
-
-Compor os resolvedores suportados em um único serviço de discovery público, recebendo raízes/instalações aprovadas por um contrato explícito. Preservar a distinção entre encontrar, selecionar, aprovar e executar. Não executar wrappers arbitrários para ampliar cobertura.
-
-**Aceite obrigatório:** Os layouts declarados funcionam via a mesma API pública consumida pelos hosts, inclusive múltiplos candidatos e diagnóstico prescritivo. Nenhum consumidor importa helper privado ou reimplementa parsing de instalação.
-
-**Testes de partida:** `test_r08_discovery_public_path_reuses_pi_layout_resolution`.
-
-## R09 — P2 — Composição pública ainda exige tipo privado para resume e tem anotação incompatível
-
-C1: PC06.
-
-Publicar os DTOs/callbacks necessários em módulo suportado, com exports e Protocols coerentes. Ajustar a assinatura de environment e declarar o que é estável. Não exportar indiscriminadamente toda a bridge para resolver um único tipo.
-
-**Aceite obrigatório:** Consumidores externos, instalados pelo wheel, exercitam composição básica e resume usando apenas imports públicos; type checking confirma que a assinatura corresponde aos objetos realmente recebidos.
-
-**Testes de partida:** `test_r09_public_resume_contract_is_constructible_without_private_import`.
-
-## R10 — P2 — Evicção do dicionário não libera adaptador retido por sink de eventos travado
-
-C1: PC07.
-
-Separar entrega de notificações da propriedade dos objetos nativos; gerenciar e cancelar tarefas cooperativas de sink com orçamento e sem confirmar entrega fictícia. Preservar cursor/replay no journal. Rastrear tarefas de cleanup no shutdown e não descartar ownership incerto.
-
-**Aceite obrigatório:** Após parada comprovada e cleanup, um callback que não retorna não retém adaptadores pesados nem gera coleção ilimitada de tarefas. Perda de notificação continua recuperável por replay durável, sem avançar cursor de evento não entregue.
-
-**Testes de partida:** `test_r10_stopped_session_native_is_released_even_when_host_sink_stalls`.
-
-## Entrega
-
-Reabra a matriz nas linhas afetadas; classifique PASS apenas para a camada realmente executada. Preserve os testes entregues como sementes e acrescente fault injection nos pontos de I/O, thread, callback, preflight e retenção. Documente nova versão/hash, migrations, comandos, plataforma, saída e riscos. Não trate as 119 falhas deste sandbox como 119 bugs independentes nem remova gates de contenção para fazê-las passar.
-
-Publique uma decisão honesta E0/E1/E2/E3 segundo C1. E1 permanece bloqueado pelos P1 confirmados; E2 exige os hosts reais. Nenhuma publicação/push ou uso de credenciais está autorizado por este documento além do fluxo normal de implementação já acordado com o usuário.
+Antes de declarar E1, demonstre defaults seguros, guardas no efeito,
+contenção independente de journal/observers, disposal público, erros
+estáveis e cobertura correta do build Pi. Separe explicitamente o que
+passou, o que não foi executado e o que permanece bloqueado.
+```

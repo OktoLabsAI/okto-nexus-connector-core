@@ -90,13 +90,21 @@ def create_runtime(
         if callback is not None and not callable(callback):
             raise TypeError(f"{name} must be callable when provided")
     if native_factory is None:
+        # C3/S01: ONE effective temporal source shared by runtime, kernel
+        # and factory - including the DEFAULT (no host clock provided).
+        # An optional test parameter never disables protection: without it
+        # the real system monotonic clock is used under the same contract.
+        from .clock import SystemClock
+        effective_clock = clock if clock is not None else SystemClock()
         native_factory = CopiedAdapterFactory(
             environment,
             pi_native_action=pi_native_action,
             codex_client_info=codex_client_info,
             codex_resume=codex_resume,
             native_approvals_enabled=native_approvals_enabled,
-            clock=clock.monotonic if clock is not None else None)
+            clock=effective_clock.monotonic)
+    else:
+        effective_clock = clock
     return LocalRuntimeCore(
         journal, native_factory,
         candidates=dict(candidates),
@@ -105,7 +113,7 @@ def create_runtime(
         trusted_discovery_roots=tuple(trusted_discovery_roots),
         pi_install_root=pi_install_root,
         pi_node=pi_node,
-        clock=clock,
+        clock=effective_clock,
         event_sink=event_sink,
         lease_grace_seconds=lease_grace_seconds,
         lease_poll_seconds=lease_poll_seconds,

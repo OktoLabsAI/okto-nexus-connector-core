@@ -91,8 +91,12 @@ def test_rc_11_04_require_containment_typedefences(monkeypatch):
     from nexus_connector_core.native.process import preflight
     monkeypatch.setattr(preflight, "containment_preflight",
                         lambda *, platform=None: {"job_objects": "missing"})
-    with pytest.raises(CoreError, match="PROCESS_CONTAINMENT_UNAVAILABLE"):
+    # C3/S07: the typed code is the stable machine contract; the
+    # requirement detail travels in the separate message field.
+    with pytest.raises(CoreError) as excinfo:
         preflight.require_containment()
+    assert excinfo.value.code == "PROCESS_CONTAINMENT_UNAVAILABLE"
+    assert "job_objects" in excinfo.value.message
 
 
 def test_rc_11_08_preflight_reads_no_secrets():

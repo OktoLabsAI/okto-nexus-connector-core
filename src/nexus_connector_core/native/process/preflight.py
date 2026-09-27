@@ -139,9 +139,10 @@ def containment_preflight(*, platform: str = None) -> dict[str, str]:
 def require_containment(*, platform: str = None) -> None:
     """Raise the typed preflight error when any requirement is missing.
 
-    C2/R07: the structured requirement map travels WITH the typed error
-    (redacted diagnostics, no secrets), so a refusal names every missing
-    backend requirement instead of discarding the detail it built.
+    C2/R07 + C3/S07: the typed ``code`` is a stable contract
+    (``PROCESS_CONTAINMENT_UNAVAILABLE``) for CLI/Server/protocol
+    classification; the structured, redacted requirement map travels in
+    the separate ``message`` field - never concatenated into the enum.
     """
     status = containment_preflight(platform=platform)
     missing = {name: detail for name, detail in status.items()
@@ -149,5 +150,5 @@ def require_containment(*, platform: str = None) -> None:
     if missing:
         detail = "; ".join(f"{name}: {reason}"
                            for name, reason in sorted(missing.items()))
-        raise CoreError("PROCESS_CONTAINMENT_UNAVAILABLE: " + detail,
-                        "preflight", retry_safe=True)
+        raise CoreError("PROCESS_CONTAINMENT_UNAVAILABLE", "preflight",
+                        retry_safe=True, message=detail)

@@ -1,4 +1,4 @@
-# Core API (`0.2.1.dev0`)
+# Core API (`0.2.2.dev0`)
 
 This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,
@@ -27,7 +27,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `OwnedSlotLedger`, `SQLiteOwnedSlotLedger` | Optional installation-wide owned-slot port and Core-owned SQLite implementation. Every runtime in that installation must receive handles to the same absolute ledger path. |
 | `OwnedSlotReservation`, `OwnedSlotPage` | Bounded read-only inventory of unresolved reservations and their original open operation IDs; it is not process-liveness or release authority. |
 | `ShutdownPolicy`, `ShutdownReport` | Bounded drain/interrupt observation and per-session outcome. `unknown` retains ownership. |
-| `CoreError` | Typed failure with `code`, `stage`, `possible_effect`, `retry_safe` and optional `operation_id`. |
+| `CoreError` | Typed failure with `code`, `stage`, `possible_effect`, `retry_safe` and optional `operation_id`. C3/S07: `code` is a stable machine-readable enum; human diagnostics (redacted by the raiser) travel in the separate `message` field (`str(exc)` shows the message). |
 | `CONTRACT_REVISION` | Exact NXL revision required by development negotiation; see [compatibility](compatibility.md). |
 
 `LocalRuntimeCore` implements `discover`, `prepare`, `open`, `submit`,

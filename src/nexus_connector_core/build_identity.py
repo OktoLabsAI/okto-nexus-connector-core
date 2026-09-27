@@ -22,8 +22,11 @@ from .protocol import canonical_json
 __all__ = ["executable_build_identity", "pi_build_identity",
            "BUILD_IDENTITY_ALGORITHM"]
 
-BUILD_IDENTITY_ALGORITHM = "core.build_identity.v1"
-_MAX_MANIFEST_ENTRIES = 4096
+BUILD_IDENTITY_ALGORITHM = "core.build_identity.v2"
+# C3/S06: bounded coverage headroom. The real 0.2.x-qualified Pi
+# release closure measures 14,094 files / 101.3 MiB / 118 packages;
+# the cap stays strict and refusal of larger layouts is explicit.
+_MAX_MANIFEST_ENTRIES = 32768
 _MAX_MANIFEST_BYTES = 256 * 1024 * 1024
 
 
@@ -63,17 +66,19 @@ def pi_build_identity(node: str | os.PathLike,
     enumerates the package tree with *relative* paths and content digests
     only — no absolute paths, no user data.
 
-    C2/R06: the loadable set also covers the package's DECLARED production
-    dependencies (``dependencies`` in package.json), resolved through the
-    standard node_modules lookup — including packages hoisted OUTSIDE the
-    scope directory — transitively, under strict limits. Per dependency the
-    covered artifacts are its manifest plus the resolved entrypoints it
-    declares (``main`` and ``bin``): that is the executable surface a
-    require() from the CLI can reach first; deeper files belong to their
-    own packages and re-enter through those packages' manifests. A
-    present-but-malformed manifest refuses (ValueError) instead of
-    silently shrinking coverage. Undeclared packages never enter the
-    identity.
+    C2/R06 + C3/S06: the loadable set also covers the package's DECLARED
+    production dependencies (``dependencies`` in package.json), resolved
+    through the standard node_modules lookup — including packages hoisted
+    OUTSIDE the scope directory — transitively, under strict limits. Each
+    dependency contributes its FULL content manifest (every file of the
+    package), which is the only bounded way to cover every loading form
+    Node supports: implicit ``index.js`` resolution, relative imports from
+    any entry, and ``exports`` maps alike. ``main``/``bin`` alone proved
+    insufficient (S06); a digest that cannot represent the layout refuses
+    (ValueError) rather than qualifying it silently. Undeclared packages
+    never enter the identity. Semantic changes to this coverage version
+    the algorithm tag (v2) and require deliberate requalification of the
+    allowlist.
     """
     node_path = Path(node)
     root = Path(package_root)
@@ -115,8 +120,7 @@ def pi_build_identity(node: str | os.PathLike,
             if resolved is None or resolved in seen:
                 continue
             seen.add(resolved)
-            total = _add_dependency_artifacts(
-                resolved, f"deps/{name}/", entries, total)
+            _add_tree(resolved, f"deps/{name}/")
             queue.append(resolved)
 
     identity = {
@@ -131,10 +135,10 @@ def pi_build_identity(node: str | os.PathLike,
 
 
 _MAX_DEPENDENCY_PACKAGES = 512
-_MAX_DEPENDENCY_ARTIFACTS = 64
 
 
 def _add_entry(entries: list, total: int, path: Path, relative: str) -> int:
+    """Append one bounded manifest entry (path-free relative + digest)."""
     if (len(entries) >= _MAX_MANIFEST_ENTRIES or
             total >= _MAX_MANIFEST_BYTES):
         raise ValueError("pi package manifest exceeds bounded size")
@@ -143,43 +147,6 @@ def _add_entry(entries: list, total: int, path: Path, relative: str) -> int:
                     "sha256": _file_digest(path).split(":", 1)[1],
                     "size": size})
     return total + size
-
-
-def _add_dependency_artifacts(dep_dir: Path, prefix: str,
-                              entries: list, total: int) -> int:
-    """Manifest + resolved main/bin entrypoints of one dependency."""
-    manifest = dep_dir / "package.json"
-    data = None
-    if manifest.is_file():
-        total = _add_entry(entries, total, manifest, prefix + "package.json")
-        try:
-            data = json.loads(manifest.read_text(encoding="utf-8"))
-        except ValueError:
-            data = None
-    if not isinstance(data, dict):
-        return total
-    targets: list[str] = []
-    main = data.get("main")
-    if isinstance(main, str) and main:
-        targets.append(main)
-    binary = data.get("bin")
-    if isinstance(binary, str) and binary:
-        targets.append(binary)
-    elif isinstance(binary, dict):
-        targets.extend(value for value in binary.values()
-                       if isinstance(value, str))
-    added = 0
-    for target in targets:
-        if added >= _MAX_DEPENDENCY_ARTIFACTS:
-            raise ValueError("dependency entrypoints exceed bounded size")
-        artifact = (dep_dir / target).resolve()
-        if (artifact.is_file() and
-                artifact.is_relative_to(dep_dir.resolve())):
-            total = _add_entry(
-                entries, total, artifact,
-                prefix + target.replace("\\", "/"))
-            added += 1
-    return total
 
 
 def _node_install_root(package_root: Path) -> Path:

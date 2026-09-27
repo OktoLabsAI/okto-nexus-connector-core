@@ -6,6 +6,7 @@ import asyncio
 import concurrent.futures
 import re
 import sys
+import time
 from collections import deque
 from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mapping
 from dataclasses import dataclass, replace
@@ -23,6 +24,10 @@ from .adapters.compatibility import qualified_build
 #: force, lifecycle observation and connector close never queue behind the
 #: default-executor work used by normal sends and stream reads.
 _CONTROL_POOL_SIZE = 4
+#: C3/S05: physical force has its OWN reserved capacity, never consumable
+#: by state observations or graceful closes - a blocked observation
+#: backend cannot starve the emergency dispatch.
+_FORCE_POOL_SIZE = 2
 
 from .event_ingest import translate_native_event
 from .registry import adapter_spec, load_adapter
@@ -121,7 +126,8 @@ class CopiedAdapterSession:
                  *, session_id: str, stream_epoch: str,
                  context: ExecutionContext,
                  redactor: NativeSecretRedactor | None = None,
-                 control_executor: concurrent.futures.Executor | None = None):
+                 control_executor: concurrent.futures.Executor | None = None,
+                 force_executor: concurrent.futures.Executor | None = None):
         self._connector = connector
         self._session = session
         self._session_id = session_id
@@ -138,6 +144,16 @@ class CopiedAdapterSession:
             concurrent.futures.ThreadPoolExecutor(
                 max_workers=_CONTROL_POOL_SIZE,
                 thread_name_prefix="nexus-core-control"))
+        self._owns_force_executor = force_executor is None
+        self._force_executor: concurrent.futures.Executor = (
+            force_executor if force_executor is not None else
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=_FORCE_POOL_SIZE,
+                thread_name_prefix="nexus-core-force"))
+        # C3/S05: one in-flight observation per session - repeated polls
+        # coalesce onto the shared unit instead of piling units on the
+        # control pool while a backend hangs.
+        self._observe_inflight: asyncio.Task | None = None
         self.native_id = session.session_id
         self._closed = False
         self._close_started = False
@@ -272,8 +288,37 @@ class CopiedAdapterSession:
         projected = dict(request)
         if operator_response is not None:
             projected["operator_response"] = dict(operator_response)
-        await asyncio.to_thread(reply, self._session.session_id, projected,
-                                "decline" if decision == "cancel" else decision)
+        # C3/S03: a PERMISSIVE decision (accept/provide) grants work and
+        # shares the same effect guard as every other write - checked on
+        # the loop AND inside the dispatch thread at the write frontier,
+        # including deadline, revocation, fault and closing flags. Deny-
+        # style answers never grant anything, so refusing them past a
+        # deadline would only make containment harder: they stay allowed
+        # while the session is not closed.
+        outcome = "decline" if decision == "cancel" else decision
+        permissive = outcome not in {
+            "decline", "deny", "denied", "reject", "refuse", "cancel"}
+        fence = getattr(self, "effect_fence", None)
+        if permissive and fence is not None:
+            fence.check("approval_reply")
+
+        def _guarded_reply():
+            if permissive and fence is not None:
+                fence.check("approval_reply")
+            # Correlation revalidation at the write frontier: a late worker
+            # must not answer an already-superseded request/turn.
+            if self._close_started or self._active_operation_id is None:
+                raise RuntimeCommandNotSent(
+                    "native approval turn is not active", code="STALE_TURN")
+            if method in {"item/commandExecution/requestApproval",
+                          "item/fileChange/requestApproval", *INPUT_METHODS}:
+                if (not isinstance(params, dict) or
+                        params.get("turnId") != self._active_turn_id):
+                    raise RuntimeCommandNotSent(
+                        "native approval turn changed", code="STALE_TURN")
+            return reply(self._session.session_id, projected, outcome)
+
+        await asyncio.to_thread(_guarded_reply)
 
     async def events(self) -> AsyncIterator[RuntimeEvent]:
         if hasattr(self._connector, "events_for_session"):
@@ -342,6 +387,29 @@ class CopiedAdapterSession:
         loop = asyncio.get_running_loop()
         return await loop.run_in_executor(self._control_executor, fn, *args)
 
+    async def _run_force(self, fn, /, *args):
+        """Run the PHYSICAL force on its own reserved pool (C3/S05)."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._force_executor, fn, *args)
+
+    async def _lifecycle(self) -> Mapping[str, Any]:
+        """Coalesced lifecycle observation: concurrent callers share one
+        in-flight backend unit; a new poll starts only after the previous
+        one returns. Cancellation of one waiter never cancels the shared
+        unit."""
+        task = self._observe_inflight
+        if task is None or task.done():
+            task = asyncio.create_task(
+                self._run_control(self._connector.observe_lifecycle,
+                                  self._session))
+            self._observe_inflight = task
+
+            def _clear(done: asyncio.Task) -> None:
+                if self._observe_inflight is done:
+                    self._observe_inflight = None
+            task.add_done_callback(_clear)
+        return await asyncio.shield(task)
+
     async def close(self) -> str:
         if self._closed:
             return "already_closed"
@@ -355,20 +423,20 @@ class CopiedAdapterSession:
             except Exception:
                 pass
         try:
-            before_close = await self._run_control(
-                self._connector.observe_lifecycle, self._session)
+            before_close = await self._lifecycle()
         except Exception:
             before_close = {}
         await self._run_control(self._connector.close)
         try:
-            after_close = await self._run_control(
-                self._connector.observe_lifecycle, self._session)
+            after_close = await self._lifecycle()
         except Exception:
             after_close = {}
-        if self._owns_control_executor and self._closed:
-            # Only a confirmed stop disposes the reserved capacity; an
-            # unconfirmed close keeps it for retries and later observation.
-            self._control_executor.shutdown(wait=False, cancel_futures=True)
+        # C3/S08: the freshly observed result feeds the outcome (and any
+        # downstream decision) immediately - never a stale prior flag.
+        # Session-owned executors (direct construction, not the public
+        # composition) are NOT disposed here: a confirmed stop can still be
+        # followed by legitimate late observation/retries, and the public
+        # lifecycle for factory-owned capacity is the runtime shutdown.
         self._closed = after_close.get("stop_observed") is True
         # A tree that stopped only because close() enforced containment did
         # not demonstrate graceful native shutdown.
@@ -378,11 +446,10 @@ class CopiedAdapterSession:
     async def force_stop(self) -> None:
         """Request owned-tree containment independently of a stuck send."""
         self._close_started = True
-        await self._run_control(self._connector.force_stop)
+        await self._run_force(self._connector.force_stop)
 
     async def observe(self) -> tuple[str, str]:
-        lifecycle = await self._run_control(
-            self._connector.observe_lifecycle, self._session)
+        lifecycle = await self._lifecycle()
         state = "STOPPED" if lifecycle.get("stop_observed") is True else "RUNNING"
         if state == "STOPPED":
             self._closed = True
@@ -414,25 +481,32 @@ class CopiedAdapterFactory:
                                    if codex_client_info is not None else None)
         self._codex_resume = codex_resume
         self._native_approvals_enabled = native_approvals_enabled
-        # C2/R03: the spawn gate consults the live monotonic clock after
-        # every awaited host callback and immediately before the write.
-        self._clock = clock
-        # C2/R02: one reserved control pool for every session this factory
-        # opens, so containment/observation capacity is bounded, named and
-        # owned here; normal data work stays on the loop's default executor.
+        # C3/S01: the spawn gate ALWAYS has a clock - None never means
+        # "protection off". The composition shares one effective source;
+        # direct constructions fall back to the system monotonic clock.
+        self._clock = clock if clock is not None else time.monotonic
+        # C2/R02 + C3/S05: one reserved control pool for observations/close
+        # and one DEDICATED force pool for every session this factory opens:
+        # bounded, named and owned here; a blocked observation backend can
+        # never consume the emergency force capacity. Normal data work stays
+        # on the loop's default executor.
         self._control_executor = concurrent.futures.ThreadPoolExecutor(
             max_workers=_CONTROL_POOL_SIZE,
             thread_name_prefix="nexus-core-control")
+        self._force_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=_FORCE_POOL_SIZE,
+            thread_name_prefix="nexus-core-force")
 
     def close(self) -> None:
-        """Release the reserved control pool (best effort, non-blocking).
+        """Release the factory-owned executors (best effort, non-blocking).
 
         In-flight containment calls are never cancelled mid-flight: threads
         already executing a physical force/observation run to completion.
-        Queued-but-not-started control calls are dropped; the runtime's own
-        shutdown budget governs how long it waits for confirmation.
+        Queued-but-not-started calls are dropped; the runtime's own shutdown
+        budget governs how long it waits for confirmation.
         """
         self._control_executor.shutdown(wait=False, cancel_futures=True)
+        self._force_executor.shutdown(wait=False, cancel_futures=True)
 
     async def open(self, prepared: PreparedLaunch, session_id: str,
                    context: ExecutionContext, *, stream_epoch: str) -> CopiedAdapterSession:
@@ -544,8 +618,17 @@ class CopiedAdapterFactory:
             start_kwargs = {"owning_agent_id": context.agent_id}
             if resume_grant is not None:
                 start_kwargs["resume_thread_id"] = resume_grant.thread_id
-            native_session = await asyncio.to_thread(connector.start,
-                                                     **start_kwargs)
+
+            def _guarded_start():
+                # C3/S02: the revalidation runs INSIDE the work unit that
+                # starts the process, when the worker finally begins and
+                # after every queue wait - not only before enqueueing. A
+                # refusal here is provably pre-spawn: retry_safe stays
+                # honest because nothing was started.
+                _revalidate_launch("launch")
+                return connector.start(**start_kwargs)
+
+            native_session = await asyncio.to_thread(_guarded_start)
         except BaseException:
             await asyncio.to_thread(connector.close)
             raise
@@ -553,4 +636,5 @@ class CopiedAdapterFactory:
                                     session_id=session_id,
                                     stream_epoch=stream_epoch, context=context,
                                     redactor=redactor,
-                                    control_executor=self._control_executor)
+                                    control_executor=self._control_executor,
+                                    force_executor=self._force_executor)

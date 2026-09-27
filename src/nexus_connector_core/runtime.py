@@ -132,6 +132,10 @@ class _Session:
     effect_fence: object = field(default=None)
     lease_expired: bool = False
     revoked: bool = False
+    # C3/S04: conservative in-memory marker while a lease CAS is in flight
+    # on the journal worker (the caller may stop waiting; the durable
+    # commit can still land and is applied by the late-commit callback).
+    lease_cas_pending: bool = False
     eviction_scheduled: bool = False
     normal_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     control_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -248,6 +252,8 @@ class LocalRuntimeCore:
         # waits for them within the cleanup budget; none is discarded while
         # ownership could still be uncertain.
         self._cleanup_tasks: set[asyncio.Task] = set()
+        # C3/S08: one-shot public disposal of factory-owned executors.
+        self._factory_disposed = False
 
     async def discover(self, request: DiscoveryRequest) -> Inventory:
         candidates = []
@@ -957,7 +963,33 @@ class LocalRuntimeCore:
                     timeout=self._cleanup_budget_seconds + 1.0)
             except (asyncio.TimeoutError, TimeoutError):
                 pass
+        # C3/S08: dispose factory-owned executors through the PUBLIC
+        # lifecycle - never by the host reaching into privates - once the
+        # shutdown is fully resolved. Uncertain ownership (unknown closes,
+        # still-running forces, live bindings) RETAINS the containment
+        # capacity those sessions may still need; a later fully-resolved
+        # shutdown disposes it. Idempotent by flag.
+        self._dispose_factory_if_resolved()
         return ShutdownReport(outcomes)
+
+    def _dispose_factory_if_resolved(self) -> None:
+        if self._factory_disposed:
+            return
+        if self._uncertain_opens or self._cleanup_tasks:
+            return
+        for binding in self._sessions.values():
+            if not binding.closed:
+                return
+            force = binding.force_task
+            if force is not None and not force.done():
+                return
+        dispose = getattr(self._native_factory, "close", None)
+        if callable(dispose) and not asyncio.iscoroutine(dispose):
+            try:
+                dispose()
+                self._factory_disposed = True
+            except Exception:
+                pass
 
     def _schedule_force(self, session: SessionKey, binding: _Session,
                         deadline: float,
@@ -1262,29 +1294,93 @@ class LocalRuntimeCore:
                                     context.authorization_revision == old.authorization_revision):
                                 raise CoreError("BINDING_NOT_AUTHORIZED",
                                                 "lease_renew")
-                            # Durable fence first: if another Core instance
-                            # sharing this journal already advanced or revoked
-                            # the persisted lease, this renewal loses without
-                            # ever becoming the active generation in memory.
-                            # A legacy claim without lease evidence fails
-                            # SESSION_UNKNOWN here rather than being seeded
-                            # from memory.
-                            await self._journal.cas_session_lease(
-                                session,
-                                expected_connection_generation=old.connection_generation,
-                                connection_generation=context.connection_generation,
-                                owner_generation=context.session_owner_generation,
-                                authorization_revision=context.authorization_revision,
-                                configuration_revision=context.configuration_revision,
-                                revoked=False)
-                            binding.context = context
-                            binding.lease_expired = False
+                            if binding.lease_cas_pending:
+                                raise CoreError("RECONNECT_BUSY", "lease_renew",
+                                                retry_safe=True)
+                            # C3/S04: reserve in memory under the SHORT lock
+                            # (no I/O), then run the durable CAS OUTSIDE
+                            # every state lock: the containment coordinator
+                            # never queues behind storage latency. The race
+                            # is explicit: the worker may accept and commit
+                            # the CAS after the caller stopped waiting, so
+                            # the answer on timeout/cancel is BUSY - never a
+                            # claim that nothing happened - and a late
+                            # commit is applied conservatively below.
+                            binding.lease_cas_pending = True
+                        cas = asyncio.ensure_future(self._journal.cas_session_lease(
+                            session,
+                            expected_connection_generation=old.connection_generation,
+                            connection_generation=context.connection_generation,
+                            owner_generation=context.session_owner_generation,
+                            authorization_revision=context.authorization_revision,
+                            configuration_revision=context.configuration_revision,
+                            revoked=False))
+                        try:
+                            # The shield keeps the delivered unit alive when
+                            # the caller stops waiting: the worker may still
+                            # commit, and the applier recovers it below.
+                            await asyncio.shield(cas)
+                        except asyncio.CancelledError:
+                            cas.add_done_callback(self._late_cas_applier(
+                                session, binding, context, revoke=False))
+                            raise
+                        async with self._lock:
+                            binding.lease_cas_pending = False
+                            if (self._sessions.get(session) is binding and
+                                    not binding.closed and
+                                    not binding.revoked):
+                                # Durable fence already advanced (PC1): a
+                                # competing Core lost without ever becoming
+                                # the active generation in memory.
+                                binding.context = context
+                                binding.lease_expired = False
         except TimeoutError as exc:
             raise CoreError("RECONNECT_BUSY", "lease_renew",
                             retry_safe=True) from exc
         snapshot = await self.inspect(session)
         await self._lease_event(session, binding, "core.lease_renewed", {})
         return snapshot
+
+    def _late_cas_applier(self, session: SessionKey, binding: _Session,
+                          context: ExecutionContext, *, revoke: bool):
+        """Recover a durable lease CAS the caller no longer waits for.
+
+        C3/S04 fault point: the journal worker may accept and commit the
+        CAS after the caller was cancelled or timed out. Cancelling the
+        await never proves absence of effect - the durable row advanced.
+        The applier runs on the loop when the CAS task completes and
+        applies the commit conservatively: a renewal applies only to a
+        still-live, unrevoked binding; a revocation always tightens. A
+        failed CAS commits nothing and only clears the pending marker
+        (durable storage stays the reconcile authority either way).
+        """
+        def _on_done(task: asyncio.Task) -> None:
+            try:
+                task.result()
+            except BaseException:
+                # Nothing durable committed (unit failed or was cancelled
+                # before delivery); storage remains the reconcile authority.
+                binding.lease_cas_pending = False
+                return
+            loop = asyncio.get_running_loop()
+            loop.call_soon(self._apply_committed_cas, session, binding,
+                           context, revoke)
+        return _on_done
+
+    def _apply_committed_cas(self, session: SessionKey, binding: _Session,
+                             context: ExecutionContext, revoke: bool) -> None:
+        if self._sessions.get(session) is binding:
+            if revoke:
+                binding.context = replace(
+                    context,
+                    lease_deadline_monotonic=self._clock.monotonic(),
+                    allowed_actions=frozenset())
+                binding.lease_expired = True
+                binding.revoked = True
+            elif not (binding.closed or binding.closing or binding.revoked):
+                binding.context = context
+                binding.lease_expired = False
+        binding.lease_cas_pending = False
 
     async def revoke_lease(self, session: SessionKey, context: ExecutionContext,
                            *, expected_connection_generation: int) -> None:
@@ -1315,24 +1411,40 @@ class LocalRuntimeCore:
                                     context.authorization_revision <= old.authorization_revision or
                                     context.configuration_revision < old.configuration_revision):
                                 raise CoreError("STALE_GENERATION", "lease_revoke")
-                            # The durable revocation is committed before the
-                            # in-memory one: a crash between the two leaves a
-                            # durably revoked lease, never a revoked session
-                            # whose journal row could still be renewed.
-                            await self._journal.cas_session_lease(
-                                session,
-                                expected_connection_generation=old.connection_generation,
-                                connection_generation=context.connection_generation,
-                                owner_generation=context.session_owner_generation,
-                                authorization_revision=context.authorization_revision,
-                                configuration_revision=context.configuration_revision,
-                                revoked=True)
-                            binding.context = replace(
-                                context,
-                                lease_deadline_monotonic=self._clock.monotonic(),
-                                allowed_actions=frozenset())
-                            binding.lease_expired = True
-                            binding.revoked = True
+                            if binding.lease_cas_pending:
+                                raise CoreError("REVOKE_BUSY", "lease_revoke",
+                                                retry_safe=True)
+                            # C3/S04: reserve in memory, durable revocation
+                            # OUTSIDE the state locks (a crash or a stuck
+                            # journal between the two leaves a durably
+                            # revoked lease - never a revoked session whose
+                            # journal row could still be renewed). A late
+                            # commit after caller cancellation still
+                            # tightens memory via the applier.
+                            binding.lease_cas_pending = True
+                        cas = asyncio.ensure_future(self._journal.cas_session_lease(
+                            session,
+                            expected_connection_generation=old.connection_generation,
+                            connection_generation=context.connection_generation,
+                            owner_generation=context.session_owner_generation,
+                            authorization_revision=context.authorization_revision,
+                            configuration_revision=context.configuration_revision,
+                            revoked=True))
+                        try:
+                            await asyncio.shield(cas)
+                        except asyncio.CancelledError:
+                            cas.add_done_callback(self._late_cas_applier(
+                                session, binding, context, revoke=True))
+                            raise
+                        async with self._lock:
+                            binding.lease_cas_pending = False
+                            if self._sessions.get(session) is binding:
+                                binding.context = replace(
+                                    context,
+                                    lease_deadline_monotonic=self._clock.monotonic(),
+                                    allowed_actions=frozenset())
+                                binding.lease_expired = True
+                                binding.revoked = True
         except TimeoutError as exc:
             raise CoreError("REVOKE_BUSY", "lease_revoke",
                             retry_safe=True) from exc
