@@ -38,6 +38,37 @@ class RuntimeCommandNotSent(EffectNotSent):
     """Native effect was rejected before a protocol write."""
 
 
+class DispatchGuards:
+    """Thread-scoped operation guard for native write frontiers (C4/T03).
+
+    The bridge installs the per-operation guard (a tiny sync callable
+    raising :class:`RuntimeCommandNotSent`) right before dispatching on a
+    worker thread; the adapter's transport consults it AFTER acquiring its
+    own write lock and immediately BEFORE the first byte reaches the
+    stream/process - the true effect frontier, after every internal wait.
+    Thread-scoped so concurrent dispatches never overwrite each other's
+    guard. A refusal here is provably pre-effect (zero bytes written) and
+    maps to the kernel's durable not-sent evidence.
+    """
+
+    __slots__ = ("_local",)
+
+    def __init__(self):
+        import threading
+        self._local = threading.local()
+
+    def set(self, check) -> None:
+        self._local.check = check
+
+    def clear(self) -> None:
+        self._local.check = None
+
+    def check(self) -> None:
+        check = getattr(self._local, "check", None)
+        if check is not None:
+            check()
+
+
 class Clock(Protocol):
     def now_iso(self) -> str: ...
 

@@ -119,3 +119,24 @@ códigos preservados.
    (manifesto de conteúdo); nova qualificação real
    `sha256:bc3b22f8…4284914`; digests v1 não qualificam (S06).
 7. Versão mínima esperada pelos hosts: **0.2.2.dev0**.
+
+
+## Mudanças que os hosts absorvem (C4 — reauditoria T01–T07)
+
+1. **`create_runtime(cleanup_budget_seconds=…)`** exposto (default 5.0).
+2. **Seam aditivo `opening_guard`** em `NativeFactory.open` (opcional;
+   factories legadas seguem funcionando): o runtime fecha o guard de
+   aberturas pendentes no início do shutdown — nenhum spawn tardio.
+3. **`CoreError.message`** (C3) segue o contrato código-estável;
+   `RUNTIME_DRAINING` pode chegar de aberturas drenadas (retry_safe).
+4. **CAS de lease**: falhas comprovadamente sem commit liberam a
+   tentativa (retry imediato após recuperação); commit tardio após
+   cancelamento é aplicado conservadoramente; BUSY documenta unidade em
+   voo — sem reset de sessão como workaround.
+5. **Identidade Pi v3** (`core.build_identity.v3`): relations
+   optional/peer instaladas cobertas, ausências registradas, topologia
+   lógica; nova qualificação real
+   `sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b`.
+6. **Guarda na fronteira nativa** (`DispatchGuards`): os três
+   transportes revalidam após seus locks, antes do primeiro byte.
+7. Versão mínima esperada pelos hosts: **0.2.3.dev0**.

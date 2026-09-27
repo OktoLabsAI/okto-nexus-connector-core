@@ -108,11 +108,14 @@ def test_production_identity_grants_recorded_from_campaigns():
         build_identity="sha256:df63d86e72bc1a27f13899ad0467c4b312d8ee2cb67ae3a09e37f734d9f0edcb")
     assert compatibility.qualified_build(
         "pi", "0.87.1", "win32", "x86_64", "sha256:" + "0" * 64,
-        build_identity="sha256:bc3b22f8927a334f75d4a5d824e7a280c105b4929910cd127b1d0173e4284914")
-    # C2/R06 + C3/S06: pre-v2 (partial) identities no longer grant.
+        build_identity="sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b")
+    # C2/R06 + C3/S06 + C4/T06: partial/older-algorithm digests never grant.
     assert not compatibility.qualified_build(
         "pi", "0.87.1", "win32", "x86_64", "sha256:" + "0" * 64,
         build_identity="sha256:b454b39171e7428e721ecc01be6654c3608a9091d398c3d3d445897a91a67e43")
+    assert not compatibility.qualified_build(
+        "pi", "0.87.1", "win32", "x86_64", "sha256:" + "0" * 64,
+        build_identity="sha256:bc3b22f8927a334f75d4a5d824e7a280c105b4929910cd127b1d0173e4284914")
     assert not compatibility.qualified_build(
         "pi", "0.87.1", "win32", "x86_64", "sha256:" + "0" * 64,
         build_identity="sha256:d4f09928e4a7043d1d6bd742a4ead3344d3b18b3990410b797ba65169a0cf583")

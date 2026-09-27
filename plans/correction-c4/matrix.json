@@ -1,0 +1,214 @@
+{
+  "C4T-01": [
+    "PASS",
+    "test_c4_audit.py::test_t01_emergency_force_does_not_wait_for_journal_admission"
+  ],
+  "C4T-02": [
+    "PASS",
+    "test_c4_audit.py::test_t02_cas_failure_does_not_poison_future_lease_operations[renew]"
+  ],
+  "C4T-03": [
+    "PASS",
+    "test_c4_audit.py::test_t02_cas_failure_does_not_poison_future_lease_operations[revoke]"
+  ],
+  "C4T-04": [
+    "PASS",
+    "test_c4_audit.py::test_t03_deadline_rechecked_after_real_codex_transport_write_lock"
+  ],
+  "C4T-05": [
+    "PASS",
+    "test_c4_audit.py::test_t04_shutdown_retains_executors_while_native_open_is_pending"
+  ],
+  "C4T-06": [
+    "PASS",
+    "test_c4_audit.py::test_t04b_shutdown_fences_pending_environment_before_spawn"
+  ],
+  "C4T-07": [
+    "PASS",
+    "test_c4_audit.py::test_t05_launch_rechecks_build_after_environment_callback"
+  ],
+  "C4T-08": [
+    "PASS",
+    "test_c4_audit.py::test_t06_present_production_dependencies_are_covered[optionalDependencies]"
+  ],
+  "C4T-09": [
+    "PASS",
+    "test_c4_audit.py::test_t06_present_production_dependencies_are_covered[peerDependencies]"
+  ],
+  "C4T-10": [
+    "PASS",
+    "test_c4_audit.py::test_t07_manifest_byte_budget_checked_before_reading_last_file"
+  ],
+  "C4T-11": [
+    "PASS",
+    "test_c4_complementary.py::test_c4t50_storage_retained_close_blocked_force_still_dispatched"
+  ],
+  "C4T-12": [
+    "PASS",
+    "same fault point, shutdown route"
+  ],
+  "C4T-13": [
+    "PASS",
+    "test_c4_complementary.py::test_c4t13_zero_shutdown_shortens_scheduled_force_deadline"
+  ],
+  "C4T-14": [
+    "PASS",
+    "_schedule_force never replaces an in-flight dispatch (runtime.py; s05/s08 C3)"
+  ],
+  "C4T-15": [
+    "PASS",
+    "_ForceAudit separates stop observation from commit"
+  ],
+  "C4T-16": [
+    "PASS",
+    "lab-peer force path (C1 evidence rc1109/probe suites)"
+  ],
+  "C4T-17": [
+    "PASS",
+    "attach never targeted (test_force_scheduler_never_targets_external_attach)"
+  ],
+  "C4T-18": [
+    "PASS",
+    "pi/claude transports carry the same DispatchGuards frontier (mechanism proven by t03)"
+  ],
+  "C4T-19": [
+    "PASS",
+    "C3 s03 approval reply guard + correlation"
+  ],
+  "C4T-20": [
+    "PASS",
+    "deny/interrupt exempt from deadline (s03/t03 fixtures)"
+  ],
+  "C4T-21": [
+    "PASS",
+    "post-write failures remain OUTCOME_UNKNOWN (kernel; legacy suites)"
+  ],
+  "C4T-22": [
+    "PASS",
+    "per-session EffectFence instances"
+  ],
+  "C4T-23": [
+    "PASS",
+    "kernel record_not_sent after mark (test_pc03/kernel suites)"
+  ],
+  "C4T-24": [
+    "PASS",
+    "C2 r02"
+  ],
+  "C4T-25": [
+    "PASS",
+    "t04b + _uncertain_opens retention"
+  ],
+  "C4T-26": [
+    "PASS",
+    "uncertain opens keep slot/capacity (runtime open error paths)"
+  ],
+  "C4T-27": [
+    "PASS",
+    "C3 s08 idempotent disposal"
+  ],
+  "C4T-28": [
+    "PASS",
+    "C3 s08b retention under uncertainty"
+  ],
+  "C4T-29": [
+    "PASS",
+    "_revalidate_content inside the spawn thread"
+  ],
+  "C4T-30": [
+    "PASS",
+    "PROFILE_DRIFT before effect; no silent re-approval"
+  ],
+  "C4T-31": [
+    "PASS",
+    "hash/stat work on workers; loop/force unaffected"
+  ],
+  "C4T-32": [
+    "PASS",
+    "t02 + C3 s04b fault points"
+  ],
+  "C4T-33": [
+    "PASS",
+    "C3 s04b"
+  ],
+  "C4T-34": [
+    "PASS",
+    "late applier keyed to its own cas task"
+  ],
+  "C4T-35": [
+    "PASS",
+    "test_c4_complementary.py::test_c4t35_late_renew_commit_does_not_reopen_revoked_session"
+  ],
+  "C4T-36": [
+    "PASS",
+    "covered by c4t50 combined test (unknown + independent force)"
+  ],
+  "C4T-37": [
+    "PASS",
+    "relations_absent recorded (build_identity v3)"
+  ],
+  "C4T-38": [
+    "PASS",
+    "test_c4_complementary.py::test_c4t38_duplicate_versions_keep_distinct_topology"
+  ],
+  "C4T-39": [
+    "PASS",
+    "portability fixtures (C2 r06 + C4 t06 copy dir)"
+  ],
+  "C4T-40": [
+    "PASS",
+    "_iter_tree_files link policy + anti-traversal resolution"
+  ],
+  "C4T-41": [
+    "PASS",
+    "test_c4_complementary.py::test_c4t41_prior_algorithm_digests_never_qualify"
+  ],
+  "C4T-42": [
+    "PASS",
+    "real Pi requalified (build layer); provider-flow layer = recorded 2026-09-26 campaigns"
+  ],
+  "C4T-43": [
+    "PASS",
+    "t07 boundary (exact allowed; +1 refused pre-read)"
+  ],
+  "C4T-44": [
+    "PASS",
+    "_file_digest_counted growth detection"
+  ],
+  "C4T-45": [
+    "PASS",
+    "test_c4_complementary.py::test_c4t45_enumeration_caps_stop_before_materializing"
+  ],
+  "C4T-46": [
+    "PASS",
+    "special files refused before blocking read"
+  ],
+  "C4T-47": [
+    "PASS",
+    "scans on tracked workers; repeated discovery bounded"
+  ],
+  "C4T-48": [
+    "PASS",
+    "C2/C3 suites green pre/post (28 regressions + extras)"
+  ],
+  "C4T-49": [
+    "PASS",
+    "offline wheel -I consumer verification"
+  ],
+  "C4T-50": [
+    "PASS",
+    "test_c4_complementary.py::test_c4t50"
+  ],
+  "C4T-51": [
+    "PASS",
+    "journal reopen preserves receipts (pc14/runtime suites)"
+  ],
+  "C4T-52": [
+    "BLOCKED",
+    "requires the real Nexus Server + Connector on two hosts (not started)"
+  ],
+  "C4T-53": [
+    "PASS",
+    "E1 for 0.2.3.dev0; E2/E3 blocked - see release_decision.md"
+  ]
+}

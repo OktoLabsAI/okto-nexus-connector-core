@@ -302,6 +302,10 @@ class ClaudeCodeStreamConnector:
         self._stderr_thread: threading.Thread | None = None
 
         self._write_lock = threading.Lock()
+        # C4/T03: thread-scoped operation guard consulted after the
+        # bounded write-lock acquire, immediately before the first byte.
+        from ..adapter_types import DispatchGuards
+        self._dispatch_guards = DispatchGuards()
         self._state_lock = threading.Lock()
         self._pending_admissions = 0
         # Guarded by _state_lock. ``_pending_turns`` is a FIFO of one entry
@@ -666,6 +670,11 @@ class ClaudeCodeStreamConnector:
         line = json.dumps(obj, ensure_ascii=False)
         self._acquire_write_lock()
         try:
+            # C4/T03: guard AFTER the bounded lock acquire, immediately
+            # before the first byte (pre-effect refusal, zero bytes).
+            guards = getattr(self, "_dispatch_guards", None)
+            if guards is not None:
+                guards.check()
             proc = self._proc
             if proc is None or proc.stdin is None:
                 raise NativeAdapterError(

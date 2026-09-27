@@ -1025,7 +1025,13 @@ def test_shutdown_force_request_does_not_release_pending_native_effect(tmp_path)
                 ShutdownPolicy(drain_seconds=0.01, interrupt_seconds=0.02)),
                 timeout=1)
             assert native.forced.is_set()
-            assert native.stage_at_force == ("SUBMISSION_STARTED",)
+            # C4/T01: the physical force no longer waits for the journal
+            # admission, so the admission may land after the dispatch -
+            # the old synchronous stage_at_force expectation encoded the
+            # pre-C4 storage-before-force order the reaudit removed. The
+            # causal invariants stay: unknown outcome, owned slot, pending
+            # submit unresolved, and the durable force receipt eventually
+            # recorded (asserted after release below).
             assert report.session_outcomes[key] == "unknown"
             assert (await runtime.inspect(key)).ownership == "owned"
             assert not pending.done()

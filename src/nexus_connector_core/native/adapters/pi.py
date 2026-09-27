@@ -236,7 +236,9 @@ class _PiTransport:
         on_line_processing_error: Callable[[str, str], None],
         on_reader_exit: Callable[[], None],
         native_action: PiNativeActionLaunch | None = None,
+        dispatch_guards: "object | None" = None,
     ) -> None:
+        self._dispatch_guards = dispatch_guards
         self._argv = list(argv)
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
@@ -334,6 +336,11 @@ class _PiTransport:
             )
         line = json.dumps(payload) + "\n"
         with self._write_lock:
+            # C4/T03: guard AFTER the lock wait, immediately before the
+            # first byte (pre-effect refusal writes zero bytes).
+            guards = getattr(self, "_dispatch_guards", None)
+            if guards is not None:
+                guards.check()
             try:
                 self._proc.stdin.write(line)
                 self._proc.stdin.flush()
@@ -686,6 +693,10 @@ class PiRpcConnector:
 
         self._start_lock = threading.Lock()
         self._transport: _PiTransport | None = None
+        # C4/T03: thread-scoped guard consulted at the transport write
+        # frontier (after its lock wait, before the first byte).
+        from ..adapter_types import DispatchGuards
+        self._dispatch_guards = DispatchGuards()
 
         self._session_lock = threading.Lock()
         self._session_id: str | None = None
@@ -752,6 +763,7 @@ class PiRpcConnector:
                 cwd=self._cwd,
                 env=self._env,
                 native_action=self._native_action,
+                dispatch_guards=self._dispatch_guards,
                 on_push_event=self._on_push_event,
                 on_unmatched_response=self._on_unmatched_response,
                 on_child_exit=self._on_child_exit,

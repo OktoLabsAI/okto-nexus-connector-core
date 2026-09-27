@@ -237,7 +237,7 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
     assert compatibility.control_observation(
         "pi", pi[1], platform=pi[2], architecture=pi[3],
         fingerprint=pi[4],
-        build_identity="sha256:bc3b22f8927a334f75d4a5d824e7a280c105b4929910cd127b1d0173e4284914"
+        build_identity="sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b"
     )["compatible_controls"] == ["steer", "interrupt"]
     assert compatibility.control_observation(
         "codex", codex[1], platform=codex[2], architecture=codex[3],

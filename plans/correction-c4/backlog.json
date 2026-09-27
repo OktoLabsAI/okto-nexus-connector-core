@@ -1,0 +1,93 @@
+{
+  "round": "C4",
+  "base_commit": "8677145c3050b9ba270bc24ae6343d6cb391a168",
+  "phases": {
+    "C4-00": {
+      "tasks": {
+        "C4-00.01": "DONE",
+        "C4-00.02": "DONE",
+        "C4-00.03": "DONE",
+        "C4-00.04": "DONE"
+      },
+      "note": "baseline 10/10 fail; EFFECT_BOUNDARIES.md; layers classified"
+    },
+    "C4-01": {
+      "tasks": {
+        "C4-01.01": "DONE",
+        "C4-01.02": "DONE",
+        "C4-01.03": "DONE",
+        "C4-01.04": "DONE",
+        "C4-01.05": "DONE",
+        "C4-01.06": "DONE (lab peers; OS campaign = existing C1 evidence)"
+      },
+      "note": "force dispatch before journal; parallel tracked audit"
+    },
+    "C4-02": {
+      "tasks": {
+        "C4-02.01": "DONE",
+        "C4-02.02": "DONE (codex/pi/claude)",
+        "C4-02.03": "DONE (C3 s03 semantics kept)",
+        "C4-02.04": "DONE (zero-byte refusal vs post-write unknown)",
+        "C4-02.05": "DONE",
+        "C4-02.06": "DONE"
+      },
+      "note": "DispatchGuards thread-scoped at the transport frontier"
+    },
+    "C4-03": {
+      "tasks": {
+        "C4-03.01": "DONE",
+        "C4-03.02": "DONE",
+        "C4-03.03": "DONE (uncertain opens retained)",
+        "C4-03.04": "DONE",
+        "C4-03.05": "DONE",
+        "C4-03.06": "DONE (stat snapshot; residual window declared)",
+        "C4-03.07": "DONE (docs/handoff)"
+      },
+      "note": "OpeningAttempt + draining guard + content revalidation"
+    },
+    "C4-04": {
+      "tasks": {
+        "C4-04.01": "DONE (attempt+token via task identity)",
+        "C4-04.02": "DONE (atomic-txn evidence contract)",
+        "C4-04.03": "DONE",
+        "C4-04.04": "DONE",
+        "C4-04.05": "DONE",
+        "C4-04.06": "DONE"
+      },
+      "note": "evidenced finalization; never finally-blind"
+    },
+    "C4-05": {
+      "tasks": {
+        "C4-05.01": "DONE",
+        "C4-05.02": "DONE",
+        "C4-05.03": "DONE (logical topology)",
+        "C4-05.04": "DONE (in-scope links only)",
+        "C4-05.05": "DONE (v3 + real requalification)",
+        "C4-05.06": "DONE (Node proofs in seeds)"
+      },
+      "note": "optional/peer present covered; absence recorded"
+    },
+    "C4-06": {
+      "tasks": {
+        "C4-06.01": "DONE",
+        "C4-06.02": "DONE",
+        "C4-06.03": "DONE",
+        "C4-06.04": "DONE (off-loop)",
+        "C4-06.05": "DONE (real layout measured)"
+      },
+      "note": "projected budget before read; bounded enumeration"
+    },
+    "C4-07": {
+      "tasks": {
+        "C4-07.01": "DONE",
+        "C4-07.02": "DONE (complementary)",
+        "C4-07.03": "DONE (lab peers; real providers = recorded campaigns)",
+        "C4-07.04": "DONE",
+        "C4-07.05": "DONE (no persisted migration required)",
+        "C4-07.06": "DONE",
+        "C4-07.07": "DONE (E1 for 0.2.3.dev0)"
+      },
+      "note": "matrix below; artifacts pinned"
+    }
+  }
+}

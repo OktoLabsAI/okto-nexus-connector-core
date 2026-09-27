@@ -94,3 +94,22 @@ offline verdes, **não publicado**. Pi requalificado sob o algoritmo v2
 S01-S08.md`. **E1 declarado para 0.2.2.dev0**; E2/E3 seguem bloqueados
 pelos hosts reais (N/C), backend Linux compatível para campanha de
 backend, attach, billing e PyPI conjunta.
+
+
+## Adendo C4 (2026-09-28) — reavaliação independente de `8677145`
+
+Terceira reauditoria (`FIX_UPDATE_PLAN/`): 7 achados (T01–T07, 10
+sementes), **E1 rejeitado para 0.2.2.dev0**. Correção C4 executada
+(C4-00..C4-07, 47 tarefas DONE em `plans/correction-c4/backlog.json`;
+matriz C4T-01..53 em `matrix.json` — 52 PASS/mapeados, **C4T-52 BLOCKED**
+dois hosts reais). 10/10 sementes verdes (baseline 10/10 fail registrado);
+C2/C3 preservadas; cenários combinados em
+`tests/regression/test_c4_complementary.py`; fronteiras em
+`plans/correction-c4/EFFECT_BOUNDARIES.md`. Suítes: Windows 3.13/3.11/
+3.12 = 742/74 cada; WSL2 3.13/3.11/3.12 = 797/19 cada. Artefato
+normalizado **0.2.3.dev0** byte-idêntico (wheel
+`sha256:12891135…f01dfe1`, sdist `sha256:4006f997…eda8d60`), twine/
+offline verdes, **não publicado**. Pi requalificado sob
+`core.build_identity.v3` (`sha256:caf8bfad…22de487b`). **E1 declarado
+para 0.2.3.dev0**; E2/E3 seguem bloqueados (hosts N/C, attach, billing,
+PyPI conjunta).

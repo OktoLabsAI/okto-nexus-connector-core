@@ -41,7 +41,7 @@ from .composition import create_runtime
 from .runtime import LocalRuntimeCore
 from .slot_ledger import SQLiteOwnedSlotLedger
 
-__version__ = "0.2.2.dev0"
+__version__ = "0.2.3.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",

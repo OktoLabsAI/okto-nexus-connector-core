@@ -38,6 +38,7 @@ def create_runtime(
     trusted_discovery_roots: tuple = (),
     pi_install_root=None,
     pi_node=None,
+    cleanup_budget_seconds: float = 5.0,
     codex_client_info: Optional[Mapping[str, str]] = None,
     codex_resume=None,
     pi_native_action=None,
@@ -120,4 +121,5 @@ def create_runtime(
         max_lease_seconds=max_lease_seconds,
         reconnect_fence_seconds=reconnect_fence_seconds,
         max_concurrent_opens=max_concurrent_opens,
-        max_owned_sessions=max_owned_sessions)
+        max_owned_sessions=max_owned_sessions,
+        cleanup_budget_seconds=cleanup_budget_seconds)

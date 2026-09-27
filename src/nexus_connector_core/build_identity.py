@@ -15,6 +15,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import stat
 from pathlib import Path
 
 from .protocol import canonical_json
@@ -22,19 +23,50 @@ from .protocol import canonical_json
 __all__ = ["executable_build_identity", "pi_build_identity",
            "BUILD_IDENTITY_ALGORITHM"]
 
-BUILD_IDENTITY_ALGORITHM = "core.build_identity.v2"
-# C3/S06: bounded coverage headroom. The real 0.2.x-qualified Pi
-# release closure measures 14,094 files / 101.3 MiB / 118 packages;
-# the cap stays strict and refusal of larger layouts is explicit.
+#: C4/T06: coverage v3 - declared relations now include INSTALLED
+#: optionalDependencies and peerDependencies (absence is recorded, so
+#: installing one later changes the identity), and the closure preserves
+#: topology via importer-relative logical paths (two importers resolving
+#: different versions of one name never collide). Requalification of the
+#: allowlist is required for every semantic change.
+BUILD_IDENTITY_ALGORITHM = "core.build_identity.v3"
+# C3/S06 + C4/T06: bounded coverage headroom. The real 0.2.x-qualified Pi
+# release closure measures 14,094 files / 101.3 MiB / 118 packages; the
+# caps stay strict and refusal of larger layouts is explicit.
 _MAX_MANIFEST_ENTRIES = 32768
 _MAX_MANIFEST_BYTES = 256 * 1024 * 1024
+_MAX_DEPENDENCY_PACKAGES = 512
+# C4/T07: enumeration itself is bounded - directories visited, depth and
+# files collected are capped so a hostile layout cannot materialize an
+# unbounded path list before the budget check fires.
+_MAX_DIRECTORIES = 65536
+_MAX_DEPTH = 48
+_READ_CHUNK = 1024 * 1024
 
 
 def _file_digest(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+        for chunk in iter(lambda: stream.read(_READ_CHUNK), b""):
             digest.update(chunk)
+    return "sha256:" + digest.hexdigest()
+
+
+def _file_digest_counted(path: Path, expected: int) -> str:
+    """Digest while counting the bytes ACTUALLY read (C4/T07): a file
+    growing between stat and read refuses instead of silently exceeding
+    the budget."""
+    digest = hashlib.sha256()
+    read = 0
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(_READ_CHUNK), b""):
+            read += len(chunk)
+            if read > expected:
+                raise ValueError(
+                    f"file grew during read: {path.name}")
+            digest.update(chunk)
+    if read != expected:
+        raise ValueError(f"file changed size during read: {path.name}")
     return "sha256:" + digest.hexdigest()
 
 
@@ -56,6 +88,60 @@ def executable_build_identity(executable: str | os.PathLike) -> str:
         canonical_json(identity)).hexdigest()
 
 
+def _iter_tree_files(directory: Path):
+    """Bounded, incremental enumeration (C4/T07): os.walk with directory,
+    depth and file caps; regular files only; in-scope symlinks followed
+    by content, anything escaping the walked root refuses. Nothing is
+    materialized beyond the entry cap."""
+    dirs_visited = 0
+    collected = []
+
+    def walk(current: Path, depth: int) -> None:
+        nonlocal dirs_visited
+        if depth > _MAX_DEPTH:
+            raise ValueError("pi package tree exceeds bounded depth")
+        dirs_visited += 1
+        if dirs_visited > _MAX_DIRECTORIES:
+            raise ValueError("pi package tree exceeds bounded directories")
+        try:
+            names = sorted(os.listdir(current))
+        except OSError as exc:
+            raise ValueError(f"unreadable directory in package") from exc
+        for name in names:
+            if len(collected) > _MAX_MANIFEST_ENTRIES:
+                raise ValueError("pi package manifest exceeds bounded size")
+            path = current / name
+            try:
+                st = os.lstat(path)
+            except OSError as exc:
+                raise ValueError("unreadable entry in package") from exc
+            if stat.S_ISLNK(st.st_mode):
+                # Layout policy (C4/T06): links INSIDE the walked root are
+                # covered by content; a link escaping it refuses - the
+                # identity never reads outside the authorized scope.
+                try:
+                    target = path.resolve(strict=True)
+                except OSError as exc:
+                    raise ValueError(
+                        f"broken link in package: {name}") from exc
+                if not target.is_relative_to(directory.resolve()):
+                    raise ValueError(
+                        f"link escapes the package scope: {name}")
+                st = target.stat()
+            if stat.S_ISDIR(st.st_mode):
+                walk(path, depth + 1)
+            elif stat.S_ISREG(st.st_mode):
+                collected.append(path)
+            else:
+                # FIFOs, devices, sockets: refused BEFORE any blocking
+                # read (C4/T07).
+                raise ValueError(
+                    f"unsupported special file in package: {name}")
+
+    walk(directory, 0)
+    return collected
+
+
 def pi_build_identity(node: str | os.PathLike,
                       package_root: str | os.PathLike) -> str:
     """Portable identity of the Node + Pi-package launch pair.
@@ -64,21 +150,20 @@ def pi_build_identity(node: str | os.PathLike,
     directory (C2/R06: never the ``@earendil-works`` scope directory, so
     unrelated sibling packages cannot perturb the identity). The manifest
     enumerates the package tree with *relative* paths and content digests
-    only — no absolute paths, no user data.
+    only - no absolute paths, no user data.
 
-    C2/R06 + C3/S06: the loadable set also covers the package's DECLARED
-    production dependencies (``dependencies`` in package.json), resolved
-    through the standard node_modules lookup — including packages hoisted
-    OUTSIDE the scope directory — transitively, under strict limits. Each
-    dependency contributes its FULL content manifest (every file of the
-    package), which is the only bounded way to cover every loading form
-    Node supports: implicit ``index.js`` resolution, relative imports from
-    any entry, and ``exports`` maps alike. ``main``/``bin`` alone proved
-    insufficient (S06); a digest that cannot represent the layout refuses
-    (ValueError) rather than qualifying it silently. Undeclared packages
-    never enter the identity. Semantic changes to this coverage version
-    the algorithm tag (v2) and require deliberate requalification of the
-    allowlist.
+    C2/R06 + C3/S06 + C4/T06: the loadable set covers the package's
+    DECLARED production relations - ``dependencies`` plus INSTALLED
+    ``optionalDependencies``/``peerDependencies`` - resolved through the
+    standard node_modules lookup, transitively, under strict limits. The
+    ABSENCE of an optional/peer relation is recorded, so installing one
+    later changes the identity. Each reached package contributes its
+    FULL content manifest under an importer-relative logical path (two
+    importers resolving different versions of one name never collide).
+    A digest that cannot represent the layout refuses (ValueError)
+    rather than qualifying it silently; undeclared packages never enter
+    the identity. C4/T07: budgets are enforced BEFORE reading (projected
+    totals), enumeration is bounded, and growth during read refuses.
     """
     node_path = Path(node)
     root = Path(package_root)
@@ -89,39 +174,46 @@ def pi_build_identity(node: str | os.PathLike,
     if not node_resolved.is_file() or not root_resolved.is_dir():
         raise ValueError("invalid pi build identity inputs")
     entries = []
+    total = 0
 
     def _add_tree(directory: Path, prefix: str) -> None:
         nonlocal total
-        for current in sorted(directory.rglob("*")):
-            if not current.is_file():
-                continue
-            total = _add_entry(entries, total, current,
-                               prefix + current.relative_to(directory)
-                               .as_posix())
-
-    total = 0
+        for current in _iter_tree_files(directory):
+            relative = prefix + current.relative_to(directory).as_posix()
+            total = _add_entry(entries, total, current, relative)
 
     _add_tree(root_resolved, "")
 
-    # The installation root bounds the node_modules lookup: the directory
-    # that CONTAINS the top-level node_modules the package lives under.
     install_root = _node_install_root(root_resolved)
-    queue = [root_resolved]
+    # C4/T06: importer-relative logical topology ("@/name/subname").
+    queue = [(root_resolved, "@")]
     seen = {root_resolved.resolve()}
+    absent_relations: list[str] = []
     packages = 0
     while queue:
-        package_dir = queue.pop(0)
+        package_dir, logical = queue.pop(0)
         packages += 1
         if packages > _MAX_DEPENDENCY_PACKAGES:
             raise ValueError("pi dependency closure exceeds bounded size")
-        for name in _declared_dependencies(package_dir):
+        for name, required in _declared_relations(package_dir):
             resolved = _resolve_node_modules_package(package_dir, name,
                                                      install_root)
-            if resolved is None or resolved in seen:
+            if resolved is None:
+                if not required:
+                    # Recorded absence: installing it later must change
+                    # the identity (C4/T06).
+                    absent_relations.append(f"{logical}:{name}")
+                else:
+                    raise ValueError(
+                        f"declared dependency missing from installation: "
+                        f"{name}")
+                continue
+            if resolved in seen:
                 continue
             seen.add(resolved)
-            _add_tree(resolved, f"deps/{name}/")
-            queue.append(resolved)
+            dep_logical = f"{logical}/{name}"
+            _add_tree(resolved, f"{dep_logical}/")
+            queue.append((resolved, dep_logical))
 
     identity = {
         "algorithm": BUILD_IDENTITY_ALGORITHM,
@@ -129,22 +221,31 @@ def pi_build_identity(node: str | os.PathLike,
         "node_sha256": _file_digest(node_resolved).split(":", 1)[1],
         "node_size": node_resolved.stat().st_size,
         "package": entries,
+        "relations_absent": sorted(absent_relations),
     }
     return "sha256:" + hashlib.sha256(
         canonical_json(identity)).hexdigest()
 
 
-_MAX_DEPENDENCY_PACKAGES = 512
-
-
 def _add_entry(entries: list, total: int, path: Path, relative: str) -> int:
-    """Append one bounded manifest entry (path-free relative + digest)."""
-    if (len(entries) >= _MAX_MANIFEST_ENTRIES or
-            total >= _MAX_MANIFEST_BYTES):
+    """Append one bounded manifest entry (path-free relative + digest).
+
+    C4/T07: the PROJECTED total is validated BEFORE the file is read;
+    hitting the limit exactly is allowed, exceeding it by one byte
+    refuses before any digest work.
+    """
+    if len(entries) >= _MAX_MANIFEST_ENTRIES:
         raise ValueError("pi package manifest exceeds bounded size")
-    size = path.stat().st_size
+    try:
+        st = path.stat()
+        size = st.st_size
+    except OSError as exc:
+        raise ValueError("unreadable file in package") from exc
+    if total + size > _MAX_MANIFEST_BYTES:
+        raise ValueError("pi package manifest exceeds bounded size")
     entries.append({"path": relative,
-                    "sha256": _file_digest(path).split(":", 1)[1],
+                    "sha256": _file_digest_counted(path, size)
+                    .split(":", 1)[1],
                     "size": size})
     return total + size
 
@@ -160,10 +261,10 @@ def _node_install_root(package_root: Path) -> Path:
     return parent
 
 
-def _declared_dependencies(package_dir: Path) -> tuple[str, ...]:
+def _validated_relation_map(package_dir: Path, key: str) -> dict:
     manifest = package_dir / "package.json"
     if not manifest.is_file():
-        return ()
+        return {}
     try:
         data = json.loads(manifest.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -171,20 +272,51 @@ def _declared_dependencies(package_dir: Path) -> tuple[str, ...]:
             f"unreadable package.json in {package_dir.name}") from exc
     if not isinstance(data, dict):
         raise ValueError(f"invalid package.json in {package_dir.name}")
-    dependencies = data.get("dependencies")
-    if dependencies is None:
-        return ()
-    if not isinstance(dependencies, dict) or not all(
-            isinstance(key, str) and isinstance(value, str)
-            for key, value in dependencies.items()):
-        raise ValueError(f"invalid dependencies in {package_dir.name}")
-    return tuple(sorted(dependencies))
+    relations = data.get(key)
+    if relations is None:
+        return {}
+    if not isinstance(relations, dict):
+        raise ValueError(f"invalid {key} in {package_dir.name}")
+    if key == "peerDependenciesMeta":
+        # Values are objects ("optional": true), validated structurally.
+        if not all(isinstance(name, str) and isinstance(value, dict)
+                   for name, value in relations.items()):
+            raise ValueError(
+                f"invalid {key} in {package_dir.name}")
+        return relations
+    if not all(isinstance(name, str) and isinstance(value, str)
+               for name, value in relations.items()):
+        raise ValueError(f"invalid {key} in {package_dir.name}")
+    return relations
+
+
+def _declared_relations(package_dir: Path) -> tuple[tuple[str, bool], ...]:
+    """(name, required) for dependencies + optional/peer relations.
+
+    ``dependencies`` are required (a missing one refuses the layout);
+    optional/peer relations may be absent - the absence is recorded so a
+    later install changes the identity (C4/T06).
+    """
+    combined: dict[str, bool] = {}
+    for name in _validated_relation_map(package_dir, "dependencies"):
+        combined[name] = True
+    for key in ("optionalDependencies", "peerDependencies"):
+        for name in _validated_relation_map(package_dir, key):
+            combined.setdefault(name, False)
+    # peerDependenciesMeta.optional marks peers that MAY be absent; a peer
+    # not so marked stays required. Its values are OBJECTS, not strings.
+    meta = _validated_relation_map(package_dir, "peerDependenciesMeta")
+    for name, value in meta.items():
+        if isinstance(value, dict) and value.get("optional") is True:
+            if name in combined:
+                combined[name] = False
+    return tuple(sorted(combined.items(), key=lambda item: item[0]))
 
 
 def _resolve_node_modules_package(package_dir: Path, name: str,
                                   install_root: Path) -> Path | None:
     """Standard node resolution, bounded by the installation root."""
-    if not name or name.startswith(("/", "\\")) or "\\" in name:
+    if not name or name.startswith(("/", "\\")) or "\\" in name or ".." in name.split("/"):
         return None
     current = package_dir
     while True:

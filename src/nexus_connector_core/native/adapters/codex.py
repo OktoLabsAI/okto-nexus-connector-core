@@ -266,7 +266,9 @@ class _CodexTransport:
         on_malformed_line: Callable[[str, str], None],
         on_dispatch_error: Callable[[str, str], None],
         on_server_request: Callable | None = None,
+        dispatch_guards: "object | None" = None,
     ) -> None:
+        self._dispatch_guards = dispatch_guards
         self._command = list(command)
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
@@ -352,6 +354,12 @@ class _CodexTransport:
                 {"stderr_tail": self.stderr_tail()},
             )
         try:
+            # C4/T03: the guard is consulted AFTER the lock wait and
+            # immediately before the first byte - a refusal here has
+            # provably written zero bytes (pre-effect, durable not-sent).
+            guards = getattr(self, "_dispatch_guards", None)
+            if guards is not None:
+                guards.check()
             try:
                 self._proc.stdin.write(line)
                 self._proc.stdin.flush()
@@ -622,6 +630,10 @@ class CodexAppServerConnector:
         self._thread_start_overrides = dict(thread_start_overrides or {})
 
         self._transport: _CodexTransport | None = None
+        # C4/T03: thread-scoped operation guard consulted by the transport
+        # after its write-lock wait, at the zero-byte frontier.
+        from ..adapter_types import DispatchGuards
+        self._dispatch_guards = DispatchGuards()
         self._start_lock = threading.Lock()
         # Lifetime attempts, including uncertain starts: never recycle a native
         # allocation on timeout or discard attribution of late ended-thread events.
@@ -1002,6 +1014,7 @@ class CodexAppServerConnector:
             self._command,
             cwd=self._cwd,
             env=self._env,
+            dispatch_guards=self._dispatch_guards,
             on_notification=self._on_notification,
             on_unmatched_response=self._on_unmatched_response,
             on_child_exit=self._on_child_exit,

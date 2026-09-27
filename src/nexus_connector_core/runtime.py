@@ -170,6 +170,51 @@ class _SessionTombstones:
         return self._entries.get(session)
 
 
+class _ForceAudit:
+    """Shared state between the force dispatch and its parallel journal
+    audit (C4/T01): `admitted` is True only after the journal confirms the
+    admission; `outcome` is the dispatch result observed by the runtime.
+    Neither field ever fabricates durable evidence."""
+
+    __slots__ = ("admitted", "outcome", "outcome_set")
+
+    def __init__(self) -> None:
+        self.admitted = False
+        self.outcome: str | None = None
+        self.outcome_set = asyncio.Event()
+
+    def set_outcome(self, outcome: str) -> None:
+        if self.outcome is None:
+            self.outcome = outcome
+        self.outcome_set.set()
+
+
+class _OpeningGuard:
+    """Thread-safe draining fence for one pending open (C4/T04).
+
+    Registered in memory BEFORE any callback or queued unit with spawn
+    capacity; the runtime closes it at the START of shutdown, and the
+    factory consults it after every await and inside the spawn thread -
+    so a late environment resolution cannot start a native adapter under
+    a runtime that already began draining."""
+
+    __slots__ = ("closed",)
+
+    def __init__(self) -> None:
+        self.closed = False
+
+
+class _OpeningAttempt:
+    """Traceable pending-open record (C4-03.01): completion event plus
+    the draining guard, owned by the runtime and fenced by shutdown."""
+
+    __slots__ = ("finished", "guard")
+
+    def __init__(self) -> None:
+        self.finished = asyncio.Event()
+        self.guard = _OpeningGuard()
+
+
 class LocalRuntimeCore:
     """One installation's runtime kernel.
 
@@ -242,7 +287,14 @@ class LocalRuntimeCore:
         self._event_sink = event_sink
         self._sessions: dict[SessionKey, _Session] = {}
         self._session_tombstones = _SessionTombstones()
-        self._opening: dict[SessionKey, asyncio.Event] = {}
+        self._opening: dict[SessionKey, _OpeningAttempt] = {}
+        # C4/T04: additive opening_guard seam - passed only when declared.
+        import inspect as _inspect
+        try:
+            self._factory_accepts_opening_guard = "opening_guard" in                 _inspect.signature(self._native_factory.open).parameters
+        except (TypeError, ValueError, AttributeError):
+            # Legacy seams (bare async functions) do not declare it.
+            self._factory_accepts_opening_guard = False
         self._uncertain_opens: set[SessionKey] = set()
         self._lock = asyncio.Lock()
         self._event_changed = asyncio.Condition()
@@ -334,8 +386,14 @@ class LocalRuntimeCore:
             if occupied >= self._max_owned_sessions:
                 raise CoreError("CAPACITY_EXCEEDED", "open", retry_safe=True,
                                 operation_id=operation.operation_id)
-            finished = asyncio.Event()
-            self._opening[session_key] = finished
+            attempt = _OpeningAttempt()
+            self._opening[session_key] = attempt
+        # C4/T04: factories that declare the additive opening_guard seam
+        # receive the draining fence (legacy/test factories without the
+        # parameter are simply not passed it).
+        open_kwargs = {"stream_epoch": operation.stream_epoch}
+        if self._factory_accepts_opening_guard:
+            open_kwargs["opening_guard"] = attempt.guard
         effect_started = False
         binding_registered = False
         try:
@@ -373,7 +431,7 @@ class LocalRuntimeCore:
                 try:
                     native = await self._native_factory.open(
                         prepared, operation.session_id, context,
-                        stream_epoch=operation.stream_epoch)
+                        **open_kwargs)
                 except EffectNotSent:
                     if slot_reserved:
                         await self._owned_slots.release_owned_slot(
@@ -445,6 +503,7 @@ class LocalRuntimeCore:
                                              asyncio.get_running_loop().time() +
                                              self._shutdown_policy.drain_seconds +
                                              self._shutdown_policy.interrupt_seconds)
+                finished = attempt.finished
                 finished.set()
 
     async def submit(self, operation: TurnOperation,
@@ -899,7 +958,14 @@ class LocalRuntimeCore:
         async with self._lock:
             self._shutting_down = True
             self._shutdown_policy = policy
-            opening = tuple(self._opening.values())
+            # C4/T04: draining closes the guard of EVERY pending open
+            # before any drain wait - a late callback or a queued spawn
+            # unit will refuse at the frontier instead of starting a new
+            # native effect under a draining runtime.
+            for pending_attempt in self._opening.values():
+                pending_attempt.guard.closed = True
+            opening = tuple(attempt.finished for attempt in
+                            self._opening.values())
         async with self._event_changed:
             self._event_changed.notify_all()
         if opening:
@@ -975,7 +1041,9 @@ class LocalRuntimeCore:
     def _dispose_factory_if_resolved(self) -> None:
         if self._factory_disposed:
             return
-        if self._uncertain_opens or self._cleanup_tasks:
+        # C4/T04: a pending open can still produce an effect (callbacks,
+        # queued spawn units) - its capacity is NOT disposable.
+        if self._opening or self._uncertain_opens or self._cleanup_tasks:
             return
         for binding in self._sessions.values():
             if not binding.closed:
@@ -1023,51 +1091,27 @@ class LocalRuntimeCore:
             force_stop = getattr(binding.native, "force_stop", None)
             if not callable(force_stop):
                 return
-            identity = [session.server_id, session.executor_id,
-                        session.session_id, binding.epoch,
-                        binding.context.session_owner_generation]
-            operation_id = "core.internal.shutdown_force." + hashlib.sha256(
-                canonical_json(identity)).hexdigest()
-            operation = Operation(operation_id, session.session_id,
-                                  "runtime.shutdown_force",
-                                  {"stream_epoch": binding.epoch})
-            key = OperationKey(session.server_id, session.executor_id,
-                               operation_id)
-            digest = intent_hash(operation, binding.context)
-            admitted = False
-            try:
-                _, admitted = await self._journal.admit(
-                    key, digest, session.session_id, critical=True,
-                    effect_imminent=True)
-            except Exception:
-                # Disk pressure cannot be allowed to defeat containment.
-                binding.faulted = True
             binding.force_requested = True
             started.set()
+            # C4/T01: the PHYSICAL force is dispatched FIRST; the durable
+            # audit (admission + receipt) runs in PARALLEL on a tracked
+            # side task. Storage can never delay or veto containment of a
+            # tree the Core already owns; while stop is not observed the
+            # honest outcome stays unknown and ownership is retained.
+            audit = _ForceAudit()
+            audit_task = asyncio.create_task(
+                self._force_audit(session, binding, audit))
+            self._cleanup_tasks.add(audit_task)
+            audit_task.add_done_callback(self._cleanup_tasks.discard)
             try:
                 await force_stop()
             except asyncio.CancelledError:
-                # The containment call completed-or-was-cancelled after the
-                # physical request was issued: the honest outcome stays a
-                # possible effect, but a completed force_stop must still get
-                # its durable receipt even when the surrounding task is
-                # being cancelled (PC01 ordering: receipt writes now land
-                # on the worker and can race the cancellation).
-                if admitted:
-                    await asyncio.shield(self._journal.record_receipt(key, OperationReceipt(
-                        operation_id, digest, "OUTCOME_UNKNOWN", True, False,
-                        session.session_id, error_code="OUTCOME_UNKNOWN")))
+                audit.set_outcome("OUTCOME_UNKNOWN")
                 raise
             except BaseException:
-                if admitted:
-                    await self._journal.record_receipt(key, OperationReceipt(
-                        operation_id, digest, "OUTCOME_UNKNOWN", True, False,
-                        session.session_id, error_code="OUTCOME_UNKNOWN"))
+                audit.set_outcome("OUTCOME_UNKNOWN")
                 return
-            if admitted:
-                await asyncio.shield(self._journal.record_receipt(key, OperationReceipt(
-                    operation_id, digest, "SUBMITTED", True, False,
-                    session.session_id)))
+            audit.set_outcome("SUBMITTED")
         except BaseException:
             # Neither an attempted force nor an exception proves tree stop.
             # The normal shutdown task retains the effect slot and observes
@@ -1075,6 +1119,53 @@ class LocalRuntimeCore:
             return
         finally:
             started.set()
+
+    async def _force_audit(self, session: SessionKey, binding: _Session,
+                           audit: "_ForceAudit") -> None:
+        """Best-effort durable audit of one force dispatch (C4/T01).
+
+        Admission and the receipt are diagnostics recorded when storage
+        cooperates; a stuck journal parks here without ever delaying the
+        physical force (already dispatched) and without inventing a
+        committed receipt - `admitted` stays False until the journal
+        confirms, so nothing claims durable evidence that is not on disk.
+        """
+        identity = [session.server_id, session.executor_id,
+                    session.session_id, binding.epoch,
+                    binding.context.session_owner_generation]
+        operation_id = "core.internal.shutdown_force." + hashlib.sha256(
+            canonical_json(identity)).hexdigest()
+        operation = Operation(operation_id, session.session_id,
+                              "runtime.shutdown_force",
+                              {"stream_epoch": binding.epoch})
+        key = OperationKey(session.server_id, session.executor_id,
+                           operation_id)
+        digest = intent_hash(operation, binding.context)
+        try:
+            _, admitted = await self._journal.admit(
+                key, digest, session.session_id, critical=True,
+                effect_imminent=True)
+        except Exception:
+            # Audit unavailable: in-memory diagnostic only. The physical
+            # request already happened; no receipt is invented.
+            binding.faulted = True
+            return
+        if not admitted:
+            return
+        audit.admitted = True
+        try:
+            await asyncio.wait_for(
+                audit.outcome_set.wait(),
+                timeout=self._cleanup_budget_seconds + 5.0)
+        except (asyncio.TimeoutError, TimeoutError):
+            audit.set_outcome("OUTCOME_UNKNOWN")
+        stage = audit.outcome or "OUTCOME_UNKNOWN"
+        try:
+            await self._journal.record_receipt(key, OperationReceipt(
+                operation_id, digest, stage, True, False, session.session_id,
+                error_code=None if stage == "SUBMITTED" else stage))
+        except Exception:
+            binding.faulted = True
 
     @staticmethod
     def _active_turn(binding: _Session) -> bool:
@@ -1324,6 +1415,20 @@ class LocalRuntimeCore:
                             cas.add_done_callback(self._late_cas_applier(
                                 session, binding, context, revoke=False))
                             raise
+                        except BaseException:
+                            # C4/T02: the journal CAS is ONE atomic sqlite
+                            # transaction - an error from the completed unit
+                            # PROVES nothing committed (rollback), so this
+                            # attempt finalizes safely and a retry may
+                            # proceed once storage recovers. Enqueue refusals
+                            # (JOURNAL_FULL before any delivery) are the
+                            # trivial case of the same proof. Never cleared
+                            # in a `finally`: only on this evidenced path,
+                            # leaving accepted-but-unawaited units (late
+                            # commit) correctly reserved.
+                            if cas.done():
+                                binding.lease_cas_pending = False
+                            raise
                         async with self._lock:
                             binding.lease_cas_pending = False
                             if (self._sessions.get(session) is binding and
@@ -1431,10 +1536,21 @@ class LocalRuntimeCore:
                             configuration_revision=context.configuration_revision,
                             revoked=True))
                         try:
+                            # The shield keeps the delivered unit alive when
+                            # the caller stops waiting: the worker may still
+                            # commit, and the applier recovers it below.
                             await asyncio.shield(cas)
                         except asyncio.CancelledError:
                             cas.add_done_callback(self._late_cas_applier(
                                 session, binding, context, revoke=True))
+                            raise
+                        except BaseException:
+                            # C4/T02: same evidenced finalization as the
+                            # renewal path - the atomic-transaction proof
+                            # releases the reservation; accepted-but-unwaited
+                            # units keep theirs for the late applier.
+                            if cas.done():
+                                binding.lease_cas_pending = False
                             raise
                         async with self._lock:
                             binding.lease_cas_pending = False

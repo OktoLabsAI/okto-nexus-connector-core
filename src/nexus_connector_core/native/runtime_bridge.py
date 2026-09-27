@@ -224,6 +224,7 @@ class CopiedAdapterSession:
                                  expected_turn_id=expected_turn_id)
         try:
             fence = getattr(self, "effect_fence", None)
+            guards = getattr(self._connector, "_dispatch_guards", None)
             if fence is not None:
                 # Loop-side check: fail fast, before paying for the thread
                 # hop. Thread-side check happens at the closest point to
@@ -233,7 +234,16 @@ class CopiedAdapterSession:
 
                 def _guarded_dispatch() -> None:
                     fence.check(command.verb)
-                    self._connector.send(self._session, command)
+                    # C4/T03: install the thread-scoped transport guard so
+                    # the refusal is re-consulted AFTER the adapter's own
+                    # lock waits, at the zero-byte frontier.
+                    if guards is not None:
+                        guards.set(lambda: fence.check(command.verb))
+                    try:
+                        self._connector.send(self._session, command)
+                    finally:
+                        if guards is not None:
+                            guards.clear()
 
                 await asyncio.to_thread(_guarded_dispatch)
             else:
@@ -509,7 +519,8 @@ class CopiedAdapterFactory:
         self._force_executor.shutdown(wait=False, cancel_futures=True)
 
     async def open(self, prepared: PreparedLaunch, session_id: str,
-                   context: ExecutionContext, *, stream_epoch: str) -> CopiedAdapterSession:
+                   context: ExecutionContext, *, stream_epoch: str,
+                   opening_guard=None) -> CopiedAdapterSession:
         spec = adapter_spec(prepared.intent.adapter_id)
         if spec.mode != "managed":
             raise CoreError("CAPABILITY_UNSUPPORTED", "open", retry_safe=True)
@@ -520,14 +531,41 @@ class CopiedAdapterFactory:
         require_containment()
 
         def _revalidate_launch(stage: str) -> None:
-            """C2/R03: the deadline is checked with the live clock after
-            every await (journal-free memory read) and right before the
-            spawn; an authorization valid at admission does not survive to
-            the write frontier once the lease has expired under it."""
+            """C2/R03 + C4/T04: the deadline is checked with the live clock
+            after every await (journal-free memory read) and right before
+            the spawn; an authorization valid at admission does not survive
+            to the write frontier once the lease has expired under it. A
+            runtime that began draining closes the opening guard - no
+            pending open may start a native effect afterwards."""
             clock = self._clock
             if (clock is not None and
                     clock() >= context.lease_deadline_monotonic):
                 raise CoreError("AGENT_REVOKED", stage, retry_safe=True)
+            if opening_guard is not None and opening_guard.closed:
+                raise CoreError("RUNTIME_DRAINING", stage, retry_safe=True)
+
+        def _launch_signature() -> tuple:
+            """C4/T05: cheap stat snapshot (size, mtime_ns) of the launch
+            artifacts, taken before the callbacks and re-verified at every
+            launch frontier. A full content hash already ran at prepare;
+            this closes the callback window for real modifications. The
+            residual window (a same-size, same-mtime rewrite) is declared,
+            not claimed atomic."""
+            import os
+            signature = []
+            for target in (prepared.argv[0], prepared.cwd):
+                try:
+                    info = os.stat(target)
+                    signature.append((info.st_size, info.st_mtime_ns))
+                except OSError:
+                    signature.append(None)
+            return tuple(signature)
+
+        def _revalidate_content(stage: str, snapshot: tuple) -> None:
+            if _launch_signature() != snapshot:
+                raise CoreError("PROFILE_DRIFT", stage, retry_safe=True)
+
+        content_snapshot = await asyncio.to_thread(_launch_signature)
         kind = spec.native_kind
         if not qualified_build(
                 kind, prepared.candidate.version, sys.platform,
@@ -541,6 +579,7 @@ class CopiedAdapterFactory:
                             retry_safe=True)
         env = dict(await self._environment(prepared))
         _revalidate_launch("environment")
+        _revalidate_content("environment", content_snapshot)
         allowed_mcp_names = {_token_env_name(reference)
                              for reference in prepared.secret_refs
                              if isinstance(reference, str) and
@@ -560,6 +599,7 @@ class CopiedAdapterFactory:
             resume_grant = (await self._codex_resume(prepared, session_id, context)
                             if self._codex_resume is not None else None)
             _revalidate_launch("codex_resume")
+            _revalidate_content("codex_resume", content_snapshot)
             if resume_grant is not None and (
                     type(resume_grant) is not CodexResumeGrant or
                     not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}",
@@ -596,6 +636,7 @@ class CopiedAdapterFactory:
             native_action = (await self._pi_native_action(prepared, session_id, context)
                              if self._pi_native_action is not None else None)
             _revalidate_launch("native_action")
+            _revalidate_content("native_action", content_snapshot)
             if native_action is not None and (
                     not isinstance(native_action, PiNativeActionLaunch) or
                     native_action.session_id != session_id or
@@ -614,6 +655,7 @@ class CopiedAdapterFactory:
                    *((native_action.capability_ref,) if native_action is not None else ()))
         redactor = NativeSecretRedactor(secrets)
         _revalidate_launch("launch")
+        _revalidate_content("launch", content_snapshot)
         try:
             start_kwargs = {"owning_agent_id": context.agent_id}
             if resume_grant is not None:
@@ -626,6 +668,7 @@ class CopiedAdapterFactory:
                 # refusal here is provably pre-spawn: retry_safe stays
                 # honest because nothing was started.
                 _revalidate_launch("launch")
+                _revalidate_content("launch", content_snapshot)
                 return connector.start(**start_kwargs)
 
             native_session = await asyncio.to_thread(_guarded_start)

@@ -89,7 +89,7 @@ QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
     ("codex", "0.157.0", "win32", "x86_64",
      "sha256:df63d86e72bc1a27f13899ad0467c4b312d8ee2cb67ae3a09e37f734d9f0edcb"),
     ("pi", "0.87.1", "win32", "x86_64",
-     "sha256:bc3b22f8927a334f75d4a5d824e7a280c105b4929910cd127b1d0173e4284914"),
+     "sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b"),
     ("claude_code", "2.1.282", "win32", "x86_64",
      "sha256:b9c8e2e61cc523f4d78630d6141e843c41fbe530cd297e7d4af8acd44841bed9"),
 }
