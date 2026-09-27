@@ -32,12 +32,23 @@ def _check_windows() -> dict[str, str]:
     status = {}
     try:
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)
+        # C2 (§6 review): explicit 64-bit Win32 ABI declarations with
+        # validated returns, per the same ABI discipline R07 imposed on
+        # the Linux side. Qualified separately from Linux - a Linux pass
+        # never implies Win32 validity.
+        from ctypes import wintypes
+        kernel.CreateJobObjectW.argtypes = [wintypes.LPVOID, wintypes.LPCWSTR]
+        kernel.CreateJobObjectW.restype = wintypes.HANDLE
+        kernel.CloseHandle.argtypes = [wintypes.HANDLE]
+        kernel.CloseHandle.restype = wintypes.BOOL
         job = kernel.CreateJobObjectW(None, None)
         if not job:
             status["job_objects"] = (
                 f"CreateJobObjectW failed (WinError {ctypes.get_last_error()})")
+        elif not kernel.CloseHandle(job):
+            status["job_objects"] = (
+                f"CloseHandle failed (WinError {ctypes.get_last_error()})")
         else:
-            kernel.CloseHandle(job)
             status["job_objects"] = "ok"
     except OSError as exc:
         status["job_objects"] = f"kernel32 unavailable: {exc}"
@@ -83,15 +94,36 @@ def _check_linux() -> dict[str, str]:
     try:
         libc = ctypes.CDLL(None, use_errno=True)
         libc.prctl.restype = ctypes.c_int
-        # PR_GET_CHILD_SUBREAPER (52): read-only query.
-        if libc.prctl(52, 0, 0, 0, 0) < 0:
-            status["subreaper"] = (
-                f"prctl query failed (errno {ctypes.get_errno()})")
-        else:
-            status["subreaper"] = "ok"
+        libc.prctl.argtypes = [ctypes.c_ulong, ctypes.c_void_p,
+                               ctypes.c_ulong, ctypes.c_ulong, ctypes.c_ulong]
+        status["subreaper"] = _query_subreaper(libc.prctl)
     except (OSError, AttributeError) as exc:
         status["subreaper"] = f"prctl unavailable: {exc}"
     return status
+
+
+#: PR_GET_CHILD_SUBREAPER (include/uapi/linux/prctl.h): reads the caller's
+#: child-subreaper flag into an int* (second argument); it is NOT 52 -
+#: that number is PR_GET_SPECULATION_CTRL with different argument ABI.
+PR_GET_CHILD_SUBREAPER = 37
+
+
+def _query_subreaper(prctl) -> str:
+    """Query PR_GET_CHILD_SUBREAPER through the given prctl callable.
+
+    The correct ABI passes an ``int*`` OUT pointer as the second argument;
+    the return value is 0 on success and -1 with errno on failure. A
+    textual "ok" here means the exact operation was confirmed.
+    """
+    value = ctypes.c_int(-1)
+    result = prctl(PR_GET_CHILD_SUBREAPER, ctypes.byref(value),
+                   ctypes.c_ulong(0), ctypes.c_ulong(0), ctypes.c_ulong(0))
+    if type(result) is not int or result < 0:
+        errno = ctypes.get_errno()
+        return f"prctl({PR_GET_CHILD_SUBREAPER}) failed (errno {errno})"
+    if value.value not in (0, 1):
+        return f"unexpected subreaper value {value.value}"
+    return "ok"
 
 
 def containment_preflight(*, platform: str = None) -> dict[str, str]:
@@ -105,12 +137,17 @@ def containment_preflight(*, platform: str = None) -> dict[str, str]:
 
 
 def require_containment(*, platform: str = None) -> None:
-    """Raise the typed preflight error when any requirement is missing."""
+    """Raise the typed preflight error when any requirement is missing.
+
+    C2/R07: the structured requirement map travels WITH the typed error
+    (redacted diagnostics, no secrets), so a refusal names every missing
+    backend requirement instead of discarding the detail it built.
+    """
     status = containment_preflight(platform=platform)
     missing = {name: detail for name, detail in status.items()
                if detail != "ok"}
     if missing:
         detail = "; ".join(f"{name}: {reason}"
                            for name, reason in sorted(missing.items()))
-        raise CoreError("PROCESS_CONTAINMENT_UNAVAILABLE", "preflight",
-                        retry_safe=True)
+        raise CoreError("PROCESS_CONTAINMENT_UNAVAILABLE: " + detail,
+                        "preflight", retry_safe=True)

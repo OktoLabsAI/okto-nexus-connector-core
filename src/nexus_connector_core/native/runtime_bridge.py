@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import concurrent.futures
 import re
 import sys
 from collections import deque
@@ -17,30 +18,22 @@ from ..pi_extension_resource import PiNativeActionLaunch
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, RuntimeCommandNotSent)
 from .adapters.compatibility import qualified_build
+
+#: Reserved capacity for containment/observation calls (C2/R02): physical
+#: force, lifecycle observation and connector close never queue behind the
+#: default-executor work used by normal sends and stream reads.
+_CONTROL_POOL_SIZE = 4
+
 from .event_ingest import translate_native_event
 from .registry import adapter_spec, load_adapter
 from .redaction import NativeSecretRedactor, credential_values
 from .process import snapshot_owned_process_birth
 
 
-@dataclass(frozen=True, slots=True)
-class CodexResumeGrant:
-    """Trusted-host proof for binding one stored Codex thread to one open."""
-
-    thread_id: str
-    session_id: str
-    server_id: str
-    executor_id: str
-    binding_id: str
-    agent_id: str
-    workspace_id: str
-    session_owner_generation: int
-    candidate_fingerprint: str
-    root_fingerprint: str
-    profile_fingerprint: str
-    terminal_observed: bool
-    persisted_rollout_observed: bool
-    exclusive_owner: bool
+# C2/R09: CodexResumeGrant is the PUBLIC resume contract (models.py);
+# the bridge imports the same class object so its exact-type validation
+# accepts instances consumers build from the public export.
+from ..models import CodexResumeGrant  # noqa: E402  (re-export identity)
 
 
 class _CopiedConnector(Protocol):
@@ -69,46 +62,82 @@ class EffectFence:
     thread that starts late must not write under stale authorization).
     Containment controls (interrupt/close) stay allowed past a lease
     deadline by contract; everything else fails closed before the write.
+
+    C2/R03: the guard also consults the LIVE monotonic clock against the
+    CURRENT lease deadline - never only a watcher flag, which is only as
+    fresh as the watcher's last run. Linearization of the revoke/renew
+    race: revoke publishes its flags before returning; renew replaces the
+    binding context under the runtime lock. Reading the deadline first
+    and the flags second is conservative under both orders - an
+    extension racing this check can only delay an acceptance, never
+    widen one, and an effect dispatched before a later revocation keeps
+    its upstream OUTCOME_UNKNOWN handling (no exactly-once claim).
     """
 
-    __slots__ = ("_probe",)
+    __slots__ = ("_probe", "_clock", "_lease_deadline", "_deadline_probe")
 
-    def __init__(self, probe=None):
+    def __init__(self, probe=None, *, clock=None, lease_deadline=None,
+                 deadline_probe=None):
         self._probe = probe
+        self._clock = clock
+        self._lease_deadline = lease_deadline
+        self._deadline_probe = deadline_probe
 
     def check(self, action: str) -> None:
         probe = self._probe
-        if probe is None:
-            return
-        closed, closing, revoked, expired, faulted = probe()
-        if closed:
-            reason, code = "session closed before dispatch", "SESSION_CLOSED"
-        elif revoked:
-            reason, code = "authorization revoked before dispatch", "AGENT_REVOKED"
-        elif faulted:
-            reason, code = ("event stream unavailable before dispatch",
-                            "EVENT_STREAM_UNAVAILABLE")
-        elif closing and action not in {"interrupt", "end"}:
-            reason, code = "session closing before dispatch", "SESSION_CLOSING"
-        elif (expired and
-                action not in {"interrupt", "end"}):
-            reason, code = "lease expired before dispatch", "AGENT_REVOKED"
-        else:
-            return
-        raise RuntimeCommandNotSent(reason, code=code)
+        if probe is not None:
+            closed, closing, revoked, expired, faulted = probe()
+            if closed:
+                reason, code = "session closed before dispatch", "SESSION_CLOSED"
+            elif revoked:
+                reason, code = "authorization revoked before dispatch", "AGENT_REVOKED"
+            elif faulted:
+                reason, code = ("event stream unavailable before dispatch",
+                                "EVENT_STREAM_UNAVAILABLE")
+            elif closing and action not in {"interrupt", "end"}:
+                reason, code = "session closing before dispatch", "SESSION_CLOSING"
+            elif (expired and
+                    action not in {"interrupt", "end"}):
+                reason, code = "lease expired before dispatch", "AGENT_REVOKED"
+            else:
+                reason = None
+            if reason is not None:
+                raise RuntimeCommandNotSent(reason, code=code)
+        # C2/R03: the real clock at the write frontier - a dispatch that
+        # starts after the deadline must refuse even when the watcher flag
+        # has not caught up yet.
+        clock = self._clock
+        if clock is not None and action not in {"interrupt", "end"}:
+            deadline = (self._lease_deadline if self._deadline_probe is None
+                        else self._deadline_probe())
+            if deadline is not None and clock() >= deadline:
+                raise RuntimeCommandNotSent(
+                    "lease deadline reached before dispatch",
+                    code="AGENT_REVOKED")
 
 
 class CopiedAdapterSession:
     def __init__(self, connector: _CopiedConnector, session: HarnessSession,
                  *, session_id: str, stream_epoch: str,
                  context: ExecutionContext,
-                 redactor: NativeSecretRedactor | None = None):
+                 redactor: NativeSecretRedactor | None = None,
+                 control_executor: concurrent.futures.Executor | None = None):
         self._connector = connector
         self._session = session
         self._session_id = session_id
         self._epoch = stream_epoch
         self._context = context
         self._redactor = redactor or NativeSecretRedactor()
+        # C2/R02: containment/observation capacity is reserved and owned.
+        # The factory owns one pool for its sessions; a directly constructed
+        # session owns its own, disposed when it closes. Cancelling the await
+        # never claims the underlying thread terminated.
+        self._owns_control_executor = control_executor is None
+        self._control_executor: concurrent.futures.Executor = (
+            control_executor if control_executor is not None else
+            concurrent.futures.ThreadPoolExecutor(
+                max_workers=_CONTROL_POOL_SIZE,
+                thread_name_prefix="nexus-core-control"))
         self.native_id = session.session_id
         self._closed = False
         self._close_started = False
@@ -308,6 +337,11 @@ class CopiedAdapterSession:
                                          stream_epoch=self._epoch,
                                          native_session_id=self._session.session_id)
 
+    async def _run_control(self, fn, /, *args):
+        """Run a containment/observation call on the reserved control pool."""
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(self._control_executor, fn, *args)
+
     async def close(self) -> str:
         if self._closed:
             return "already_closed"
@@ -321,16 +355,20 @@ class CopiedAdapterSession:
             except Exception:
                 pass
         try:
-            before_close = await asyncio.to_thread(self._connector.observe_lifecycle,
-                                                   self._session)
+            before_close = await self._run_control(
+                self._connector.observe_lifecycle, self._session)
         except Exception:
             before_close = {}
-        await asyncio.to_thread(self._connector.close)
+        await self._run_control(self._connector.close)
         try:
-            after_close = await asyncio.to_thread(self._connector.observe_lifecycle,
-                                                  self._session)
+            after_close = await self._run_control(
+                self._connector.observe_lifecycle, self._session)
         except Exception:
             after_close = {}
+        if self._owns_control_executor and self._closed:
+            # Only a confirmed stop disposes the reserved capacity; an
+            # unconfirmed close keeps it for retries and later observation.
+            self._control_executor.shutdown(wait=False, cancel_futures=True)
         self._closed = after_close.get("stop_observed") is True
         # A tree that stopped only because close() enforced containment did
         # not demonstrate graceful native shutdown.
@@ -340,11 +378,11 @@ class CopiedAdapterSession:
     async def force_stop(self) -> None:
         """Request owned-tree containment independently of a stuck send."""
         self._close_started = True
-        await asyncio.to_thread(self._connector.force_stop)
+        await self._run_control(self._connector.force_stop)
 
     async def observe(self) -> tuple[str, str]:
-        lifecycle = await asyncio.to_thread(self._connector.observe_lifecycle,
-                                            self._session)
+        lifecycle = await self._run_control(
+            self._connector.observe_lifecycle, self._session)
         state = "STOPPED" if lifecycle.get("stop_observed") is True else "RUNNING"
         if state == "STOPPED":
             self._closed = True
@@ -366,7 +404,8 @@ class CopiedAdapterFactory:
                  codex_client_info: Mapping[str, str] | None = None,
                  codex_resume: Callable[[PreparedLaunch, str, ExecutionContext],
                                         Awaitable[CodexResumeGrant | None]] | None = None,
-                 native_approvals_enabled: bool = False):
+                 native_approvals_enabled: bool = False,
+                 clock: Callable[[], float] | None = None):
         if type(native_approvals_enabled) is not bool:
             raise ValueError("native_approvals_enabled must be bool")
         self._environment = environment
@@ -375,6 +414,25 @@ class CopiedAdapterFactory:
                                    if codex_client_info is not None else None)
         self._codex_resume = codex_resume
         self._native_approvals_enabled = native_approvals_enabled
+        # C2/R03: the spawn gate consults the live monotonic clock after
+        # every awaited host callback and immediately before the write.
+        self._clock = clock
+        # C2/R02: one reserved control pool for every session this factory
+        # opens, so containment/observation capacity is bounded, named and
+        # owned here; normal data work stays on the loop's default executor.
+        self._control_executor = concurrent.futures.ThreadPoolExecutor(
+            max_workers=_CONTROL_POOL_SIZE,
+            thread_name_prefix="nexus-core-control")
+
+    def close(self) -> None:
+        """Release the reserved control pool (best effort, non-blocking).
+
+        In-flight containment calls are never cancelled mid-flight: threads
+        already executing a physical force/observation run to completion.
+        Queued-but-not-started control calls are dropped; the runtime's own
+        shutdown budget governs how long it waits for confirmation.
+        """
+        self._control_executor.shutdown(wait=False, cancel_futures=True)
 
     async def open(self, prepared: PreparedLaunch, session_id: str,
                    context: ExecutionContext, *, stream_epoch: str) -> CopiedAdapterSession:
@@ -386,6 +444,16 @@ class CopiedAdapterFactory:
         # fallback to bare kill(pid).
         from .process import require_containment
         require_containment()
+
+        def _revalidate_launch(stage: str) -> None:
+            """C2/R03: the deadline is checked with the live clock after
+            every await (journal-free memory read) and right before the
+            spawn; an authorization valid at admission does not survive to
+            the write frontier once the lease has expired under it."""
+            clock = self._clock
+            if (clock is not None and
+                    clock() >= context.lease_deadline_monotonic):
+                raise CoreError("AGENT_REVOKED", stage, retry_safe=True)
         kind = spec.native_kind
         if not qualified_build(
                 kind, prepared.candidate.version, sys.platform,
@@ -398,6 +466,7 @@ class CopiedAdapterFactory:
             raise CoreError("BINDING_NOT_AUTHORIZED", "native_approval_launch",
                             retry_safe=True)
         env = dict(await self._environment(prepared))
+        _revalidate_launch("environment")
         allowed_mcp_names = {_token_env_name(reference)
                              for reference in prepared.secret_refs
                              if isinstance(reference, str) and
@@ -416,6 +485,7 @@ class CopiedAdapterFactory:
         if kind == "codex":
             resume_grant = (await self._codex_resume(prepared, session_id, context)
                             if self._codex_resume is not None else None)
+            _revalidate_launch("codex_resume")
             if resume_grant is not None and (
                     type(resume_grant) is not CodexResumeGrant or
                     not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}",
@@ -451,6 +521,7 @@ class CopiedAdapterFactory:
         elif kind == "pi":
             native_action = (await self._pi_native_action(prepared, session_id, context)
                              if self._pi_native_action is not None else None)
+            _revalidate_launch("native_action")
             if native_action is not None and (
                     not isinstance(native_action, PiNativeActionLaunch) or
                     native_action.session_id != session_id or
@@ -468,6 +539,7 @@ class CopiedAdapterFactory:
         secrets = (*credential_values(env),
                    *((native_action.capability_ref,) if native_action is not None else ()))
         redactor = NativeSecretRedactor(secrets)
+        _revalidate_launch("launch")
         try:
             start_kwargs = {"owning_agent_id": context.agent_id}
             if resume_grant is not None:
@@ -480,4 +552,5 @@ class CopiedAdapterFactory:
         return CopiedAdapterSession(connector, native_session,
                                     session_id=session_id,
                                     stream_epoch=stream_epoch, context=context,
-                                    redactor=redactor)
+                                    redactor=redactor,
+                                    control_executor=self._control_executor)

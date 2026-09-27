@@ -251,6 +251,33 @@ class OpenOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class CodexResumeGrant:
+    """Trusted-host proof for binding one stored Codex thread to one open.
+
+    C2/R09: this is the PUBLIC resume contract. Hosts construct it from
+    ``nexus_connector_core`` and the copied-adapter bridge validates the
+    exact type plus every binding field; a structural look-alike is not
+    accepted. All fields come from the trusted host's own verification
+    of the persisted rollout.
+    """
+
+    thread_id: str
+    session_id: str
+    server_id: str
+    executor_id: str
+    binding_id: str
+    agent_id: str
+    workspace_id: str
+    session_owner_generation: int
+    candidate_fingerprint: str
+    root_fingerprint: str
+    profile_fingerprint: str
+    terminal_observed: bool
+    persisted_rollout_observed: bool
+    exclusive_owner: bool
+
+
+@dataclass(frozen=True, slots=True)
 class TurnOperation:
     operation_id: str
     session_id: str

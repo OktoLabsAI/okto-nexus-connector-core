@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Callable, Mapping, Awaitable, Optional
 
-from .models import InstallationCandidate
+from .models import InstallationCandidate, PreparedLaunch
 from .native.runtime_bridge import CopiedAdapterFactory
 from .pi_extension_resource import PiNativeActionLaunch
 from .runtime import LocalRuntimeCore
@@ -22,7 +22,7 @@ __all__ = ["create_runtime"]
 def create_runtime(
     *,
     journal,
-    environment: Callable[[InstallationCandidate], Awaitable[Mapping[str, str]]],
+    environment: Callable[[PreparedLaunch], Awaitable[Mapping[str, str]]],
     candidates: Mapping[str, InstallationCandidate],
     workspace_roots: Mapping[str, str],
     native_factory=None,
@@ -35,6 +35,9 @@ def create_runtime(
     reconnect_fence_seconds: float = 5.0,
     max_concurrent_opens: int = 8,
     max_owned_sessions: int = 32,
+    trusted_discovery_roots: tuple = (),
+    pi_install_root=None,
+    pi_node=None,
     codex_client_info: Optional[Mapping[str, str]] = None,
     codex_resume=None,
     pi_native_action=None,
@@ -92,12 +95,16 @@ def create_runtime(
             pi_native_action=pi_native_action,
             codex_client_info=codex_client_info,
             codex_resume=codex_resume,
-            native_approvals_enabled=native_approvals_enabled)
+            native_approvals_enabled=native_approvals_enabled,
+            clock=clock.monotonic if clock is not None else None)
     return LocalRuntimeCore(
         journal, native_factory,
         candidates=dict(candidates),
         workspace_roots=dict(workspace_roots),
         owned_slot_ledger=owned_slot_ledger,
+        trusted_discovery_roots=tuple(trusted_discovery_roots),
+        pi_install_root=pi_install_root,
+        pi_node=pi_node,
         clock=clock,
         event_sink=event_sink,
         lease_grace_seconds=lease_grace_seconds,

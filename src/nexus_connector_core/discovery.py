@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .models import CoreError, InstallationCandidate
+from .native.process import require_containment
 from .native.registry import adapter_specs
 from .build_identity import (executable_build_identity,
                                 pi_build_identity)
@@ -94,11 +95,28 @@ def candidate_pi_node_cli(node_path: str | Path, script_path: str | Path, *,
     if not explicit and not any(script.is_relative_to(root.resolve(strict=True))
                                 for root in trusted_roots):
         raise CoreError("APPROVAL_REQUIRED", "discovery")
-    package_root = script.parents[3]  # .../pi-coding-agent/dist/bundle/cli.js
+    # C2/R06: the hashed unit is the pi-coding-agent PACKAGE directory
+    # (parents[2]); the @earendil-works scope directory would drag unrelated
+    # sibling packages into the identity while missing declared deps
+    # hoisted in node_modules (covered now via the dependency closure).
+    package_root = script.parents[2]  # .../pi-coding-agent/dist/bundle/cli.js
     return replace(node,
                    fingerprint=_pi_node_cli_fingerprint(Path(node.executable), script),
                    launch_script=str(script),
+                   version=_pi_package_version(package_root),
                    build_identity=pi_build_identity(node.executable, package_root))
+
+
+def _pi_package_version(package_root: Path) -> str | None:
+    """Bounded read of the package's own declared version, if any."""
+    import json
+    try:
+        data = json.loads(
+            (package_root / "package.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    version = data.get("version") if isinstance(data, dict) else None
+    return version if isinstance(version, str) and version else None
 
 
 def selected_fingerprint(selected: InstallationCandidate) -> str:
@@ -161,6 +179,10 @@ def _probe_selected_version(candidate: InstallationCandidate, adapter_id: str, *
                             cwd: str | Path,
                             env: Mapping[str, str]) -> InstallationCandidate:
     """Bounded read-only version observation; never grants a capability."""
+    # C2/R07: an active probe spawns a version process; the containment
+    # gate must refuse BEFORE any observer runs in an environment whose
+    # backend cannot honor the owned-tree contract.
+    require_containment()
     if candidate.adapter_id != adapter_id or candidate.trust != "selected":
         raise CoreError("BINDING_NOT_AUTHORIZED", "version_probe")
     root = Path(cwd)

@@ -13,6 +13,7 @@ binding (the audit's standing observation). Nothing here weakens that.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from pathlib import Path
 
@@ -56,11 +57,23 @@ def pi_build_identity(node: str | os.PathLike,
                       package_root: str | os.PathLike) -> str:
     """Portable identity of the Node + Pi-package launch pair.
 
-    ``package_root`` is the ``@earendil-works/pi-coding-agent`` directory
-    (or the release directory containing it); the manifest enumerates the
-    package tree with *relative* paths and content digests only — no
-    absolute paths, no user data. Later loads beyond the manifest would
-    change the package contents and therefore the identity.
+    ``package_root`` is the ``@earendil-works/pi-coding-agent`` package
+    directory (C2/R06: never the ``@earendil-works`` scope directory, so
+    unrelated sibling packages cannot perturb the identity). The manifest
+    enumerates the package tree with *relative* paths and content digests
+    only — no absolute paths, no user data.
+
+    C2/R06: the loadable set also covers the package's DECLARED production
+    dependencies (``dependencies`` in package.json), resolved through the
+    standard node_modules lookup — including packages hoisted OUTSIDE the
+    scope directory — transitively, under strict limits. Per dependency the
+    covered artifacts are its manifest plus the resolved entrypoints it
+    declares (``main`` and ``bin``): that is the executable surface a
+    require() from the CLI can reach first; deeper files belong to their
+    own packages and re-enter through those packages' manifests. A
+    present-but-malformed manifest refuses (ValueError) instead of
+    silently shrinking coverage. Undeclared packages never enter the
+    identity.
     """
     node_path = Path(node)
     root = Path(package_root)
@@ -71,18 +84,41 @@ def pi_build_identity(node: str | os.PathLike,
     if not node_resolved.is_file() or not root_resolved.is_dir():
         raise ValueError("invalid pi build identity inputs")
     entries = []
+
+    def _add_tree(directory: Path, prefix: str) -> None:
+        nonlocal total
+        for current in sorted(directory.rglob("*")):
+            if not current.is_file():
+                continue
+            total = _add_entry(entries, total, current,
+                               prefix + current.relative_to(directory)
+                               .as_posix())
+
     total = 0
-    for current in sorted(root_resolved.rglob("*")):
-        if not current.is_file():
-            continue
-        if len(entries) >= _MAX_MANIFEST_ENTRIES or total >= _MAX_MANIFEST_BYTES:
-            raise ValueError("pi package manifest exceeds bounded size")
-        relative = current.relative_to(root_resolved).as_posix()
-        size = current.stat().st_size
-        entries.append({"path": relative,
-                        "sha256": _file_digest(current).split(":", 1)[1],
-                        "size": size})
-        total += size
+
+    _add_tree(root_resolved, "")
+
+    # The installation root bounds the node_modules lookup: the directory
+    # that CONTAINS the top-level node_modules the package lives under.
+    install_root = _node_install_root(root_resolved)
+    queue = [root_resolved]
+    seen = {root_resolved.resolve()}
+    packages = 0
+    while queue:
+        package_dir = queue.pop(0)
+        packages += 1
+        if packages > _MAX_DEPENDENCY_PACKAGES:
+            raise ValueError("pi dependency closure exceeds bounded size")
+        for name in _declared_dependencies(package_dir):
+            resolved = _resolve_node_modules_package(package_dir, name,
+                                                     install_root)
+            if resolved is None or resolved in seen:
+                continue
+            seen.add(resolved)
+            total = _add_dependency_artifacts(
+                resolved, f"deps/{name}/", entries, total)
+            queue.append(resolved)
+
     identity = {
         "algorithm": BUILD_IDENTITY_ALGORITHM,
         "kind": "pi_node_package",
@@ -92,3 +128,103 @@ def pi_build_identity(node: str | os.PathLike,
     }
     return "sha256:" + hashlib.sha256(
         canonical_json(identity)).hexdigest()
+
+
+_MAX_DEPENDENCY_PACKAGES = 512
+_MAX_DEPENDENCY_ARTIFACTS = 64
+
+
+def _add_entry(entries: list, total: int, path: Path, relative: str) -> int:
+    if (len(entries) >= _MAX_MANIFEST_ENTRIES or
+            total >= _MAX_MANIFEST_BYTES):
+        raise ValueError("pi package manifest exceeds bounded size")
+    size = path.stat().st_size
+    entries.append({"path": relative,
+                    "sha256": _file_digest(path).split(":", 1)[1],
+                    "size": size})
+    return total + size
+
+
+def _add_dependency_artifacts(dep_dir: Path, prefix: str,
+                              entries: list, total: int) -> int:
+    """Manifest + resolved main/bin entrypoints of one dependency."""
+    manifest = dep_dir / "package.json"
+    data = None
+    if manifest.is_file():
+        total = _add_entry(entries, total, manifest, prefix + "package.json")
+        try:
+            data = json.loads(manifest.read_text(encoding="utf-8"))
+        except ValueError:
+            data = None
+    if not isinstance(data, dict):
+        return total
+    targets: list[str] = []
+    main = data.get("main")
+    if isinstance(main, str) and main:
+        targets.append(main)
+    binary = data.get("bin")
+    if isinstance(binary, str) and binary:
+        targets.append(binary)
+    elif isinstance(binary, dict):
+        targets.extend(value for value in binary.values()
+                       if isinstance(value, str))
+    added = 0
+    for target in targets:
+        if added >= _MAX_DEPENDENCY_ARTIFACTS:
+            raise ValueError("dependency entrypoints exceed bounded size")
+        artifact = (dep_dir / target).resolve()
+        if (artifact.is_file() and
+                artifact.is_relative_to(dep_dir.resolve())):
+            total = _add_entry(
+                entries, total, artifact,
+                prefix + target.replace("\\", "/"))
+            added += 1
+    return total
+
+
+def _node_install_root(package_root: Path) -> Path:
+    """The directory containing the top-level node_modules of a package."""
+    parent = package_root.parent
+    if parent.name == "node_modules":
+        return parent.parent
+    grandparent = parent.parent
+    if grandparent.name == "node_modules":
+        return grandparent.parent
+    return parent
+
+
+def _declared_dependencies(package_dir: Path) -> tuple[str, ...]:
+    manifest = package_dir / "package.json"
+    if not manifest.is_file():
+        return ()
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError(
+            f"unreadable package.json in {package_dir.name}") from exc
+    if not isinstance(data, dict):
+        raise ValueError(f"invalid package.json in {package_dir.name}")
+    dependencies = data.get("dependencies")
+    if dependencies is None:
+        return ()
+    if not isinstance(dependencies, dict) or not all(
+            isinstance(key, str) and isinstance(value, str)
+            for key, value in dependencies.items()):
+        raise ValueError(f"invalid dependencies in {package_dir.name}")
+    return tuple(sorted(dependencies))
+
+
+def _resolve_node_modules_package(package_dir: Path, name: str,
+                                  install_root: Path) -> Path | None:
+    """Standard node resolution, bounded by the installation root."""
+    if not name or name.startswith(("/", "\\")) or "\\" in name:
+        return None
+    current = package_dir
+    while True:
+        candidate = current / "node_modules" / Path(*name.split("/"))
+        if candidate.is_dir():
+            return candidate.resolve(strict=True)
+        if current == install_root or current.parent == current:
+            break
+        current = current.parent
+    return None

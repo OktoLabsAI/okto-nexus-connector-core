@@ -108,6 +108,10 @@ def test_production_identity_grants_recorded_from_campaigns():
         build_identity="sha256:df63d86e72bc1a27f13899ad0467c4b312d8ee2cb67ae3a09e37f734d9f0edcb")
     assert compatibility.qualified_build(
         "pi", "0.87.1", "win32", "x86_64", "sha256:" + "0" * 64,
+        build_identity="sha256:b454b39171e7428e721ecc01be6654c3608a9091d398c3d3d445897a91a67e43")
+    # C2/R06: the pre-dependency-coverage identity no longer grants.
+    assert not compatibility.qualified_build(
+        "pi", "0.87.1", "win32", "x86_64", "sha256:" + "0" * 64,
         build_identity="sha256:d4f09928e4a7043d1d6bd742a4ead3344d3b18b3990410b797ba65169a0cf583")
     assert compatibility.qualified_build(
         "claude_code", "2.1.282", "win32", "x86_64", "sha256:" + "0" * 64,

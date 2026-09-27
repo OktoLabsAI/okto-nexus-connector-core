@@ -1,9 +1,9 @@
 # PENDÊNCIAS — okto-nexus-connector-core (pós-correção C1, 2026-09-26/27)
 
-Estado de entrega: **E1** (Core corrigido em escopo delimitado). Wheel
-`0.2.0.dev0` (wheel `63348370…3d8e253`, sdist `a73d4954…a6bb88ba`),
-byte-idêntico Windows/WSL2, não publicado. HEAD de referência:
-`15772d3`. Nenhuma pendência abaixo é executável dentro deste
+Estado de entrega: **E1** (Core corrigido em escopo delimitado; C2
+concluída). Artefato `0.2.1.dev0` (wheel `d0c35f4c…ebfa538`, sdist
+`e7b386eb…ac74ff2`), byte-idêntico Windows/WSL2, não publicado. C1:
+`15772d3`; reauditoria: `e6b6305`; correção C2: ver `git log`. Nenhuma pendência abaixo é executável dentro deste
 repositório sem a ação do dono correspondente.
 
 ## A. Requer os projetos irmãos N (okto-nexus Server) e C (Connector) — não iniciados

@@ -63,3 +63,35 @@ códigos preservados.
   (PC13) — dependem dos projetos irmãos (não iniciados).
 - Attach (PC12): trilha própria; capability continua desligada.
 - Publicação/PyPI: sessão conjunta pendente (fora do escopo C1).
+
+
+## Mudanças que os hosts absorvem (C2 — reauditoria R01–R10)
+
+1. **Pi qualifica só por identidade portátil**: o fingerprint composto
+   legado (Node+cli.js) deixou de ser grant de qualificação para
+   `pi_rpc` (R06); identidade nova do build 0.87.1:
+   `sha256:b454b39171e7428e721ecc01be6654c3608a9091d398c3d3d445897a91a67e43`.
+   Binding local (path-bound) continua exigido à parte.
+2. **`CodexResumeGrant` é público** (`from nexus_connector_core import
+   CodexResumeGrant`) — a bridge valida o mesmo objeto; anotação real de
+   `create_runtime(environment)` é
+   `Callable[[PreparedLaunch], Awaitable[Mapping[str, str]]]` (R09).
+3. **Discovery público composto**: `LocalRuntimeCore(pi_install_root=,
+   pi_node=)` e `create_runtime(trusted_discovery_roots=,
+   pi_install_root=, pi_node=)` — `discover()` compõe os releases Pi;
+   versão do candidato vem do package.json do pacote (R08).
+4. **Retry idempotente sobrevive a EOF/closing/evicção**: mesmo ID+hash
+   devolve o recibo durável conhecido em vez de erro de sessão (R04).
+5. **`cleanup_budget_seconds`** (default 5.0) no runtime/`create_runtime`:
+   sink travado é cancelado cooperativamente na evicção sem avançar
+   cursor; adaptador nativo liberado (R10).
+6. **`journal.open_journal(path)`**: entrada assíncrona de construção
+   (PC01.06/C2-§6); `aclose()` inalterado.
+7. **Pool de controle reservado** na factory (`CopiedAdapterFactory.close()`
+   para dispose); força/observação/close nunca disputam o executor
+   default (R02). `containment_preflight` com ABI correta (prctl 37) e
+   `require_containment` carregando os requisitos faltantes na mensagem
+   (R07). Probes ativos (`probe_selected_*`) exigem contenção ANTES de
+   spawnar.
+8. **Semântica do manifesto NXL `core_version`** documentada como
+   "introduced in" (0.1.0.dev0) — não é a versão do pacote produtor.

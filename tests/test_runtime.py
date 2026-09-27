@@ -89,7 +89,8 @@ def make_runtime(tmp_path, *, clock=None, lease_grace_seconds=15.0,
                  reconnect_fence_seconds=5.0,
                  journal_limits=None,
                  owned_slot_ledger=None,
-                 event_sink=None):
+                 event_sink=None,
+                 cleanup_budget_seconds=5.0):
     binary = tmp_path / "codex"
     binary.write_bytes(b"synthetic binary")
     candidate = InstallationCandidate(adapter_id, str(binary),
@@ -107,7 +108,8 @@ def make_runtime(tmp_path, *, clock=None, lease_grace_seconds=15.0,
                                max_lease_seconds=max_lease_seconds,
                                reconnect_fence_seconds=reconnect_fence_seconds,
                                max_concurrent_opens=max_concurrent_opens,
-                               max_owned_sessions=max_owned_sessions)
+                               max_owned_sessions=max_owned_sessions,
+                               cleanup_budget_seconds=cleanup_budget_seconds)
     return runtime, journal, factory
 
 

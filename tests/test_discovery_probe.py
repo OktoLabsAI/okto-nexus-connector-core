@@ -214,7 +214,11 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
     claude = ("claude_code", "2.1.282", "win32", "x86_64",
               "sha256:fc0e3af017705624b9e1bce913f72761864ff994804514da1f5e41380fca4484")
     assert compatibility.QUALIFIED_BUILDS == compatibility.QUALIFIED_CONTROL_BUILDS
-    for key in (codex, pi, claude):
+    # C2/R06: Pi qualifies only through the dependency-covering portable
+    # identity; the legacy composite fingerprint stays a binding proof but
+    # is not a grant on its own. Codex/Claude keep the fingerprint grant.
+    assert not compatibility.qualified_build(*pi)
+    for key in (codex, claude):
         assert compatibility.qualified_build(*key)
         assert compatibility.qualified_build(*key, control=True)
         # Any drift — version, platform, architecture or file bytes — loses
@@ -232,7 +236,9 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
     )["compatible_controls"] == ["interrupt"]
     assert compatibility.control_observation(
         "pi", pi[1], platform=pi[2], architecture=pi[3],
-        fingerprint=pi[4])["compatible_controls"] == ["steer", "interrupt"]
+        fingerprint=pi[4],
+        build_identity="sha256:b454b39171e7428e721ecc01be6654c3608a9091d398c3d3d445897a91a67e43"
+    )["compatible_controls"] == ["steer", "interrupt"]
     assert compatibility.control_observation(
         "codex", codex[1], platform=codex[2], architecture=codex[3],
         fingerprint=codex[4])["compatible_controls"] == ["steer", "interrupt"]

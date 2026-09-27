@@ -147,6 +147,18 @@ def _sqlite_full(error: BaseException) -> bool:
             getattr(error, "sqlite_errorcode", None) == sqlite3.SQLITE_FULL)
 
 
+async def open_journal(path, *, limits: "JournalLimits | None" = None)         -> "SQLiteJournal":
+    """Async construction entry for the SQLite journal (PC01.06, C2/R-§6).
+
+    ``SQLiteJournal.__init__`` performs blocking setup (open, schema,
+    worker start). Hosts running inside an event loop should construct
+    through this entry, which performs the same setup off the loop; the
+    resulting journal is identical. Closing stays ``aclose()``.
+    """
+    import asyncio
+    return await asyncio.to_thread(SQLiteJournal, path, limits=limits)
+
+
 class SQLiteJournal:
     def __init__(self, path: str | Path, *, limits: JournalLimits | None = None):
         self.path = str(path)

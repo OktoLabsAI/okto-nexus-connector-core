@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
-from .discovery import discover_path
+from .discovery import discover_path, discover_pi_releases
 from .clock import RollbackFencedClock, SystemClock
 from .journal import (SQLiteJournal, validate_claim_namespace,
                       validate_claim_page, validate_compaction_rows)
@@ -187,7 +187,10 @@ class LocalRuntimeCore:
                  max_lease_seconds: float = 120.0,
                  reconnect_fence_seconds: float = 5.0,
                  max_concurrent_opens: int = 8,
-                 max_owned_sessions: int = 8):
+                 max_owned_sessions: int = 8,
+                 pi_install_root: str | "Path | None" = None,
+                 pi_node: str | "Path | None" = None,
+                 cleanup_budget_seconds: float = 5.0):
         if any(not _finite_timing(value)
                for value in (lease_grace_seconds, lease_poll_seconds,
                              max_lease_seconds, reconnect_fence_seconds)):
@@ -205,6 +208,18 @@ class LocalRuntimeCore:
                 isinstance(max_owned_sessions, bool) or
                 max_owned_sessions <= 0):
             raise ValueError("max_owned_sessions must be a positive integer")
+        # C2/R08: explicit public contract for the composed Pi release
+        # resolver - both inputs or neither; nothing implicit is scanned.
+        if (pi_install_root is None) != (pi_node is None):
+            raise ValueError(
+                "pi_install_root and pi_node must be provided together")
+        if not _finite_timing(cleanup_budget_seconds) or \
+                cleanup_budget_seconds <= 0:
+            raise ValueError("invalid cleanup budget")
+        self._cleanup_budget_seconds = cleanup_budget_seconds
+        self._pi_install_root = (Path(pi_install_root)
+                                  if pi_install_root is not None else None)
+        self._pi_node = Path(pi_node) if pi_node is not None else None
         self._journal = journal
         self._owned_slots = owned_slot_ledger or journal
         self._clock = RollbackFencedClock(clock or SystemClock())
@@ -229,13 +244,27 @@ class LocalRuntimeCore:
         self._event_changed = asyncio.Condition()
         self._shutting_down = False
         self._shutdown_policy = ShutdownPolicy()
+        # C2/R10: tracked cooperative-cleanup tasks (evictions). Shutdown
+        # waits for them within the cleanup budget; none is discarded while
+        # ownership could still be uncertain.
+        self._cleanup_tasks: set[asyncio.Task] = set()
 
     async def discover(self, request: DiscoveryRequest) -> Inventory:
         candidates = []
         for adapter_id in request.adapter_ids:
-            candidates.extend(await asyncio.to_thread(
+            found = await asyncio.to_thread(
                 discover_path, adapter_id,
-                trusted_roots=self._trusted_discovery_roots))
+                trusted_roots=self._trusted_discovery_roots)
+            if (adapter_id == "pi_rpc" and self._pi_install_root is not
+                    None and self._pi_node is not None):
+                # C2/R08: the public path composes the same supported
+                # resolver the helpers expose - one inventory from the
+                # approved roots, no helper imports, no wrapper execution.
+                found = list(found) + list(await asyncio.to_thread(
+                    discover_pi_releases, self._pi_install_root,
+                    self._pi_node,
+                    trusted_roots=self._trusted_discovery_roots))
+            candidates.extend(found)
         return Inventory(tuple(candidates))
 
     async def prepare(self, intent: LaunchIntent,
@@ -272,10 +301,13 @@ class LocalRuntimeCore:
                              })
         session_key = SessionKey(context.server_id, context.executor_id,
                                  operation.session_id)
+        # C2/R01+C2/R04: the dedup read is authorized I/O and never runs
+        # under the global state lock; a retried open answers from its
+        # durable receipt regardless of concurrent fence transitions.
+        old = await self._existing(semantic, context)
+        if old is not None:
+            return old
         async with self._lock:
-            old = await self._existing(semantic, context)
-            if old is not None:
-                return old
             if (self._shutting_down or session_key in self._sessions or
                     session_key in self._opening or
                     session_key in self._uncertain_opens):
@@ -362,7 +394,10 @@ class LocalRuntimeCore:
                     binding.effect_fence = EffectFence(
                         lambda: (binding.closed, binding.closing,
                                  binding.revoked, binding.lease_expired,
-                                 binding.faulted))
+                                 binding.faulted),
+                        clock=self._clock.monotonic,
+                        deadline_probe=lambda:
+                            binding.context.lease_deadline_monotonic)
                     try:
                         setattr(native, "effect_fence", binding.effect_fence)
                     except (AttributeError, TypeError):
@@ -521,32 +556,32 @@ class LocalRuntimeCore:
              "response_sha256": (hashlib.sha256(encoded_response).hexdigest()
                                  if encoded_response is not None else None)})
         request_key = json.dumps(request_id)
-        async with self._lock:
+        # C2/R01+C2/R04: dedup read outside the locks; memory revalidation
+        # afterwards.
+        old = await self._existing(semantic, context)
+        if old is not None:
+            return old
+        binding = self._session(operation.session_id, context,
+                                require_live_lease=True)
+        async with binding.control_lock:
             old = await self._existing(semantic, context)
             if old is not None:
                 return old
             binding = self._session(operation.session_id, context,
-                                    require_live_lease=True)
-        async with binding.control_lock:
-            async with self._lock:
-                old = await self._existing(semantic, context)
-                if old is not None:
-                    return old
-                binding = self._session(operation.session_id, context,
-                                        require_live_lease=True)
-                if (self._shutting_down or binding.closed or binding.closing or
-                        binding.faulted):
-                    raise CoreError("SESSION_CLOSING", "approval_decide")
-                if action not in binding.context.allowed_actions:
-                    raise CoreError("BINDING_NOT_AUTHORIZED", "approval_decide")
-                if binding.adapter_id not in {"codex_app_server", "claude_stream"}:
-                    raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
-                reply = getattr(binding.native, "reply_native_approval", None)
-                if not callable(reply):
-                    raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
-                if binding.pending_native_requests.get(request_key) != encoded_request:
-                    raise CoreError("NATIVE_REQUEST_NOT_OBSERVED", "approval_decide",
-                                    retry_safe=True)
+                                      require_live_lease=True)
+            if (self._shutting_down or binding.closed or binding.closing or
+                    binding.faulted):
+                raise CoreError("SESSION_CLOSING", "approval_decide")
+            if action not in binding.context.allowed_actions:
+                raise CoreError("BINDING_NOT_AUTHORIZED", "approval_decide")
+            if binding.adapter_id not in {"codex_app_server", "claude_stream"}:
+                raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
+            reply = getattr(binding.native, "reply_native_approval", None)
+            if not callable(reply):
+                raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
+            if binding.pending_native_requests.get(request_key) != encoded_request:
+                raise CoreError("NATIVE_REQUEST_NOT_OBSERVED", "approval_decide",
+                                retry_safe=True)
 
             async def effect() -> None:
                 try:
@@ -566,9 +601,18 @@ class LocalRuntimeCore:
     async def _send(self, semantic: Operation, context: ExecutionContext,
                     verb: str, payload: Mapping[str, str]) -> OperationReceipt:
         self._authorize(context, semantic.action)
-        # PC02.02: the in-memory admission fence is checked BEFORE any
-        # durable I/O, so a stuck journal can never widen the window in
-        # which expired/revoked/closing work is still accepted.
+        # C2/R04: an idempotent retry (same ID, same hash) must receive the
+        # known receipt even when the session is faulted, closing, closed or
+        # already evicted; a divergent hash stays an OPERATION_CONFLICT.
+        # This read is authorized I/O and runs OUTSIDE every state lock so a
+        # stuck journal can never delay the containment fences (C2/R01).
+        old = await self._existing(semantic, context)
+        if old is not None:
+            return old
+        # PC02.02/C2-R01: the in-memory admission fence is a memory-only
+        # critical section - no durable I/O under the global lock, so an
+        # expired/revoked/closing session is refused even while some other
+        # coroutine is still waiting on storage.
         fence_key = SessionKey(context.server_id, context.executor_id,
                                semantic.session_id)
         async with self._lock:
@@ -590,12 +634,8 @@ class LocalRuntimeCore:
                     fence_binding.lease_expired):
                 raise CoreError("AGENT_REVOKED", "admission", retry_safe=True,
                                 operation_id=semantic.operation_id)
-        async with self._lock:
-            old = await self._existing(semantic, context)
-            if old is not None:
-                return old
-            binding = self._session(semantic.session_id, context,
-                                    require_live_lease=semantic.action == "turn.submit")
+        binding = self._session(semantic.session_id, context,
+                                require_live_lease=semantic.action == "turn.submit")
         # A slow normal write must not hold the runtime-wide state lock: an
         # interrupt/steer may need to reach that same native session urgently.
         # Separate session locks let controls overlap normal sends, while
@@ -603,40 +643,41 @@ class LocalRuntimeCore:
         command_lock = (binding.normal_lock if verb == "send_turn"
                         else binding.control_lock)
         async with command_lock:
-            async with self._lock:
-                old = await self._existing(semantic, context)
-                if old is not None:
-                    return old
-                binding = self._session(
-                    semantic.session_id, context,
-                    require_live_lease=semantic.action == "turn.submit")
-                if self._shutting_down:
-                    raise CoreError("RUNTIME_DRAINING", "admission")
-                if binding.closed:
-                    raise CoreError("SESSION_CLOSED", "admission")
-                if binding.closing:
-                    raise CoreError("SESSION_CLOSING", "admission")
-                if binding.faulted:
-                    raise CoreError("EVENT_STREAM_UNAVAILABLE", "admission")
-                if verb == "steer":
-                    # Codex steer must name the active native turn ID. Pi
-                    # steer is the ID-less contract: the bridge targets the
-                    # agent run it observed starting for the active submit
-                    # (native queue semantics, next turn boundary) and
-                    # refuses before the write when there is none. Supplying
-                    # a native turn ID for Pi is refused the same way, so
-                    # neither adapter silently accepts an untargetable
-                    # steer. Other adapters keep refusing steer outright.
-                    if binding.adapter_id == "codex_app_server":
-                        if not semantic.expected_turn_id:
-                            raise CoreError("CAPABILITY_UNSUPPORTED", "control")
-                    elif binding.adapter_id == "pi_rpc":
-                        if semantic.expected_turn_id is not None:
-                            raise CoreError("CAPABILITY_UNSUPPORTED", "control")
-                    else:
+            # Revalidation after the (unlocked) journal read: pure memory
+            # checks; the global lock stays free for containment.
+            old = await self._existing(semantic, context)
+            if old is not None:
+                return old
+            binding = self._session(
+                semantic.session_id, context,
+                require_live_lease=semantic.action == "turn.submit")
+            if self._shutting_down:
+                raise CoreError("RUNTIME_DRAINING", "admission")
+            if binding.closed:
+                raise CoreError("SESSION_CLOSED", "admission")
+            if binding.closing:
+                raise CoreError("SESSION_CLOSING", "admission")
+            if binding.faulted:
+                raise CoreError("EVENT_STREAM_UNAVAILABLE", "admission")
+            if verb == "steer":
+                # Codex steer must name the active native turn ID. Pi
+                # steer is the ID-less contract: the bridge targets the
+                # agent run it observed starting for the active submit
+                # (native queue semantics, next turn boundary) and
+                # refuses before the write when there is none. Supplying
+                # a native turn ID for Pi is refused the same way, so
+                # neither adapter silently accepts an untargetable
+                # steer. Other adapters keep refusing steer outright.
+                if binding.adapter_id == "codex_app_server":
+                    if not semantic.expected_turn_id:
                         raise CoreError("CAPABILITY_UNSUPPORTED", "control")
-                if semantic.action not in binding.context.allowed_actions:
-                    raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
+                elif binding.adapter_id == "pi_rpc":
+                    if semantic.expected_turn_id is not None:
+                        raise CoreError("CAPABILITY_UNSUPPORTED", "control")
+                else:
+                    raise CoreError("CAPABILITY_UNSUPPORTED", "control")
+            if semantic.action not in binding.context.allowed_actions:
+                raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
 
             async def effect() -> None:
                 await binding.native.send(
@@ -653,18 +694,19 @@ class LocalRuntimeCore:
         semantic = Operation(operation.operation_id, operation.session_id,
                              "runtime.close")
         self._authorize(context, semantic.action)
-        async with self._lock:
-            old = await self._existing(semantic, context)
-            if old is not None:
-                return old
-            binding = self._session(operation.session_id, context)
+        # C2/R01+C2/R04: the dedup read answers an idempotent retry from
+        # its durable receipt even after EOF/closing/eviction; it never
+        # runs under the global state lock.
+        old = await self._existing(semantic, context)
+        if old is not None:
+            return old
+        binding = self._session(operation.session_id, context)
         async with binding.normal_lock:
             async with binding.control_lock:
-                async with self._lock:
-                    old = await self._existing(semantic, context)
-                    if old is not None:
-                        return old
-                    binding = self._session(operation.session_id, context)
+                old = await self._existing(semantic, context)
+                if old is not None:
+                    return old
+                binding = self._session(operation.session_id, context)
 
                 async def effect() -> None:
                     async with self._lock:
@@ -904,6 +946,17 @@ class LocalRuntimeCore:
                                            timeout=0.1)
                 except TimeoutError:
                     pass
+        # C2/R10: tracked cooperative-cleanup tasks (evictions) are awaited
+        # within the cleanup budget; uncertain ownership is never silently
+        # discarded - the tombstone keeps the honest outcome either way.
+        if self._cleanup_tasks:
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*tuple(self._cleanup_tasks),
+                                   return_exceptions=True),
+                    timeout=self._cleanup_budget_seconds + 1.0)
+            except (asyncio.TimeoutError, TimeoutError):
+                pass
         return ShutdownReport(outcomes)
 
     def _schedule_force(self, session: SessionKey, binding: _Session,
@@ -1115,7 +1168,8 @@ class LocalRuntimeCore:
                 pump = binding.pump
                 if pump is not None and not pump.done():
                     try:
-                        await asyncio.wait_for(asyncio.shield(pump), timeout=5.0)
+                        await asyncio.wait_for(asyncio.shield(pump),
+                                               timeout=self._cleanup_budget_seconds)
                     except (asyncio.TimeoutError, asyncio.CancelledError,
                             Exception):
                         pass
@@ -1124,10 +1178,26 @@ class LocalRuntimeCore:
                     if task is not None and not task.done():
                         try:
                             await asyncio.wait_for(asyncio.shield(task),
-                                                   timeout=5.0)
+                                                   timeout=self._cleanup_budget_seconds)
                         except (asyncio.TimeoutError, asyncio.CancelledError,
                                 Exception):
                             pass
+                # C2/R10: a stalled host sink must not retain the native
+                # adapter. After the cooperative budget expires the sink
+                # task is cancelled WITHOUT advancing its cursor - a lost
+                # notification stays recoverable from durable replay; it is
+                # never confirmed fictitiously - and the heavy native
+                # reference is dropped from the evicted binding.
+                sink = binding.sink_task
+                if sink is not None and not sink.done():
+                    sink.cancel()
+                    try:
+                        await asyncio.wait_for(asyncio.shield(sink),
+                                               timeout=self._cleanup_budget_seconds)
+                    except (asyncio.TimeoutError, asyncio.CancelledError,
+                            Exception):
+                        pass
+                binding.native = None
                 async with self._lock:
                     if (self._sessions.get(session) is binding and
                             binding.closed):
@@ -1141,7 +1211,9 @@ class LocalRuntimeCore:
             except Exception:
                 pass
 
-        asyncio.create_task(_evict())
+        task = asyncio.create_task(_evict())
+        self._cleanup_tasks.add(task)
+        task.add_done_callback(self._cleanup_tasks.discard)
 
     async def renew_lease(self, session: SessionKey, context: ExecutionContext,
                           *, expected_connection_generation: int) -> RuntimeSnapshot:

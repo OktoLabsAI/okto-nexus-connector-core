@@ -70,10 +70,14 @@ class OffLoopExecutor:
         self._name = name
         self._normal: "queue.Queue[tuple]" = queue.Queue(maxsize=normal_capacity)
         self._urgent: "queue.Queue[tuple]" = queue.Queue(maxsize=urgent_capacity)
-        # Wake tags: one per accepted item, so the worker blocks on a
-        # lock-free SimpleQueue instead of polling; an arriving item wakes
-        # it immediately regardless of which queue it went to.
-        self._wake: "queue.SimpleQueue[str]" = queue.SimpleQueue()
+        # C2/R05: coalesced wake notification. Producers raise ONE shared
+        # pending flag and notify a Condition while holding its lock; the
+        # worker consumes the flag before re-checking both queues. The
+        # backlog is therefore bounded (<= 1 signal regardless of total
+        # work) and the enqueue/sleep race is closed: state check and wait
+        # happen under the same lock as the producer's notify.
+        self._cond = threading.Condition()
+        self._work_pending = False
         self._max_pending_bytes = max_pending_bytes
         self._idle_poll_seconds = idle_poll_seconds
         self._bytes_lock = threading.Lock()
@@ -147,11 +151,24 @@ class OffLoopExecutor:
                 pass
             if drain or self._stop.is_set():
                 return None
-            # Block until the next accepted item signals its arrival.
-            self._wake.get()
-            if self._stop.is_set():
-                # Re-check both queues once more before honoring the stop.
-                continue
+            # Spend the coalesced wake (at most one signal outstanding) and
+            # re-check both queues; otherwise sleep until a producer or the
+            # stop signal notifies under the same lock - no lost wakeups.
+            with self._cond:
+                if self._work_pending:
+                    self._work_pending = False
+                    continue
+                self._cond.wait()
+
+    def notification_backlog(self) -> int:
+        """Outstanding wake signals (bounded: 0 or 1 under any load)."""
+        with self._cond:
+            return 1 if self._work_pending else 0
+
+    def _notify_work(self) -> None:
+        with self._cond:
+            self._work_pending = True
+            self._cond.notify()
 
     def _execute(self, item: tuple) -> None:
         work, future, loop, payload_bytes = item
@@ -230,7 +247,7 @@ class OffLoopExecutor:
             self._release_bytes(payload_bytes)
             raise ExecutorFull(urgent=urgent,
                                bytes_pending=self._bytes_pending) from None
-        self._wake.put("U" if urgent else "N")
+        self._notify_work()
         return future
 
     def submit_nowait(self, work: _WORK, *, urgent: bool = False,
@@ -246,7 +263,7 @@ class OffLoopExecutor:
             self._release_bytes(payload_bytes)
             raise ExecutorFull(urgent=urgent,
                                bytes_pending=self._bytes_pending) from None
-        self._wake.put("U" if urgent else "N")
+        self._notify_work()
 
     def run_sync(self, work: _WORK, *, timeout: float = 30.0) -> Any:
         """Execute one unit on the worker, blocking the calling thread.
@@ -274,7 +291,7 @@ class OffLoopExecutor:
             self._normal.put(item)
         except queue.Full:
             raise ExecutorFull(urgent=False, bytes_pending=0) from None
-        self._wake.put("N")
+        self._notify_work()
         if not done.wait(timeout=timeout):
             raise TimeoutError(
                 f"off-loop executor unit did not finish within {timeout}s")
@@ -310,7 +327,10 @@ class OffLoopExecutor:
 
     def request_stop(self) -> None:
         self._stop.set()
-        self._wake.put("S")
+        # Wake the worker from the coalesced condition sleep (and any other
+        # waiter) so shutdown never waits for the next item to arrive.
+        with self._cond:
+            self._cond.notify_all()
         # Wake any thread blocked in run_sync as well: its work item may
         # already be drained, so the done-latch is what releases it; nothing
         # to do here for it because run_sync items carry their own latch.

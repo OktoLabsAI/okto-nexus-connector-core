@@ -33,7 +33,7 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-02-11 | Relógio e budgets | contenção/leases | PASS | existing clock-rollback/grace arithmetic tests; budget not restarted per retry (watcher rechecks absolute deadline) |
 | RC-03-01 | Expiração durante admit | guarda pré-efeito | PASS | test_pc03_effect_guard rc-03-01: clock advanced inside admit; typed refusal, zero writes, no invented stage |
 | RC-03-02 | Expiração durante marker | guarda pré-efeito | PASS | seed test_f02 (regression suite): marker-window expiry -> proven not-sent, zero effect |
-| RC-03-03 | Thread inicia tarde | guarda pré-efeito | PASS | test_pc03_effect_guard rc-03-03: executor thread held; fence checked inside the thread at the write frontier; no write under stale lease |
+| RC-03-03 | Thread inicia tarde | guarda pré-efeito | PASS | C2 §5.1: semente reescrita — fence nasce VÁLIDO e expira com o relógio vivo durante a espera do único worker; recusa na thread de despacho sem escrita (tests/test_pc03_effect_guard.py + r03). |
 | RC-03-04 | Revoke entre marker e write | guarda pré-efeito | PASS | test_pc03_effect_guard rc-03-04: revoke then submit -> AGENT_REVOKED before any native write |
 | RC-03-05 | Revogação após início de efeito | guarda pré-efeito | PASS | existing unknown-preservation tests (rejected prompt/abort, prewrite suite) + PC02 containment of in-flight |
 | RC-03-06 | Controle seguro com lease expirada | guarda pré-efeito | PASS | kernel containment exemption (interrupt/close) + existing scope tests; approval/submit blocked post-expiry |
@@ -83,9 +83,9 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-08-07 | Observado versus solicitado | modelo efetivo | PASS | no fabricated effective_model anywhere; observed-model remains provider-event evidence only (earlier authorized campaigns) |
 | RC-08-08 | Entrada especial e redaction | modelo efetivo | PASS | rc-08-08: Unicode/spaces/metachars travel as one structured token; invalid types/lengths refused |
 | RC-09-01 | Build igual em paths diferentes | build/binding | PASS | test_pc09 rc-09-01: identical trees in two roots -> equal build_identity, unequal binding fingerprints |
-| RC-09-02 | Pi dependência alterada | build/binding | PASS | rc-09-02: dependency/cli change alters the portable digest |
+| RC-09-02 | Pi dependência alterada | build/binding | PASS | C2/R06: dependência declarada resolvível (inclusive fora do escopo @earendil-works) coberta pela identidade (r06b); irmão não relacionado não altera (r06). |
 | RC-09-03 | Version string falsificada | build/binding | PASS | rc-09-03: same version string, different bytes -> different identities; qualification never merges them |
-| RC-09-04 | Drift após prepare | build/binding | PASS | rc-09-04: content tamper between selection and prepare -> PROFILE_DRIFT before spawn (identity revalidation) |
+| RC-09-04 | Drift após prepare | build/binding | PASS | Drift entre seleção e prepare revalidado (profiles.py) e, no C2, recomputado contra a raiz correta do pacote Pi (parents[2]) — prepare detecta mudança de conteúdo/dependência antes do efeito. |
 | RC-09-05 | Três estados separados | build/binding | PASS | discovery/selection/approval/qualification remain separate states (existing suites + identity fallback never approves paths) |
 | RC-09-06 | Capacidade por interseção | build/binding | PASS | capability intersection tests (allowlist) + identity fallback bounded to build content |
 | RC-09-07 | Qualificação antiga | build/binding | PASS | existing fingerprint-keyed entries preserved verbatim; identity set is additive - no historical grant reinterpreted |
@@ -104,7 +104,7 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-11-04 | Owner morre | preflight/containment | PASS | rc-11-04: typed PROCESS_CONTAINMENT_UNAVAILABLE with the missing requirement |
 | RC-11-05 | PID reutilizado | preflight/containment | PASS | existing PID-reuse/birth suites; historical PID never grants ownership |
 | RC-11-06 | Slot reservado sem prova | preflight/containment | PASS | existing crash-slot suites: no purge path; capacity blocks with diagnostics |
-| RC-11-07 | Probe com backend indisponível | preflight/containment | PASS | probes only run behind preflight + contained spawn (rc-11-08 proves passive-only checks) |
+| RC-11-07 | Probe com backend indisponível | preflight/containment | PASS | C2/R07: probes ativos passam pelo gate require_containment ANTES de qualquer observer (r07b); preflight passivo mantém mapa estruturado e a recusa carrega os requisitos faltantes. |
 | RC-11-08 | Preflight sem segredos | preflight/containment | PASS | rc-11-08: preflight reads no env/credentials; OS interfaces only |
 | RC-11-09 | Shutdown e logout suportados | preflight/containment | PASS | WSL2 full-session termination (wsl --terminate) with live owned tree: guardian+native+grandchildren all reaped, journal marker survived intact, duplicate admission returned the existing receipt (no replay). Windows logoff remains an attended procedure (ends the interactive session); job-object KILL_ON_JOB_CLOSE covers handle teardown by OS contract. |
 | RC-12-01 | Múltiplos alvos | attach | BLOCKED | host target selection UX belongs to N/C; Core types enforce single approved target |
@@ -120,14 +120,14 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-13-04 | MCP direto real | integração/providers | BLOCKED | real MCP HTTP traffic needs the Server endpoint |
 | RC-13-05 | Tools-only sem Connector | integração/providers | BLOCKED | tools-only independence needs a real harness+Server topology |
 | RC-13-06 | Cliente somente stdio | integração/providers | PASS | existing harness_config suites: stdio-only diagnostics, no fallback, native stdio intact |
-| RC-13-07 | Pi extensão autorizada | integração/providers | PASS | synthetic Pi extension campaign (fake canonical backend) green; real-domain actions remain host-owned |
+| RC-13-07 | Pi extensão autorizada | integração/providers | PASS | Camada sintética (fixtures + backend canônico fake) PASS documentada como tal; integração real com domínio/host permanece bloco E2 (pendente Server). |
 | RC-13-08 | Multi-turn e HITL | integração/providers | PASS | earlier authorized real campaigns: multi-turn, HITL decline/tardy, interrupt/steer per adapter |
 | RC-13-09 | Desconexão e reconexão | integração/providers | BLOCKED | channel drop/reconnect needs the host transport (NXL belongs to hosts) |
 | RC-13-10 | Restart dos hosts | integração/providers | PASS | restart/crash suites on both OSes: identity preserved, unknown keeps blocking, no PID ownership |
 | RC-13-11 | Pressão e fairness | integração/providers | PASS | sustained saturation + flood/slow-consumer suites (45s x4 sessions both OSes) |
 | RC-13-12 | Consumo exclusivo/handoff | integração/providers | BLOCKED | exclusive consumption/handoff belongs to Server domain logic |
 | RC-14-01 | Migração dev0 completa | artefatos/migração | PASS | test_pc14_migration rc-14-01: dev0 journal reopens with history intact; legacy read works |
-| RC-14-02 | Falha no meio da migração | artefatos/migração | PASS | rc-14-02: repeated reopen cycles stable; no partial schema state |
+| RC-14-02 | Falha no meio da migração | artefatos/migração | PASS | C2 §5.2: não há migração de schema entre 0.1.x/0.2.x — o requisito aplicável é reabertura estável do journal dev0 com histórico intacto e ciclos repetidos (test_pc14); sem ponto de migração a injetar falha, registrado explicitamente. |
 | RC-14-03 | Wheel fora da árvore | artefatos/migração | PASS | wheel installed offline in isolated venvs on both OSes; imports/conformance/smoke green |
 | RC-14-04 | Builds limpos comparados | artefatos/migração | PASS | normalized builds byte-identical Windows/WSL2 (hashes in evidence) |
 | RC-14-05 | Sem MCP/daemon no Core | artefatos/migração | PASS | import/entrypoint audit suites: no MCP service/proxy/SDK; native stdio intact |

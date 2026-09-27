@@ -60,12 +60,17 @@ def qualified_build(kind, version, platform, architecture, fingerprint,
     lets an *equivalent* installation - same bytes, different directory -
     conserve the qualification of the same build, while the caller's
     local binding checks still apply independently.
+
+    C2/R06: a Pi build qualifies ONLY through the portable identity. The
+    legacy composite fingerprint (Node + cli.js) predates dependency
+    coverage and must not bypass it; it remains the path-bound binding
+    proof, but it is not a qualification grant on its own.
     """
     sets = (QUALIFIED_CONTROL_BUILDS if control else QUALIFIED_BUILDS,
            QUALIFIED_CONTROL_BUILD_IDENTITIES if control
            else QUALIFIED_BUILD_IDENTITIES)
     key = (kind, version, platform, architecture, fingerprint)
-    if key in sets[0]:
+    if key in sets[0] and kind != "pi":
         return True
     if build_identity is not None:
         identity_key = (kind, version, platform, architecture, build_identity)
@@ -84,7 +89,7 @@ QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
     ("codex", "0.157.0", "win32", "x86_64",
      "sha256:df63d86e72bc1a27f13899ad0467c4b312d8ee2cb67ae3a09e37f734d9f0edcb"),
     ("pi", "0.87.1", "win32", "x86_64",
-     "sha256:d4f09928e4a7043d1d6bd742a4ead3344d3b18b3990410b797ba65169a0cf583"),
+     "sha256:b454b39171e7428e721ecc01be6654c3608a9091d398c3d3d445897a91a67e43"),
     ("claude_code", "2.1.282", "win32", "x86_64",
      "sha256:b9c8e2e61cc523f4d78630d6141e843c41fbe530cd297e7d4af8acd44841bed9"),
 }
@@ -151,9 +156,10 @@ CLAUDE_NATIVE_REQUEST_CONTRACTS = {
 # no new native Pi campaign is claimed.
 BASELINE_CONTROL_VERSIONS = {"codex": {"0.156.1"}, "claude_code": {"2.1.281"}, "pi": {"0.85.1"}}
 def control_observation(kind, version, *, platform=None, architecture=None,
-                        fingerprint=None):
+                        fingerprint=None, build_identity=None):
     verified = qualified_build(kind, version, platform, architecture,
-                               fingerprint, control=True)
+                               fingerprint, control=True,
+                               build_identity=build_identity)
     if not verified:
         return {"compatible_controls": [],
                 "control_contract_basis": "unverified"}

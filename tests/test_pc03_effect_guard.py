@@ -70,7 +70,13 @@ class _SlowThreadNative:
 
 
 def test_rc_03_03_late_thread_does_not_write_under_expired_lease(tmp_path):
-    """The guard runs inside the dispatch thread, at the write frontier."""
+    """The guard runs inside the dispatch thread, at the write frontier.
+
+    C2 reaudit §5.1: the fence must START VALID and BECOME invalid while
+    the dispatch waits for the single executor worker - not be born
+    already expired - and the guard must consult the live clock at the
+    write, not only watcher flags.
+    """
     from tests.test_c1_bridge_stubs import harness_session
 
     async def run():
@@ -82,32 +88,28 @@ def test_rc_03_03_late_thread_does_not_write_under_expired_lease(tmp_path):
                 "srv", "exe", "bind", "agent", "ws", 1, 1, 1,
                 time.monotonic() + 60,
                 frozenset({"turn.submit", "turn.interrupt"})))
-        tripped = threading.Event()
-        fence = EffectFence(lambda: (False, False, False, True, False))
+        clock = FakeClock(100.0)
+        # Valid at admission: every flag clean, deadline in the future.
+        fence = EffectFence(lambda: (False, False, False, False, False),
+                            clock=clock.monotonic, lease_deadline=100.5)
         session.effect_fence = fence
-        original = native.send
 
-        async def held_send(verb, payload, operation_id, *,
-                            expected_turn_id=None):
-            await original(verb, payload, operation_id,
-                           expected_turn_id=expected_turn_id)
-            tripped.set()
-
-        # Hold the ONE default-executor thread so the dispatch starts late.
-        gate = threading.Event()
-        await asyncio.to_thread(lambda: None)  # warm the executor
-        release = threading.Event()
+        import concurrent.futures
         loop = asyncio.get_running_loop()
-        occupy = loop.run_in_executor(None, lambda: release.wait(5))
-        await asyncio.sleep(0.05)
+        loop.set_default_executor(
+            concurrent.futures.ThreadPoolExecutor(max_workers=1))
+        release = threading.Event()
+        busy = loop.run_in_executor(None, lambda: release.wait(5))
+        await asyncio.sleep(0.05)  # warm the single worker with the block
 
         async def dispatch():
             await session.send("send_turn", {"text": "late"}, "op-late")
 
         task = asyncio.create_task(dispatch())
         await asyncio.sleep(0.1)  # the to_thread is queued, not yet running
+        clock.advance(1.0)  # the lease expires while the thread waits
         release.set()
-        await asyncio.wait_for(asyncio.wrap_future(occupy), timeout=5)
+        await asyncio.wrap_future(busy)
         with pytest.raises(RuntimeCommandNotSent):
             await asyncio.wait_for(task, timeout=5)
         assert native.writes == [], "late thread must not write under stale lease"

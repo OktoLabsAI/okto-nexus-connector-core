@@ -50,8 +50,11 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
         from .build_identity import (executable_build_identity,
                                      pi_build_identity)
         if candidate.launch_script is not None and candidate.adapter_id == "pi_rpc":
+            # C2/R06: recompute against the pi-coding-agent PACKAGE root
+            # (parents[2]), consistent with the identity computed at
+            # selection time.
             current_identity = pi_build_identity(
-                candidate.executable, Path(candidate.launch_script).parents[3])
+                candidate.executable, Path(candidate.launch_script).parents[2])
         else:
             current_identity = executable_build_identity(candidate.executable)
         if current_identity != candidate.build_identity:
