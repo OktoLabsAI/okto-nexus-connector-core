@@ -1,6 +1,6 @@
-# Core API (`0.1.0.dev0`)
+# Core API (`0.2.0.dev0`)
 
-This is the development API of the independent `nexus-connector-core` wheel.
+This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,
 credentials and canonical application state. Core does not import Nexus Server
 or Connector code. The supported top-level exports are listed below; native
@@ -18,6 +18,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `SessionKey`, `RuntimeSnapshot`, `ReconcileRequest`, `ReconcileReport` | Namespace-scoped inspection and recovery queries. A missing process-local handle yields unknown ownership, not proof of stop. |
 | `ClaimedSession`, `SessionClaimPage` | Paged durable session-ID history with the original open operation ID and, for new Core opens, opening connection/owner generations. These are claims, not active-process or lease observations. |
 | `SessionLeaseState` | Durable last-known lease fence for one claimed session, written atomically with the claim and advanced by `renew_lease`/`revoke_lease` through journal CAS. Fence evidence for host reconciliation — not process liveness, not a lease deadline, not takeover authority. |
+| `AttachTarget`, `AttachPolicy` | Public evidence/policy types for the future external attach mode: the host selects exactly one target with verifiable identity and approves it; the policy fixes detach-only semantics (never kill the external tree). Preparing an attach launch still fails `CAPABILITY_UNSUPPORTED` prescriptively until the substrate is qualified — no flag enables it. |
 | `ProcessBirthEvidence`, `ProcessBirthRecord` | Historical OS birth identity for a Core-owned process container. PID/token are diagnostic evidence, never authority to signal or reattach after restart. |
 | `ProcessBirthObservation` | One read-only, transient comparison of a stored birth to the current OS PID; it does not grant ownership. |
 | `RuntimeEvent`, `EventCursor` | Durable technical event stream; cursor includes server, executor, session and stream epoch. |

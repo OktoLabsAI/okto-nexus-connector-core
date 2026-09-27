@@ -769,49 +769,49 @@
         {
           "task_id": "PC12.01",
           "title": "Inventariar o adapter legado",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "legacy adapter inventoried: POSIX substrate, 57-test suite green on WSL2, windows skipped by platform; capabilities/limits recorded in docs/adapters.md",
           "commits": []
         },
         {
           "task_id": "PC12.02",
           "title": "Definir intenção e alvo públicos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "public AttachTarget (host-approved verifiable identity, bounded) + AttachPolicy (detach-only, revoke handles); no network-supplied module/class ever imported",
           "commits": []
         },
         {
           "task_id": "PC12.03",
           "title": "Integrar execução sem ownership",
-          "status": "PENDING",
+          "status": "BLOCKED",
           "findings": [],
-          "evidence": null,
+          "evidence": "BLOCKED-partial: composition of the real attach adapter awaits substrate qualification; the public types and the prescriptive refusal are in place; managed slots/trees never cover external targets",
           "commits": []
         },
         {
           "task_id": "PC12.04",
           "title": "Revalidar alvo e correlação",
-          "status": "PENDING",
+          "status": "BLOCKED",
           "findings": [],
-          "evidence": null,
+          "evidence": "BLOCKED: target revalidation/correlation needs the qualified substrate; PID/session recycling guards exist in the legacy suite",
           "commits": []
         },
         {
           "task_id": "PC12.05",
           "title": "Implementar detach e falhas",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "detach semantics fixed by contract in AttachPolicy (never kill); PC02's attach-shaped containment test proves no signal path",
           "commits": []
         },
         {
           "task_id": "PC12.06",
           "title": "Qualificar sem habilitar flags artificiais",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "ATTACH_QUALIFIED remains False; prepare(mode='attach') fails prescriptively; no flag exists to bypass",
           "commits": []
         }
       ]
@@ -830,57 +830,57 @@
         {
           "task_id": "PC13.01",
           "title": "Executar campanha determinística integrada",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "full deterministic campaign: 695/74 Windows + 751/18 WSL2 (all F/G regressions, original suites, conformance) with the wheel-based consumer smoke in offline verification",
           "commits": []
         },
         {
           "task_id": "PC13.02",
           "title": "Qualificar um provider vertical",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "vertical provider qualification delivered earlier under explicit authorization (Codex/Pi/Claude campaigns + managed-factory path); re-run deferred to PC14 artifacts",
           "commits": []
         },
         {
           "task_id": "PC13.03",
           "title": "Coordenar integração local e remota",
-          "status": "PENDING",
+          "status": "BLOCKED",
           "findings": [],
-          "evidence": null,
+          "evidence": "BLOCKED: hosts N/C not started; handoff artifact + create_runtime contract ready for pinning",
           "commits": []
         },
         {
           "task_id": "PC13.04",
           "title": "Provar MCP HTTP direto",
-          "status": "PENDING",
+          "status": "BLOCKED",
           "findings": [],
-          "evidence": null,
+          "evidence": "BLOCKED (hosts); Core side proven: declarative HTTP config, no MCP runtime, stdio native intact (existing suites)",
           "commits": []
         },
         {
           "task_id": "PC13.05",
           "title": "Qualificar demais modos gerenciados e extensão Pi",
-          "status": "PENDING",
+          "status": "BLOCKED",
           "findings": [],
-          "evidence": null,
+          "evidence": "BLOCKED partially: earlier authorized provider campaigns cover managed modes; Pi extension real-execution campaign not repeated in C1 (synthetic end-to-end green)",
           "commits": []
         },
         {
           "task_id": "PC13.06",
           "title": "Exercitar falhas cruzadas",
-          "status": "PENDING",
+          "status": "BLOCKED",
           "findings": [],
-          "evidence": null,
+          "evidence": "BLOCKED (hosts); Core side green: synthetic cross-fault suites (EOF/lease/journal-full/slow-consumer preserved)",
           "commits": []
         },
         {
           "task_id": "PC13.07",
           "title": "Consolidar matriz sem inflar evidência",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "matrix consolidation done incrementally per phase; attach never marked PASS by managed evidence",
           "commits": []
         }
       ]
@@ -901,57 +901,57 @@
         {
           "task_id": "PC14.01",
           "title": "Consolidar regressões e cobertura",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "all F01-F07 mapped to seeds/tests/commits (regression suite 9/9 green); G01-G05 closed; G06 via backlog+matrix+this evidence; RC rows tracked per phase",
           "commits": []
         },
         {
           "task_id": "PC14.02",
           "title": "Ensaiar migração e recuperação",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "RC-14-01/02 migration rehearsal: dev0 long IDs/claims/slots/unACKed events reopen intact; legacy read works; no rekey; repeated reopen stable",
           "commits": []
         },
         {
           "task_id": "PC14.03",
           "title": "Gerar e verificar wheel/sdist",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "0.2.0.dev0 wheel/sdist byte-identical Windows/WSL2; twine strict, offline installs + both consumer smokes, release gate development publishable:false",
           "commits": []
         },
         {
           "task_id": "PC14.04",
           "title": "Atualizar documentação e exemplos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "docs updated (api/compatibility/handoff) with C1 behavior: aclose, fences, EOF, IDs, create_runtime, AttachTarget/Policy, portable identity",
           "commits": []
         },
         {
           "task_id": "PC14.05",
           "title": "Entregar handoffs aos dois agentes",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "HANDOFF_ARTEFATO finalized with wheel hashes, breaking changes and per-owner pendings (N/C hosts, PyPI joint session)",
           "commits": []
         },
         {
           "task_id": "PC14.06",
           "title": "Aplicar gates de liberação",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "release_decision.md records E1 achieved, E2/E3 blocked by external dependencies (hosts, attach substrate, SO campaign, billing)",
           "commits": []
         },
         {
           "task_id": "PC14.07",
           "title": "Encerrar com evidências e riscos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "final report RELATORIO_FINAL_AGENTE.md with per-phase commits, suites, artifacts, residual backlog and risks",
           "commits": []
         }
       ]

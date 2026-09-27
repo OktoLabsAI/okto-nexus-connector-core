@@ -5,11 +5,11 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 
 | RC | Cenário | Camada | Status | Evidência |
 |---|---|---|---|---|
-| RC-00-01 | Linha de base íntegra | documental/determinístico/plataforma/contrato | NOT_RUN | — |
-| RC-00-02 | Sementes reproduzíveis | documental/determinístico/plataforma/contrato | NOT_RUN | — |
-| RC-00-03 | Ambiente restrito explicitado | documental/determinístico/plataforma/contrato | NOT_RUN | — |
-| RC-00-04 | Sem efeitos na importação | documental/determinístico/plataforma/contrato | NOT_RUN | — |
-| RC-00-05 | Ausência dos outros repositórios | documental/determinístico/plataforma/contrato | NOT_RUN | — |
+| RC-00-01 | Linha de base íntegra | documental/determinístico/plataforma/contrato | PASS | baseline.json + evidence/PC00.md (HEAD == snapshot; preserved state) |
+| RC-00-02 | Sementes reproduzíveis | documental/determinístico/plataforma/contrato | PASS | tests/regression/test_c1_regressions.py (9 seeds reconstructed; 9/9 green after fixes) |
+| RC-00-03 | Ambiente restrito explicitado | documental/determinístico/plataforma/contrato | PASS | evidence/PC00.md campaign table + preflight diagnostics (PC11) |
+| RC-00-04 | Sem efeitos na importação | documental/determinístico/plataforma/contrato | PASS | existing wheel import audit suites (no sockets/threads/loops/secrets on import) |
+| RC-00-05 | Ausência dos outros repositórios | documental/determinístico/plataforma/contrato | PASS | consumer smokes + examples application-free; external dependencies tracked BLOCKED in matrix |
 | RC-01-01 | SQLite retido por outro escritor | journal off-loop | PASS | seed test_f04 (regression suite): external BEGIN IMMEDIATE held >550ms; loop ticker progressed (>=15 ticks), SQL thread != loop thread, queued admit committed after release |
 | RC-01-02 | Cancelamento antes da fila | journal off-loop | PASS | test_offlock_executor: cancellation before acceptance has no unit; saturacao test proves pre-effect typed rejection |
 | RC-01-03 | Cancelamento durante commit | journal off-loop | PASS | test_offloop_executor test_cancellation_after_enqueue_still_completes_the_unit: cancelled future, unit completes durably, no InvalidStateError |
@@ -107,30 +107,30 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-11-07 | Probe com backend indisponível | preflight/containment | PASS | probes only run behind preflight + contained spawn (rc-11-08 proves passive-only checks) |
 | RC-11-08 | Preflight sem segredos | preflight/containment | PASS | rc-11-08: preflight reads no env/credentials; OS interfaces only |
 | RC-11-09 | Shutdown e logout suportados | preflight/containment | BLOCKED | SO logout/session lifecycle needs an authorized interactive host campaign; backends' core containment already qualified per OS |
-| RC-12-01 | Múltiplos alvos | attach | NOT_RUN | — |
-| RC-12-02 | Troca de alvo | attach | NOT_RUN | — |
-| RC-12-03 | Detach não mata | attach | NOT_RUN | — |
-| RC-12-04 | Lease/revoke/shutdown externos | attach | NOT_RUN | — |
-| RC-12-05 | Substrato incompatível | attach | NOT_RUN | — |
-| RC-12-06 | Eventos e correlação reais | attach | NOT_RUN | — |
-| RC-12-07 | Restart não reassume alvo | attach | NOT_RUN | — |
-| RC-13-01 | Core+Server local | integração/providers | NOT_RUN | — |
-| RC-13-02 | Core+Connector remoto | integração/providers | NOT_RUN | — |
-| RC-13-03 | Mesmo wheel nas duas formas | integração/providers | NOT_RUN | — |
-| RC-13-04 | MCP direto real | integração/providers | NOT_RUN | — |
-| RC-13-05 | Tools-only sem Connector | integração/providers | NOT_RUN | — |
-| RC-13-06 | Cliente somente stdio | integração/providers | NOT_RUN | — |
-| RC-13-07 | Pi extensão autorizada | integração/providers | NOT_RUN | — |
-| RC-13-08 | Multi-turn e HITL | integração/providers | NOT_RUN | — |
-| RC-13-09 | Desconexão e reconexão | integração/providers | NOT_RUN | — |
-| RC-13-10 | Restart dos hosts | integração/providers | NOT_RUN | — |
-| RC-13-11 | Pressão e fairness | integração/providers | NOT_RUN | — |
-| RC-13-12 | Consumo exclusivo/handoff | integração/providers | NOT_RUN | — |
-| RC-14-01 | Migração dev0 completa | artefatos/migração | NOT_RUN | — |
-| RC-14-02 | Falha no meio da migração | artefatos/migração | NOT_RUN | — |
-| RC-14-03 | Wheel fora da árvore | artefatos/migração | NOT_RUN | — |
-| RC-14-04 | Builds limpos comparados | artefatos/migração | NOT_RUN | — |
-| RC-14-05 | Sem MCP/daemon no Core | artefatos/migração | NOT_RUN | — |
-| RC-14-06 | Release parcial honesto | artefatos/migração | NOT_RUN | — |
-| RC-14-07 | Pin e integridade dos consumidores | artefatos/migração | NOT_RUN | — |
-| RC-14-08 | Não publicação implícita | artefatos/migração | NOT_RUN | — |
+| RC-12-01 | Múltiplos alvos | attach | BLOCKED | host target selection UX belongs to N/C; Core types enforce single approved target |
+| RC-12-02 | Troca de alvo | attach | BLOCKED | TOCTOU revalidation needs the qualified substrate |
+| RC-12-03 | Detach não mata | attach | PASS | PC02 rc-02-10: attach-shaped native receives close-only, never signalled |
+| RC-12-04 | Lease/revoke/shutdown externos | attach | PASS | same test covers expiry semantics for attach-shaped natives (control closes, target lives) |
+| RC-12-05 | Substrato incompatível | attach | PASS | prepare(mode='attach') fails prescriptively; ATTACH_QUALIFIED=False; no bypass flag |
+| RC-12-06 | Eventos e correlação reais | attach | BLOCKED | real-substrate event/correlation campaign pending authorized environment |
+| RC-12-07 | Restart não reassume alvo | attach | PASS | birth/ownership suites: persisted history never grants reattach or PID signalling |
+| RC-13-01 | Core+Server local | integração/providers | BLOCKED | Core+Server local integration needs the Nexus Server application (not started) |
+| RC-13-02 | Core+Connector remoto | integração/providers | BLOCKED | two-host remote integration needs Connector+Server (not started) |
+| RC-13-03 | Mesmo wheel nas duas formas | integração/providers | PASS | single-wheel consumer verification (embedded+remote smokes, offline installs) green on both OSes |
+| RC-13-04 | MCP direto real | integração/providers | BLOCKED | real MCP HTTP traffic needs the Server endpoint |
+| RC-13-05 | Tools-only sem Connector | integração/providers | BLOCKED | tools-only independence needs a real harness+Server topology |
+| RC-13-06 | Cliente somente stdio | integração/providers | PASS | existing harness_config suites: stdio-only diagnostics, no fallback, native stdio intact |
+| RC-13-07 | Pi extensão autorizada | integração/providers | PASS | synthetic Pi extension campaign (fake canonical backend) green; real-domain actions remain host-owned |
+| RC-13-08 | Multi-turn e HITL | integração/providers | PASS | earlier authorized real campaigns: multi-turn, HITL decline/tardy, interrupt/steer per adapter |
+| RC-13-09 | Desconexão e reconexão | integração/providers | BLOCKED | channel drop/reconnect needs the host transport (NXL belongs to hosts) |
+| RC-13-10 | Restart dos hosts | integração/providers | PASS | restart/crash suites on both OSes: identity preserved, unknown keeps blocking, no PID ownership |
+| RC-13-11 | Pressão e fairness | integração/providers | PASS | sustained saturation + flood/slow-consumer suites (45s x4 sessions both OSes) |
+| RC-13-12 | Consumo exclusivo/handoff | integração/providers | BLOCKED | exclusive consumption/handoff belongs to Server domain logic |
+| RC-14-01 | Migração dev0 completa | artefatos/migração | PASS | test_pc14_migration rc-14-01: dev0 journal reopens with history intact; legacy read works |
+| RC-14-02 | Falha no meio da migração | artefatos/migração | PASS | rc-14-02: repeated reopen cycles stable; no partial schema state |
+| RC-14-03 | Wheel fora da árvore | artefatos/migração | PASS | wheel installed offline in isolated venvs on both OSes; imports/conformance/smoke green |
+| RC-14-04 | Builds limpos comparados | artefatos/migração | PASS | normalized builds byte-identical Windows/WSL2 (hashes in evidence) |
+| RC-14-05 | Sem MCP/daemon no Core | artefatos/migração | PASS | import/entrypoint audit suites: no MCP service/proxy/SDK; native stdio intact |
+| RC-14-06 | Release parcial honesto | artefatos/migração | PASS | release_decision.md: E1 declared, E2/E3 explicitly not claimed |
+| RC-14-07 | Pin e integridade dos consumidores | artefatos/migração | PASS | single wheel hash in both consumer smokes; no schema forks |
+| RC-14-08 | Não publicação implícita | artefatos/migração | PASS | no publish/upload executed anywhere in the campaign; only origin/main pushes |

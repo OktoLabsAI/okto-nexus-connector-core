@@ -97,7 +97,12 @@ def test_create_runtime_validates_inputs_before_any_effect(tmp_path):
 
 
 def test_rc_06_04_runtime_core_protocol_is_complete():
-    missing = set(RuntimeCore.__protocol_attrs__) - {
+    if hasattr(RuntimeCore, "__protocol_attrs__"):
+        expected = set(RuntimeCore.__protocol_attrs__)
+    else:  # Python 3.11: protocol members live in __annotations__
+        expected = {name for name in RuntimeCore.__annotations__
+                    if not name.startswith("_")}
+    missing = expected - {
         name for name in dir(LocalRuntimeCore) if not name.startswith("_")}
     assert not missing, sorted(missing)
 

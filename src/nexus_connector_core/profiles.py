@@ -25,6 +25,13 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
             type(intent.model) is not str or not intent.model or
             len(intent.model) > 200):
         raise CoreError("VALIDATION_ERROR", "prepare")
+    if intent.mode == "attach":
+        # PC12: attach is a distinct lifecycle. The public types exist
+        # (AttachTarget/AttachPolicy), but the substrate qualification is
+        # not demonstrated in any supported environment - preparing an
+        # attach launch fails prescriptively instead of via a flag.
+        raise CoreError("CAPABILITY_UNSUPPORTED", "prepare",
+                        retry_safe=True)
     if intent.mode != "managed":
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
     root = Path(workspace_root)

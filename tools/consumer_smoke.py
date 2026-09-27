@@ -76,11 +76,12 @@ async def _embedded_host() -> None:
             "codex_app_server", str(binary), fingerprint(binary),
             "explicit", "selected")
         journal = SQLiteJournal(root / "journal.db")
+        factory = _Factory()
         runtime = create_runtime(
             journal=journal, environment=lambda prepared: {},
             candidates={"codex_app_server": candidate},
             workspace_roots={"workspace": str(root)},
-            native_factory=_Factory())
+            native_factory=factory)
         context = ExecutionContext(
             "server", "executor", "binding", "agent", "workspace",
             1, 1, 1, time.monotonic() + 60,
@@ -115,9 +116,11 @@ async def _embedded_host() -> None:
                 "pi_rpc", str(pi_binary), fingerprint(pi_binary),
                 "explicit", "selected")
             pi_factory = _Factory()
-            pi_runtime = LocalRuntimeCore(
-                journal, pi_factory, candidates={"pi_rpc": pi_candidate},
-                workspace_roots={"workspace": str(root)})
+            pi_runtime = create_runtime(
+                journal=journal, environment=lambda prepared: {},
+                candidates={"pi_rpc": pi_candidate},
+                workspace_roots={"workspace": str(root)},
+                native_factory=pi_factory)
             pi_context = ExecutionContext(
                 "server", "executor", "binding", "agent", "workspace",
                 1, 1, 1, time.monotonic() + 60,

@@ -277,6 +277,40 @@ class NativeApprovalOperation:
 
 
 @dataclass(frozen=True, slots=True)
+class AttachTarget:
+    """Host-chosen external attach target evidence (C1/PC12).
+
+    The host selects and approves exactly one target with verifiable
+    technical identity; the Core never auto-attaches to the first process
+    or window found, and never infers consent from a shared OS user.
+    This is target *evidence* for a future qualified attach mode - it
+    grants no process-control authority by itself.
+    """
+
+    substrate: str
+    identity: Mapping[str, Any]
+    approved_by_host: bool = False
+
+    def __post_init__(self) -> None:
+        if (type(self.substrate) is not str or not self.substrate or
+                len(self.substrate) > 80 or
+                not isinstance(self.identity, Mapping) or
+                type(self.approved_by_host) is not bool):
+            raise ValueError("invalid attach target")
+        encoded = repr(sorted(self.identity.items()))
+        if len(encoded) > 4096:
+            raise ValueError("attach target identity too large")
+
+
+@dataclass(frozen=True, slots=True)
+class AttachPolicy:
+    """Detach semantics for external targets: never kill, only revoke."""
+
+    detach_on_stop: bool = True
+    revoke_handles_on_lease_expiry: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class CloseOperation:
     operation_id: str
     session_id: str
