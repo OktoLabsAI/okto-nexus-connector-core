@@ -129,6 +129,7 @@ class _Session:
     closing: bool = False
     closed: bool = False
     faulted: bool = False
+    effect_fence: object = field(default=None)
     lease_expired: bool = False
     revoked: bool = False
     normal_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -326,6 +327,18 @@ class LocalRuntimeCore:
                 async with self._lock:
                     self._sessions[session_key] = binding
                     binding_registered = True
+                    # PC03: thread-safe pre-dispatch guard shared with the
+                    # native bridge; probes plain binding attributes (GIL-
+                    # safe reads) at the closest point to the native write.
+                    from .native.runtime_bridge import EffectFence
+                    binding.effect_fence = EffectFence(
+                        lambda: (binding.closed, binding.closing,
+                                 binding.revoked, binding.lease_expired,
+                                 binding.faulted))
+                    try:
+                        setattr(native, "effect_fence", binding.effect_fence)
+                    except (AttributeError, TypeError):
+                        pass  # host double without attribute support
                     binding.pump = asyncio.create_task(
                         self._pump(session_key, binding))
                     binding.lease_task = asyncio.create_task(

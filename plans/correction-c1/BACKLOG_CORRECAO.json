@@ -215,57 +215,57 @@
         {
           "task_id": "PC03.01",
           "title": "Mapear todos os efeitos",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "kernel.execute: containment actions exempt; recheck helper; loop-side fence in _send (PC02) covers scope/identity",
           "commits": []
         },
         {
           "task_id": "PC03.02",
           "title": "Introduzir guarda tipada e estado corrente",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "EffectFence on CopiedAdapterSession + runtime binding probe (plain-attribute reads); attach at open",
           "commits": []
         },
         {
           "task_id": "PC03.03",
           "title": "Revalidar após persistência",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "kernel rechecks after admit (safe unmarked refusal) and after mark_possible_effect (proven not-sent, F02 seed green)",
           "commits": []
         },
         {
           "task_id": "PC03.04",
           "title": "Levar a guarda ao write/spawn",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "bridge guarded dispatch: loop-side + thread-side check at the write frontier (RC-03-03 test: late thread never writes)",
           "commits": []
         },
         {
           "task_id": "PC03.05",
           "title": "Resolver corrida com revoke/renew",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "revocation trips via PC02 attributes; in-flight effects keep OUTCOME_UNKNOWN; interrupt/close remain dispatchable for containment",
           "commits": []
         },
         {
           "task_id": "PC03.06",
           "title": "Preservar recibos e replay",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "same-ID/hash returns known receipt; SESSION_CONFLICT unchanged; no re-admission of refused ops (existing tests)",
           "commits": []
         },
         {
           "task_id": "PC03.07",
           "title": "Estender fault matrix",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "fault hooks already instrumented (journal/kernel cuts) + new admit/marker/thread-frontier windows exercised",
           "commits": []
         }
       ]

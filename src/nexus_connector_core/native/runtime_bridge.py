@@ -59,6 +59,45 @@ def _next_event(iterator: Iterator[HarnessEvent]) -> HarnessEvent | None:
         return None
 
 
+class EffectFence:
+    """Thread-safe pre-dispatch guard shared with the native bridge (PC03).
+
+    The runtime trips it whenever the in-memory admission fence closes
+    (expiry/revocation/closing/fault). The copied-adapter bridge checks it
+    on the loop AND inside the dispatch thread immediately before the
+    native write/spawn - the closest point to the effect (RC-03-03: a
+    thread that starts late must not write under stale authorization).
+    Containment controls (interrupt/close) stay allowed past a lease
+    deadline by contract; everything else fails closed before the write.
+    """
+
+    __slots__ = ("_probe",)
+
+    def __init__(self, probe=None):
+        self._probe = probe
+
+    def check(self, action: str) -> None:
+        probe = self._probe
+        if probe is None:
+            return
+        closed, closing, revoked, expired, faulted = probe()
+        if closed:
+            reason, code = "session closed before dispatch", "SESSION_CLOSED"
+        elif revoked:
+            reason, code = "authorization revoked before dispatch", "AGENT_REVOKED"
+        elif faulted:
+            reason, code = ("event stream unavailable before dispatch",
+                            "EVENT_STREAM_UNAVAILABLE")
+        elif closing and action not in {"interrupt", "end"}:
+            reason, code = "session closing before dispatch", "SESSION_CLOSING"
+        elif (expired and
+                action not in {"interrupt", "end"}):
+            reason, code = "lease expired before dispatch", "AGENT_REVOKED"
+        else:
+            return
+        raise RuntimeCommandNotSent(reason, code=code)
+
+
 class CopiedAdapterSession:
     def __init__(self, connector: _CopiedConnector, session: HarnessSession,
                  *, session_id: str, stream_epoch: str,
@@ -139,7 +178,22 @@ class CopiedAdapterSession:
                                  operation_id=operation_id,
                                  expected_turn_id=expected_turn_id)
         try:
-            await asyncio.to_thread(self._connector.send, self._session, command)
+            fence = getattr(self, "effect_fence", None)
+            if fence is not None:
+                # Loop-side check: fail fast, before paying for the thread
+                # hop. Thread-side check happens at the closest point to
+                # the native write/spawn (RC-03-03): the thread may start
+                # late.
+                fence.check(command.verb)
+
+                def _guarded_dispatch() -> None:
+                    fence.check(command.verb)
+                    self._connector.send(self._session, command)
+
+                await asyncio.to_thread(_guarded_dispatch)
+            else:
+                await asyncio.to_thread(self._connector.send,
+                                        self._session, command)
         except RuntimeCommandNotSent:
             if verb == "send_turn":
                 self._active_operation_id = None

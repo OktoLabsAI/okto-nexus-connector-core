@@ -195,7 +195,6 @@ class _ClockAdvancingJournal:
         return await self._inner.mark_possible_effect(key)
 
 
-@pytest.mark.xfail(strict=True, reason="C1/PC03 pending: lease must be revalidated after durable waits (F02)")
 def test_f02_no_effect_when_lease_expires_during_marker_persistence(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")

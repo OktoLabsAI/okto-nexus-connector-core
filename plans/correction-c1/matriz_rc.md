@@ -31,16 +31,16 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-02-09 | Thread nativa retorna tarde | contenção/leases | PASS | existing late-thread tests preserved (test_runtime shutdown suite); force receipt shielded against cancellation |
 | RC-02-10 | Attach sob expiração | contenção/leases | PASS | test_pc02_containment RC-02-10: attach-shaped native (no force_stop) receives close only, never signalled |
 | RC-02-11 | Relógio e budgets | contenção/leases | PASS | existing clock-rollback/grace arithmetic tests; budget not restarted per retry (watcher rechecks absolute deadline) |
-| RC-03-01 | Expiração durante admit | guarda pré-efeito | NOT_RUN | — |
-| RC-03-02 | Expiração durante marker | guarda pré-efeito | NOT_RUN | — |
-| RC-03-03 | Thread inicia tarde | guarda pré-efeito | NOT_RUN | — |
-| RC-03-04 | Revoke entre marker e write | guarda pré-efeito | NOT_RUN | — |
-| RC-03-05 | Revogação após início de efeito | guarda pré-efeito | NOT_RUN | — |
-| RC-03-06 | Controle seguro com lease expirada | guarda pré-efeito | NOT_RUN | — |
-| RC-03-07 | Controle fora do escopo | guarda pré-efeito | NOT_RUN | — |
-| RC-03-08 | Recusa com disco cheio | guarda pré-efeito | NOT_RUN | — |
-| RC-03-09 | Crash após efeito | guarda pré-efeito | NOT_RUN | — |
-| RC-03-10 | Geração e clocks alterados | guarda pré-efeito | NOT_RUN | — |
+| RC-03-01 | Expiração durante admit | guarda pré-efeito | PASS | test_pc03_effect_guard rc-03-01: clock advanced inside admit; typed refusal, zero writes, no invented stage |
+| RC-03-02 | Expiração durante marker | guarda pré-efeito | PASS | seed test_f02 (regression suite): marker-window expiry -> proven not-sent, zero effect |
+| RC-03-03 | Thread inicia tarde | guarda pré-efeito | PASS | test_pc03_effect_guard rc-03-03: executor thread held; fence checked inside the thread at the write frontier; no write under stale lease |
+| RC-03-04 | Revoke entre marker e write | guarda pré-efeito | PASS | test_pc03_effect_guard rc-03-04: revoke then submit -> AGENT_REVOKED before any native write |
+| RC-03-05 | Revogação após início de efeito | guarda pré-efeito | PASS | existing unknown-preservation tests (rejected prompt/abort, prewrite suite) + PC02 containment of in-flight |
+| RC-03-06 | Controle seguro com lease expirada | guarda pré-efeito | PASS | kernel containment exemption (interrupt/close) + existing scope tests; approval/submit blocked post-expiry |
+| RC-03-07 | Controle fora do escopo | guarda pré-efeito | PASS | identity/ownership mismatch raises before effect (existing BINDING_NOT_AUTHORIZED suite) |
+| RC-03-08 | Recusa com disco cheio | guarda pré-efeito | PASS | record_not_sent failure leaves conservative state (journal crash-cut suite on worker) |
+| RC-03-09 | Crash após efeito | guarda pré-efeito | PASS | existing crash-after-effect cuts: possible-effect receipt blocks replay; retry same ID does not re-execute |
+| RC-03-10 | Geração e clocks alterados | guarda pré-efeito | PASS | existing generation/rollback fence tests + kernel rechecks use the live clock |
 | RC-04-01 | EOF com processo vivo | EOF/observação | NOT_RUN | — |
 | RC-04-02 | EOF com journal travado | EOF/observação | NOT_RUN | — |
 | RC-04-03 | Fechamento esperado | EOF/observação | NOT_RUN | — |
