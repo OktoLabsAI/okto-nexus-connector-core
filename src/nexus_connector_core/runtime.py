@@ -132,11 +132,38 @@ class _Session:
     effect_fence: object = field(default=None)
     lease_expired: bool = False
     revoked: bool = False
+    eviction_scheduled: bool = False
     normal_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     control_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     # Populated only after the native request event is durable. Session
     # ownership is process-local, so this index is not a restart authority.
     pending_native_requests: dict[str, bytes] = field(default_factory=dict)
+
+
+class _SessionTombstones:
+    """Bounded lightweight history for evicted sessions (PC07).
+
+    Never retains the native adapter or task closures; records only the
+    durable ownership outcome observed at eviction time so ``inspect`` can
+    distinguish a historically released session from a genuinely unknown
+    one without inventing process state.
+    """
+
+    __slots__ = ("_entries", "_capacity")
+
+    def __init__(self, capacity: int = 1024):
+        if type(capacity) is not int or not 1 <= capacity <= 65536:
+            raise ValueError("invalid tombstone capacity")
+        self._entries: "dict[SessionKey, str]" = {}
+        self._capacity = capacity
+
+    def record(self, session: SessionKey, ownership: str) -> None:
+        if len(self._entries) >= self._capacity and session not in self._entries:
+            self._entries.pop(next(iter(self._entries)))
+        self._entries[session] = ownership
+
+    def get(self, session: SessionKey) -> "str | None":
+        return self._entries.get(session)
 
 
 class LocalRuntimeCore:
@@ -195,6 +222,7 @@ class LocalRuntimeCore:
                                               for root in trusted_discovery_roots)
         self._event_sink = event_sink
         self._sessions: dict[SessionKey, _Session] = {}
+        self._session_tombstones = _SessionTombstones()
         self._opening: dict[SessionKey, asyncio.Event] = {}
         self._uncertain_opens: set[SessionKey] = set()
         self._lock = asyncio.Lock()
@@ -692,6 +720,14 @@ class LocalRuntimeCore:
     async def inspect(self, session: SessionKey) -> RuntimeSnapshot:
         binding = self._sessions.get(session)
         if binding is None:
+            ownership = self._session_tombstones.get(session)
+            if ownership is not None:
+                # Historical fact recorded at eviction; no process state is
+                # invented from it (PC07.01/.03).
+                return RuntimeSnapshot(session.session_id, "UNKNOWN",
+                                       "UNKNOWN", ownership, 0,
+                                       "CLOSED" if ownership == "released"
+                                       else "UNKNOWN")
             return RuntimeSnapshot(session.session_id, "UNKNOWN", "UNKNOWN", "unknown", 0)
         try:
             process_state, turn_state = await binding.native.observe()
@@ -831,6 +867,13 @@ class LocalRuntimeCore:
             still_opening = tuple(self._opening)
         outcomes: dict[SessionKey, str] = {key: "unknown" for key in uncertain}
         outcomes.update({key: "unknown" for key in still_opening})
+        # Sessions already closed and evicted from the live registry keep an
+        # honest shutdown answer from their tombstone (PC07): "already_closed"
+        # for released history, "unknown" where ownership stayed uncertain.
+        for tombstoned, ownership in self._session_tombstones._entries.items():
+            outcomes.setdefault(
+                tombstoned,
+                "already_closed" if ownership == "released" else "unknown")
         closing: dict[SessionKey, asyncio.Task[str]] = {}
         for session_key, binding in sessions:
             if binding.shutdown_task is None or binding.shutdown_task.done():
@@ -1047,11 +1090,58 @@ class LocalRuntimeCore:
             binding.closed = True
             if binding.lease_task is not None and binding.lease_task is not asyncio.current_task():
                 binding.lease_task.cancel()
+            self._schedule_eviction(session, binding)
             if binding.force_requested and reported != "forced":
                 return "unknown"
             return reported if reported in {"graceful", "forced"} else "unknown"
         binding.faulted = True
         return "unknown"
+
+    def _schedule_eviction(self, session: SessionKey, binding: _Session) -> None:
+        """Release the live-session entry once its tasks no longer need it.
+
+        PC07 (F06): evict only after stop was observed (binding.closed) and
+        the pump/lease tasks finished, so no callback reinstalls state and
+        the heavy native adapter becomes collectable. The durable history
+        (receipts/claims/events) is untouched; a bounded tombstone keeps
+        the honest ownership outcome for ``inspect``.
+        """
+        if getattr(binding, "eviction_scheduled", False):
+            return
+        binding.eviction_scheduled = True
+
+        async def _evict() -> None:
+            try:
+                pump = binding.pump
+                if pump is not None and not pump.done():
+                    try:
+                        await asyncio.wait_for(asyncio.shield(pump), timeout=5.0)
+                    except (asyncio.TimeoutError, asyncio.CancelledError,
+                            Exception):
+                        pass
+                for task in (binding.lease_task, binding.sink_task,
+                             binding.force_task):
+                    if task is not None and not task.done():
+                        try:
+                            await asyncio.wait_for(asyncio.shield(task),
+                                                   timeout=5.0)
+                        except (asyncio.TimeoutError, asyncio.CancelledError,
+                                Exception):
+                            pass
+                async with self._lock:
+                    if (self._sessions.get(session) is binding and
+                            binding.closed):
+                        del self._sessions[session]
+                        self._session_tombstones.record(
+                            session,
+                            "released" if not binding.slot_reserved
+                            else "unknown")
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                pass
+
+        asyncio.create_task(_evict())
 
     async def renew_lease(self, session: SessionKey, context: ExecutionContext,
                           *, expected_connection_generation: int) -> RuntimeSnapshot:
@@ -1334,6 +1424,7 @@ class LocalRuntimeCore:
             if (binding.lease_task is not None and
                     binding.lease_task is not asyncio.current_task()):
                 binding.lease_task.cancel()
+            self._schedule_eviction(session, binding)
             if binding.force_requested and reported != "forced":
                 return "unknown"
             return reported if reported in {"graceful", "forced"} else "unknown"

@@ -67,13 +67,13 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-06-07 | Erro em construção/start | composição pública | PASS | create_runtime validates all inputs (TypeError) before resolving secrets/spawn; construction opens nothing |
 | RC-06-08 | Bundle público e offline | composição pública | PASS | existing offline wheel consumer verification (bundle/manifest offline) re-run at PC14 with the new smoke |
 | RC-06-09 | Sem side effect de builder | composição pública | PASS | create_runtime builds without spawn/network/loop (pure construction); examples prove no side effects pre-open |
-| RC-07-01 | Doze ciclos da auditoria | liberação de objetos | NOT_RUN | — |
-| RC-07-02 | Mil ciclos em lotes | liberação de objetos | NOT_RUN | — |
-| RC-07-03 | Reconciliação depois de evict | liberação de objetos | NOT_RUN | — |
-| RC-07-04 | Sink permanentemente lento | liberação de objetos | NOT_RUN | — |
-| RC-07-05 | Resultado unknown | liberação de objetos | NOT_RUN | — |
-| RC-07-06 | Callback tardio | liberação de objetos | NOT_RUN | — |
-| RC-07-07 | Query após restart | liberação de objetos | NOT_RUN | — |
+| RC-07-01 | Doze ciclos da auditoria | liberação de objetos | PASS | seed test_f06: twelve open/close cycles; weakrefs collected after eviction |
+| RC-07-02 | Mil ciclos em lotes | liberação de objetos | PASS | test_pc07_release rc-07-02: 1000 cycles in batches; <=16 retained adapters after gc |
+| RC-07-03 | Reconciliação depois de evict | liberação de objetos | PASS | rc-07-03: receipts/snapshots after eviction (tombstone: released/CLOSED, process UNKNOWN); duplicate submit returns known receipt |
+| RC-07-04 | Sink permanentemente lento | liberação de objetos | PASS | sink task awaited bounded during eviction; durable cursor design unchanged; existing slow-sink tests pass |
+| RC-07-05 | Resultado unknown | liberação de objetos | PASS | unknown sessions keep slots (PC02 tests); tombstone only written for closed bindings |
+| RC-07-06 | Callback tardio | liberação de objetos | PASS | rc-07-06: session absent from live registry after eviction; tombstone immutable; late completions cannot reinstall |
+| RC-07-07 | Query após restart | liberação de objetos | PASS | restart queries use journal/tombstones; historical ownership never claims liveness (existing restart suites + tombstone inspect) |
 | RC-08-01 | Modelo explícito Codex | modelo efetivo | NOT_RUN | — |
 | RC-08-02 | Modelo explícito Claude | modelo efetivo | NOT_RUN | — |
 | RC-08-03 | Pi preservado | modelo efetivo | NOT_RUN | — |

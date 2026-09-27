@@ -472,49 +472,49 @@
         {
           "task_id": "PC07.01",
           "title": "Separar estruturas vivas e snapshots",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "live registry (_sessions) + bounded _SessionTombstones (1024) recording honest ownership outcome; inspect distinguishes released-history vs unknown without inventing process state",
           "commits": []
         },
         {
           "task_id": "PC07.02",
           "title": "Implementar teardown seguro",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "_schedule_eviction: after observed stop, awaits pump/lease/sink/force tasks (bounded) then removes the binding under the state lock; identity-checked pop, no reinstatement path",
           "commits": []
         },
         {
           "task_id": "PC07.03",
           "title": "Manter replay e idempotência",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "receipts/claims/events stay in the journal; inspect of evicted session reads tombstone (released/CLOSED or unknown); duplicate submit returns known receipt without re-execution",
           "commits": []
         },
         {
           "task_id": "PC07.04",
           "title": "Desacoplar notificações lentas",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "sink operates from durable cursor (pre-existing design retained); eviction waits its task bounded so slow consumers cannot pin the adapter",
           "commits": []
         },
         {
           "task_id": "PC07.05",
           "title": "Preservar sessões incertas",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "unknown/uncertain sessions are never evicted (only closed bindings); tombstone records unknown where slot stayed reserved",
           "commits": []
         },
         {
           "task_id": "PC07.06",
           "title": "Executar soak e regressões",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "RC-07-02 soak: 1000 open/close cycles retain <=16 adapters (weakrefs); F06 seed (12 cycles) passes with weak-only factory",
           "commits": []
         }
       ]

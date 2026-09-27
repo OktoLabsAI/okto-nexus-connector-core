@@ -335,13 +335,11 @@ def test_f05_every_admitted_operation_id_is_reconcilable(tmp_path):
 
 
 # ---------------------------------------------------------------- F06
-@pytest.mark.xfail(strict=True, reason="C1/PC07 pending: closed sessions must not retain adapters (F06)")
 def test_f06_twelve_closed_sessions_release_native_adapters(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
-        natives = []
         refs = []
-        runtime = _runtime(tmp_path, journal, _LateFactory(natives, refs),
+        runtime = _runtime(tmp_path, journal, _LateFactory(refs),
                            max_owned_sessions=4)
         authority = _context()
         try:
@@ -364,13 +362,13 @@ def test_f06_twelve_closed_sessions_release_native_adapters(tmp_path):
 
 
 class _LateFactory:
-    def __init__(self, natives, refs):
-        self._natives = natives
+    """Holds only weak references: the live registry is the runtime's."""
+
+    def __init__(self, refs):
         self._refs = refs
 
     async def open(self, prepared, session_id, context, *, stream_epoch):
         native = SeedNative()
-        self._natives.append(native)
         self._refs.append(weakref.ref(native))
         return native
 
