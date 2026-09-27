@@ -523,6 +523,30 @@ class LocalRuntimeCore:
     async def _send(self, semantic: Operation, context: ExecutionContext,
                     verb: str, payload: Mapping[str, str]) -> OperationReceipt:
         self._authorize(context, semantic.action)
+        # PC02.02: the in-memory admission fence is checked BEFORE any
+        # durable I/O, so a stuck journal can never widen the window in
+        # which expired/revoked/closing work is still accepted.
+        fence_key = SessionKey(context.server_id, context.executor_id,
+                               semantic.session_id)
+        async with self._lock:
+            fence_binding = self._sessions.get(fence_key)
+            if (self._shutting_down or fence_binding is None):
+                pass  # precise typed errors come from _session below
+            elif (fence_binding.closed or fence_binding.closing or
+                    fence_binding.revoked or fence_binding.faulted):
+                if fence_binding.closed:
+                    error = "SESSION_CLOSED"
+                elif fence_binding.revoked:
+                    error = "AGENT_REVOKED"
+                elif fence_binding.faulted:
+                    error = "EVENT_STREAM_UNAVAILABLE"
+                else:
+                    error = "SESSION_CLOSING"
+                raise CoreError(error, "admission", retry_safe=True)
+            elif (semantic.action == "turn.submit" and
+                    fence_binding.lease_expired):
+                raise CoreError("AGENT_REVOKED", "admission", retry_safe=True,
+                                operation_id=semantic.operation_id)
         async with self._lock:
             old = await self._existing(semantic, context)
             if old is not None:
@@ -1124,36 +1148,75 @@ class LocalRuntimeCore:
                     await asyncio.sleep(min(deadline - now, self._lease_poll_seconds))
                     continue
                 if not binding.lease_expired:
+                    # Memory fence first: no new work is admitted from this
+                    # instant, even if the journal is stuck (PC02.02). The
+                    # durable events are recorded best-effort AFTER
+                    # containment is underway - they are diagnostics, never
+                    # a prerequisite for the physical supervisor.
                     binding.lease_expired = True
-                    await self._lease_event(session, binding, "core.lease_expired", {})
+                    expired_event_pending = True
                 if now < deadline + self._lease_grace_seconds:
                     await asyncio.sleep(min(deadline + self._lease_grace_seconds - now,
                                             self._lease_poll_seconds))
                     continue
-                async with binding.normal_lock:
-                    async with binding.control_lock:
-                        async with self._lock:
-                            if (binding.closed or
-                                    self._clock.monotonic() <
-                                    binding.context.lease_deadline_monotonic +
-                                    self._lease_grace_seconds):
-                                continue
-                            binding.closing = True
-                        try:
-                            outcome = await self._close_expired(session, binding)
-                        except Exception:
-                            binding.faulted = True
-                            outcome = "unknown"
-                await self._lease_event(session, binding, "core.lease_closed",
-                                        {"outcome": outcome})
+                async with self._lock:
+                    if binding.closed or binding.closing:
+                        # Containment coordination already belongs to another
+                        # route (explicit stop/shutdown); never spin.
+                        return
+                    if (self._clock.monotonic() <
+                            binding.context.lease_deadline_monotonic +
+                            self._lease_grace_seconds):
+                        continue
+                    # Idempotent containment coordinator entry (PC02.03):
+                    # every concurrent route (lease expiry, explicit stop,
+                    # shutdown) shares this transition.
+                    binding.closing = True
+                try:
+                    outcome = await self._contain_expired(session, binding)
+                except Exception:
+                    binding.faulted = True
+                    outcome = "unknown"
+                if expired_event_pending:
+                    await self._bounded_lease_event(
+                        session, binding, "core.lease_expired", {})
+                await self._bounded_lease_event(
+                    session, binding, "core.lease_closed",
+                    {"outcome": outcome})
                 return
         except asyncio.CancelledError:
             return
 
-    async def _close_expired(self, session: SessionKey,
-                             binding: _Session) -> str:
-        identity = [session.server_id, session.executor_id, session.session_id,
-                    binding.epoch, binding.context.session_owner_generation]
+    async def _bounded_lease_event(self, session: SessionKey,
+                                   binding: _Session, kind: str,
+                                   payload: dict) -> None:
+        """Best-effort durable lease event; never gates containment.
+
+        A stuck or saturated journal must not delay (let alone prevent)
+        physical containment of an expired owned session. The bounded wait
+        keeps the watcher responsive; a timed-out event is dropped - it is
+        diagnostics, not an ACK.
+        """
+        try:
+            await asyncio.wait_for(
+                self._lease_event(session, binding, kind, payload),
+                timeout=5.0)
+        except (asyncio.TimeoutError, CoreError, Exception):
+            pass
+
+    async def _contain_expired(self, session: SessionKey,
+                               binding: _Session) -> str:
+        """Contain an expired owned session without waiting for send locks.
+
+        F01/G05: a stuck native send holds ``normal_lock``/``control_lock``
+        across its await; lease containment must never queue behind it. The
+        durable intent is attempted first (tolerating storage failure),
+        then the independent physical path runs lock-free against the
+        Core-owned backend (``force_stop`` first, ``close`` as fallback).
+        """
+        identity = [session.server_id, session.executor_id,
+                    session.session_id, binding.epoch,
+                    binding.context.session_owner_generation]
         operation_id = "core.internal.lease_close." + hashlib.sha256(
             canonical_json(identity)).hexdigest()
         operation = Operation(operation_id, session.session_id,
@@ -1162,34 +1225,83 @@ class LocalRuntimeCore:
         digest = intent_hash(operation, binding.context)
         admitted = False
         try:
-            _, fresh = await self._journal.admit(key, digest, session.session_id,
-                                                 critical=True,
-                                                 effect_imminent=True)
+            # Emergency containment of an owned resource must not queue
+            # behind storage: the intent write is bounded, and its failure
+            # degrades to a best-effort fault marker, never to inaction.
+            _, fresh = await asyncio.wait_for(
+                self._journal.admit(key, digest, session.session_id,
+                                    critical=True, effect_imminent=True),
+                timeout=1.0)
             if not fresh:
                 binding.faulted = True
-                return "unknown"
-            admitted = True
-        except CoreError as exc:
-            if exc.code != "JOURNAL_FULL":
-                raise
-            # Disk saturation may prevent the intent record. Still attempt
-            # containment rather than leave an owned process running forever.
+            else:
+                admitted = True
+        except (asyncio.TimeoutError, CoreError):
+            # Disk saturation (or a stuck worker) may prevent the intent
+            # record. Still contain rather than leave an owned process
+            # running forever.
             binding.faulted = True
-        try:
-            outcome = await self._close_owned(session, binding)
-        except BaseException:
-            if admitted:
-                await self._journal.record_receipt(key, OperationReceipt(
-                    operation_id, digest, "OUTCOME_UNKNOWN", True, False,
-                    session.session_id, error_code="OUTCOME_UNKNOWN"))
-            raise
+        outcome = await self._independent_containment(session, binding)
         if admitted:
-            await self._journal.record_receipt(key, OperationReceipt(
-                operation_id, digest,
-                "SUCCEEDED" if binding.closed else "OUTCOME_UNKNOWN",
-                True, False, session.session_id,
-                error_code=None if binding.closed else "OUTCOME_UNKNOWN"))
+            try:
+                await asyncio.wait_for(
+                    self._journal.record_receipt(key, OperationReceipt(
+                        operation_id, digest,
+                        "SUCCEEDED" if binding.closed else "OUTCOME_UNKNOWN",
+                        True, False, session.session_id,
+                        error_code=None if binding.closed else "OUTCOME_UNKNOWN")),
+                    timeout=1.0)
+            except (asyncio.TimeoutError, CoreError):
+                binding.faulted = True
         return outcome
+
+    async def _independent_containment(self, session: SessionKey,
+                                       binding: _Session) -> str:
+        """Physical containment of a Core-owned tree, lock-free (PC02.04).
+
+        Never waits for ``normal_lock``/``control_lock`` (a stuck send may
+        hold them), the journal, the event sink or a pending native write.
+        Attach targets have no ``force_stop`` and are never signalled.
+        """
+        force = getattr(binding.native, "force_stop", None)
+        reported = "forced" if callable(force) else "unknown"
+        if callable(force):
+            binding.force_requested = True
+            try:
+                await force()
+            except BaseException:
+                reported = "unknown"
+        else:
+            close = getattr(binding.native, "close", None)
+            if callable(close):
+                try:
+                    await close()
+                    reported = "graceful"
+                except BaseException:
+                    reported = "unknown"
+        try:
+            process_state, _ = await binding.native.observe()
+        except Exception:
+            process_state = "UNKNOWN"
+        if process_state == "STOPPED":
+            if binding.slot_reserved:
+                try:
+                    await self._owned_slots.release_owned_slot(
+                        OperationKey(session.server_id, session.executor_id,
+                                     binding.opening_operation_id),
+                        session.session_id)
+                except CoreError:
+                    pass
+                binding.slot_reserved = False
+            binding.closed = True
+            if (binding.lease_task is not None and
+                    binding.lease_task is not asyncio.current_task()):
+                binding.lease_task.cancel()
+            if binding.force_requested and reported != "forced":
+                return "unknown"
+            return reported if reported in {"graceful", "forced"} else "unknown"
+        binding.faulted = True
+        return "unknown"
 
     async def _lease_event(self, session: SessionKey, binding: _Session,
                            native_type: str, payload: Mapping[str, str]) -> None:

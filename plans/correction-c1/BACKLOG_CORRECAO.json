@@ -141,65 +141,65 @@
         {
           "task_id": "PC02.01",
           "title": "Desenhar a máquina de estados mínima",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "axes documented in evidence/PC02.md; stopped never derives from cancel() (existing tests preserved)",
           "commits": []
         },
         {
           "task_id": "PC02.02",
           "title": "Fechar admissões antes de esperar I/O",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "_send pre-fence checks closing/closed/revoked/faulted/lease_expired in memory BEFORE any durable I/O; watcher sets lease_expired before events",
           "commits": []
         },
         {
           "task_id": "PC02.03",
           "title": "Reusar coordenador único de shutdown",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "single closing transition under runtime lock shared by lease expiry/stop/shutdown; running force task never replaced (dead _close_expired removed)",
           "commits": []
         },
         {
           "task_id": "PC02.04",
           "title": "Garantir força física independente",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "_independent_containment: force_stop/close + observe without normal_lock/control_lock/journal/sink waits (RC-02-01/03 seeds+tests)",
           "commits": []
         },
         {
           "task_id": "PC02.05",
           "title": "Reconciliar renovação e revogação",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "renewal CAS preserved (existing lease tests); late renewal of closing/forced session refused by fence (RC-02-04/05 via existing + new fence)",
           "commits": []
         },
         {
           "task_id": "PC02.06",
           "title": "Conservar incerteza e capacidade",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "unknown retains slot; observation only releases (RC-02-08 test)",
           "commits": []
         },
         {
           "task_id": "PC02.07",
           "title": "Cobrir ações de segurança sem journal saudável",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "bounded best-effort intent/event writes (1s/5s) around emergency containment; JOURNAL_FULL/stuck-worker tolerated (RC-02-03 test)",
           "commits": []
         },
         {
           "task_id": "PC02.08",
           "title": "Publicar política e métricas",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "policy unchanged; containment evidence reports detection/escalation/observation separately in lease events and shutdown reports",
           "commits": []
         }
       ]

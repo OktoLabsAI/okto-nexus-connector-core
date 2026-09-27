@@ -20,17 +20,17 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-01-08 | Consumer de eventos lento | journal off-loop | PASS | events() fetches pages as complete worker units; no transaction held across consumer yields (construction + replay/gap tests) |
 | RC-01-09 | Reopen e conformance | journal off-loop | PASS | journal conformance + restart kits pass on worker; slot-ledger conformance/restart kits pass |
 | RC-01-10 | Falha/stop do worker | journal off-loop | PASS | test_offloop_executor: aclose drains+closes, stopped executor refuses new work (JOURNAL_CLOSED), no thread leaks over repeated cycles; setup failure surfaces |
-| RC-02-01 | Lease com send travado | contenção/leases | NOT_RUN | — |
-| RC-02-02 | Força real não herda lock | contenção/leases | NOT_RUN | — |
-| RC-02-03 | Storage travado na expiração | contenção/leases | NOT_RUN | — |
-| RC-02-04 | Renovação antes de fechar | contenção/leases | NOT_RUN | — |
-| RC-02-05 | Renovação tardia | contenção/leases | NOT_RUN | — |
-| RC-02-06 | Revoke versus envio | contenção/leases | NOT_RUN | — |
-| RC-02-07 | Stop concorrente | contenção/leases | NOT_RUN | — |
-| RC-02-08 | Backend não comprova morte | contenção/leases | NOT_RUN | — |
-| RC-02-09 | Thread nativa retorna tarde | contenção/leases | NOT_RUN | — |
-| RC-02-10 | Attach sob expiração | contenção/leases | NOT_RUN | — |
-| RC-02-11 | Relógio e budgets | contenção/leases | NOT_RUN | — |
+| RC-02-01 | Lease com send travado | contenção/leases | PASS | seed test_f01: send blocked on normal_lock; lease expiry contains within budget; new submit refused (regression suite) |
+| RC-02-02 | Força real não herda lock | contenção/leases | PASS | test_pc02_containment RC-02-02: real child peer ignoring graceful close is force-killed by the independent path (win32; linux via suite run) |
+| RC-02-03 | Storage travado na expiração | contenção/leases | PASS | test_pc02_containment RC-02-03: journal worker blocked during expiry; force fires without waiting; no durable ACK invented |
+| RC-02-04 | Renovação antes de fechar | contenção/leases | PASS | existing renewal-CAS tests (test_runtime) - watcher revalidates deadline under lock before containing |
+| RC-02-05 | Renovação tardia | contenção/leases | PASS | fence rejects renewal/submits of closing/revoked sessions; existing revoke tests + new pre-fence |
+| RC-02-06 | Revoke versus envio | contenção/leases | PASS | RC-02-07/08 tests: concurrent closers share one transition; unknown retains slot; no double release |
+| RC-02-07 | Stop concorrente | contenção/leases | PASS | test_pc02_containment RC-02-07: lease+stop+shutdown concurrently; single coordination; watcher never spins on closing |
+| RC-02-08 | Backend não comprova morte | contenção/leases | PASS | test_pc02_containment RC-02-08: force returned, observe NEVER_STOPPED -> outcome unknown, slot owned |
+| RC-02-09 | Thread nativa retorna tarde | contenção/leases | PASS | existing late-thread tests preserved (test_runtime shutdown suite); force receipt shielded against cancellation |
+| RC-02-10 | Attach sob expiração | contenção/leases | PASS | test_pc02_containment RC-02-10: attach-shaped native (no force_stop) receives close only, never signalled |
+| RC-02-11 | Relógio e budgets | contenção/leases | PASS | existing clock-rollback/grace arithmetic tests; budget not restarted per retry (watcher rechecks absolute deadline) |
 | RC-03-01 | Expiração durante admit | guarda pré-efeito | NOT_RUN | — |
 | RC-03-02 | Expiração durante marker | guarda pré-efeito | NOT_RUN | — |
 | RC-03-03 | Thread inicia tarde | guarda pré-efeito | NOT_RUN | — |

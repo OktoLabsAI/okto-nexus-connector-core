@@ -132,7 +132,6 @@ class FakeClock:
 
 
 # ---------------------------------------------------------------- F01
-@pytest.mark.xfail(strict=True, reason="C1/PC02 pending: lease containment must not wait for a stuck send (F01)")
 def test_f01_lease_contains_session_while_send_is_stuck(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
