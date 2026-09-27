@@ -529,49 +529,49 @@
         {
           "task_id": "PC08.01",
           "title": "Mapear suporte real por adaptador",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "verified 0.157.0 schema bundle: thread/start AND thread/resume accept nullable 'model' (ThreadStartParams/ThreadResumeParams); Claude documented --model flag; Pi --model argv pre-existing",
           "commits": []
         },
         {
           "task_id": "PC08.02",
           "title": "Corrigir preparo e factory",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "Codex: factory passes thread_start_overrides={'model': ...} (applies to start and resume); Claude: prepare_launch appends ('--model', value) tokens; Pi unchanged",
           "commits": []
         },
         {
           "task_id": "PC08.03",
           "title": "Tornar configuração efetiva rastreável",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "profile digest already covers intent.model (requested); applied now reaches the native point, so requested==applied; no fabricated effective_model",
           "commits": []
         },
         {
           "task_id": "PC08.04",
           "title": "Tratar erro e incompatibilidade",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "invalid/oversized/typed-wrong model refused with VALIDATION_ERROR before preparation; absent model keeps documented defaults (no flag/override)",
           "commits": []
         },
         {
           "task_id": "PC08.05",
           "title": "Cobrir resume e mudança de perfil",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "resume path shares the same params dict (overrides applied); profile fingerprint governs conflicts (existing resume-grant seam)",
           "commits": []
         },
         {
           "task_id": "PC08.06",
           "title": "Qualificar do teste ao provider",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "spy tests (connector kwargs + argv) pass on Windows/WSL2; real provider campaigns remain the earlier authorized evidence (0.157.0/2.1.282 recorded)",
           "commits": []
         }
       ]

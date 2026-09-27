@@ -19,6 +19,12 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
                    workspace_root: str | Path) -> PreparedLaunch:
     if intent.adapter_id != candidate.adapter_id or candidate.trust != "selected":
         raise CoreError("BINDING_NOT_AUTHORIZED", "prepare")
+    if intent.adapter_id not in {"codex_app_server", "pi_rpc", "claude_stream"}:
+        raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
+    if intent.model is not None and (
+            type(intent.model) is not str or not intent.model or
+            len(intent.model) > 200):
+        raise CoreError("VALIDATION_ERROR", "prepare")
     if intent.mode != "managed":
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
     root = Path(workspace_root)
@@ -44,10 +50,13 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
     elif intent.adapter_id == "claude_stream":
         # Mirrors the copied connector's own qualified default argv: the
         # partial-message flag is load-bearing for interrupt safety and
-        # --verbose is part of the proven stream-json shape.
+        # --verbose is part of the proven stream-json shape. An explicit
+        # model rides the documented CLI flag - never shell text.
         argv = (str(executable), "-p", "--output-format", "stream-json",
                 "--input-format", "stream-json", "--verbose",
                 "--include-partial-messages")
+        if intent.model is not None:
+            argv += ("--model", intent.model)
     else:
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
     profile = {"adapter_id": intent.adapter_id, "mode": intent.mode,

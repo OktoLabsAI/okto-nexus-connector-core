@@ -374,7 +374,6 @@ class _LateFactory:
 
 
 # ---------------------------------------------------------------- F07
-@pytest.mark.xfail(strict=True, reason="C1/PC08 pending: explicit model must reach the Codex native mechanism (F07)")
 def test_f07_codex_model_reaches_native_thread_configuration(tmp_path):
     async def run():
         import nexus_connector_core.native.runtime_bridge as bridge_module
@@ -386,22 +385,64 @@ def test_f07_codex_model_reaches_native_thread_configuration(tmp_path):
                 super().__init__()
                 captured.update(kwargs)
 
+            def start(self, **kwargs):
+                from nexus_connector_core.native.adapter_types import (
+                    HarnessSession as _HS,
+                )
+                return _HS("native-session", "codex", kwargs.get(
+                    "owning_agent_id", "agent"), "STARTING",
+                    captured.get("capabilities") or
+                    __import__("nexus_connector_core.native.adapter_types",
+                               fromlist=["HarnessCapabilities"]).HarnessCapabilities(
+                        False, "IMMEDIATE", False, True, True),
+                    "2026-09-26T00:00:00Z")
+
+            def close(self):
+                gate = getattr(self, "_stream_gate", None)
+                if gate is not None:
+                    gate.set()
+
+            def events(self):
+                import threading as _threading
+                # A live stream never ends on its own; it ends when the
+                # connector closes. The bridge polls via to_thread, so the
+                # generator must release the thread promptly on close.
+                gate = _threading.Event()
+                self._stream_gate = gate
+                while not gate.is_set():
+                    gate.wait(0.05)
+                return
+                yield
+
+            def observe_lifecycle(self, session):
+                return {"stop_observed": True}
+
+            def force_stop(self):
+                gate = getattr(self, "_stream_gate", None)
+                if gate is not None:
+                    gate.set()
+
         original_loader = bridge_module.load_adapter
+        original_qualified = bridge_module.qualified_build
 
         def recording_loader(adapter_id):
             captured["adapter_id"] = adapter_id
             return RecordingConnector
 
         bridge_module.load_adapter = recording_loader
+        bridge_module.qualified_build = lambda *args, **kwargs: True
         try:
             binary = tmp_path / "codex"
             binary.write_bytes(b"synthetic binary")
             candidate = InstallationCandidate(
                 "codex_app_server", str(binary), fingerprint(binary),
                 "explicit", "selected")
+            async def environment(_prepared):
+                return {}
+
             runtime = LocalRuntimeCore(
                 journal,
-                CopiedAdapterFactory(lambda prepared: {} ),
+                CopiedAdapterFactory(environment),
                 candidates={"codex_app_server": candidate},
                 workspace_roots={"ws": str(tmp_path)})
             authority = _context()
@@ -414,13 +455,13 @@ def test_f07_codex_model_reaches_native_thread_configuration(tmp_path):
                        for value in captured.values()), captured
         finally:
             bridge_module.load_adapter = original_loader
+            bridge_module.qualified_build = original_qualified
             await runtime.shutdown(ShutdownPolicy(0.1, 0.1))
             journal.close()
 
     asyncio.run(run())
 
 
-@pytest.mark.xfail(strict=True, reason="C1/PC08 pending: explicit model must reach the Claude native argv (F07)")
 def test_f07_claude_model_reaches_native_argv(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")

@@ -74,14 +74,14 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-07-05 | Resultado unknown | liberação de objetos | PASS | unknown sessions keep slots (PC02 tests); tombstone only written for closed bindings |
 | RC-07-06 | Callback tardio | liberação de objetos | PASS | rc-07-06: session absent from live registry after eviction; tombstone immutable; late completions cannot reinstall |
 | RC-07-07 | Query após restart | liberação de objetos | PASS | restart queries use journal/tombstones; historical ownership never claims liveness (existing restart suites + tombstone inspect) |
-| RC-08-01 | Modelo explícito Codex | modelo efetivo | NOT_RUN | — |
-| RC-08-02 | Modelo explícito Claude | modelo efetivo | NOT_RUN | — |
-| RC-08-03 | Pi preservado | modelo efetivo | NOT_RUN | — |
-| RC-08-04 | Default ausente | modelo efetivo | NOT_RUN | — |
-| RC-08-05 | Modelo não suportado | modelo efetivo | NOT_RUN | — |
-| RC-08-06 | Resume conflitante | modelo efetivo | NOT_RUN | — |
-| RC-08-07 | Observado versus solicitado | modelo efetivo | NOT_RUN | — |
-| RC-08-08 | Entrada especial e redaction | modelo efetivo | NOT_RUN | — |
+| RC-08-01 | Modelo explícito Codex | modelo efetivo | PASS | seed test_f07-codex + rc-08-01: thread_start_overrides carry the explicit model to the verified native mechanism |
+| RC-08-02 | Modelo explícito Claude | modelo efetivo | PASS | seed test_f07-claude + rc-08-08: ('--model', value) structured tokens in argv |
+| RC-08-03 | Pi preservado | modelo efetivo | PASS | existing profiles test: pi argv keeps --model and mandatory tokens |
+| RC-08-04 | Default ausente | modelo efetivo | PASS | rc-08-04: absent model -> no flag/override, defaults documented |
+| RC-08-05 | Modelo não suportado | modelo efetivo | PASS | typed VALIDATION_ERROR before preparation; no silent fallback to default |
+| RC-08-06 | Resume conflitante | modelo efetivo | PASS | resume params share overrides; conflicting model governed by profile fingerprint/resume grant (existing seam tests) |
+| RC-08-07 | Observado versus solicitado | modelo efetivo | PASS | no fabricated effective_model anywhere; observed-model remains provider-event evidence only (earlier authorized campaigns) |
+| RC-08-08 | Entrada especial e redaction | modelo efetivo | PASS | rc-08-08: Unicode/spaces/metachars travel as one structured token; invalid types/lengths refused |
 | RC-09-01 | Build igual em paths diferentes | build/binding | NOT_RUN | — |
 | RC-09-02 | Pi dependência alterada | build/binding | NOT_RUN | — |
 | RC-09-03 | Version string falsificada | build/binding | NOT_RUN | — |

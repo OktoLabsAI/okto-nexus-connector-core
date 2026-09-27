@@ -429,8 +429,16 @@ class CopiedAdapterFactory:
                     resume_grant.exclusive_owner is not True):
                 raise CoreError("BINDING_NOT_AUTHORIZED", "codex_resume",
                                 retry_safe=True)
-            client_kwargs = ({"client_info": self._codex_client_info}
+            client_kwargs = (dict(self._codex_client_info)
                              if self._codex_client_info is not None else {})
+            # PC08 (F07): the explicit model reaches the verified native
+            # mechanism - thread/start (and thread/resume) accept a nullable
+            # ``model`` string in the qualified 0.157.0 contract - instead of
+            # disappearing after the profile digest.
+            explicit_model = prepared.intent.model
+            if explicit_model is not None:
+                client_kwargs["thread_start_overrides"] = {
+                    "model": explicit_model}
             connector = load_adapter(spec.adapter_id)(command=prepared.argv,
                                                       cwd=prepared.cwd, env=env,
                                                       **client_kwargs)
