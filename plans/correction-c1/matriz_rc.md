@@ -41,14 +41,14 @@ atualizada somente com evidência real. Camadas conforme o pacote C1.
 | RC-03-08 | Recusa com disco cheio | guarda pré-efeito | PASS | record_not_sent failure leaves conservative state (journal crash-cut suite on worker) |
 | RC-03-09 | Crash após efeito | guarda pré-efeito | PASS | existing crash-after-effect cuts: possible-effect receipt blocks replay; retry same ID does not re-execute |
 | RC-03-10 | Geração e clocks alterados | guarda pré-efeito | PASS | existing generation/rollback fence tests + kernel rechecks use the live clock |
-| RC-04-01 | EOF com processo vivo | EOF/observação | NOT_RUN | — |
-| RC-04-02 | EOF com journal travado | EOF/observação | NOT_RUN | — |
-| RC-04-03 | Fechamento esperado | EOF/observação | NOT_RUN | — |
-| RC-04-04 | Cancelamento inesperado | EOF/observação | NOT_RUN | — |
-| RC-04-05 | Terminal de turno sem EOF | EOF/observação | NOT_RUN | — |
-| RC-04-06 | Evento terminal seguido de EOF | EOF/observação | NOT_RUN | — |
-| RC-04-07 | Approval pendente no EOF | EOF/observação | NOT_RUN | — |
-| RC-04-08 | Incidente único | EOF/observação | NOT_RUN | — |
+| RC-04-01 | EOF com processo vivo | EOF/observação | PASS | seed test_f03: iterator EOF with live process -> EVENT_STREAM_UNAVAILABLE before write |
+| RC-04-02 | EOF com journal travado | EOF/observação | PASS | memory fence before durable I/O; incident write bounded (5s) best-effort; submit refused while journal stuck (PC02 fence composition) |
+| RC-04-03 | Fechamento esperado | EOF/observação | PASS | test_pc04_stream_loss rc-04-03: close-then-drain emits no stream-loss incident |
+| RC-04-04 | Cancelamento inesperado | EOF/observação | PASS | CancelledError outside close fences + records once (seed waiter uses turn UNKNOWN + process RUNNING) |
+| RC-04-05 | Terminal de turno sem EOF | EOF/observação | PASS | multi-turn peers keep sessions alive after terminals (existing adapter suites); EOF never conflated with idle |
+| RC-04-06 | Evento terminal seguido de EOF | EOF/observação | PASS | durable terminals recorded before EOF remain replayable (journal events); session degrades separately |
+| RC-04-07 | Approval pendente no EOF | EOF/observação | PASS | faulted fence blocks decide_native_approval submissions (EVENT_STREAM_UNAVAILABLE) before any new effect |
+| RC-04-08 | Incidente único | EOF/observação | PASS | test_pc04_stream_loss rc-04-08: exactly one core.event_pump_failed incident per epoch |
 | RC-05-01 | Fronteiras de comprimento | IDs/legado | NOT_RUN | — |
 | RC-05-02 | Tipos não textuais | IDs/legado | NOT_RUN | — |
 | RC-05-03 | Unicode e limite de bytes | IDs/legado | NOT_RUN | — |

@@ -281,49 +281,49 @@
         {
           "task_id": "PC04.01",
           "title": "Classificar conclusões do pump",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "_pump classifies normal exhaustion and CancelledError via the closing/closed lifecycle state, not instant flags",
           "commits": []
         },
         {
           "task_id": "PC04.02",
           "title": "Aplicar fence antes do evento",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "memory fence (faulted) set under state lock BEFORE any durable I/O; incident write bounded best-effort",
           "commits": []
         },
         {
           "task_id": "PC04.03",
           "title": "Persistir e notificar incidente uma vez",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "single core.event_pump_failed per epoch (one pump task per epoch); ACK/replay does not create incidents (RC-04-08 test)",
           "commits": []
         },
         {
           "task_id": "PC04.04",
           "title": "Integrar com contenção",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "EOF fence reuses PC02 containment/inspection; ownership retained; no parallel shutdown machine",
           "commits": []
         },
         {
           "task_id": "PC04.05",
           "title": "Revisar pending requests e events",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "faulted fence blocks pending-approval replies via PC02/PC03 pre-fences; durably recorded terminals preserved",
           "commits": []
         },
         {
           "task_id": "PC04.06",
           "title": "Qualificar semântica por adaptador",
-          "status": "PENDING",
+          "status": "DONE",
           "findings": [],
-          "evidence": null,
+          "evidence": "multi-turn peers already covered (terminal keeps stream open); EOF-with-live-process seed F03 green",
           "commits": []
         }
       ]

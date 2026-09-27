@@ -1369,21 +1369,54 @@ class LocalRuntimeCore:
                     self._event_changed.notify_all()
                 if self._event_sink is not None:
                     self._schedule_sink(session, binding)
+        except asyncio.CancelledError:
+            # Unexpected watcher cancellation (RC-04-04): outside a
+            # Core-initiated close this is an observation loss, not a
+            # healthy idle state. Fence first, then record best-effort.
+            async with self._lock:
+                expected = binding.closing or binding.closed
+                if not expected:
+                    binding.faulted = True
+            if not expected:
+                await self._record_stream_loss(session, binding)
+            return
         except Exception:
             # A dead stream does not prove process death or turn completion.
             # Keep ownership until explicit close/shutdown.
             binding.faulted = True
-            try:
-                await self._journal.record_event(RuntimeEvent(
+            await self._record_stream_loss(session, binding)
+        else:
+            # Iterator exhausted without exception (audit F03 / RC-04-01):
+            # with a live process this is an unexpected EOF, not a turn
+            # boundary and not a Core-initiated close. Fence the session in
+            # memory BEFORE any durable I/O (RC-04-02) so new work is
+            # refused even while the journal is stuck; the durable incident
+            # is best-effort and bounded, and fires at most once per
+            # stream epoch (one pump task per epoch).
+            async with self._lock:
+                expected = binding.closing or binding.closed
+                if not expected:
+                    binding.faulted = True
+            if not expected:
+                await self._record_stream_loss(session, binding)
+
+    async def _record_stream_loss(self, session: SessionKey,
+                                  binding: _Session) -> None:
+        """Best-effort bounded incident record; never gates the fence."""
+        try:
+            await asyncio.wait_for(
+                self._journal.record_event(RuntimeEvent(
                     session.server_id, session.executor_id,
-                    session.session_id, binding.epoch, 0, "error", "core.event_pump_failed",
-                    {"code": "EVENT_STREAM_UNAVAILABLE"}))
-                async with self._event_changed:
-                    self._event_changed.notify_all()
-                if self._event_sink is not None:
-                    self._schedule_sink(session, binding)
-            except Exception:
-                pass
+                    session.session_id, binding.epoch, 0, "error",
+                    "core.event_pump_failed",
+                    {"code": "EVENT_STREAM_UNAVAILABLE"})),
+                timeout=5.0)
+        except (asyncio.TimeoutError, CoreError, Exception):
+            pass
+        async with self._event_changed:
+            self._event_changed.notify_all()
+        if self._event_sink is not None:
+            self._schedule_sink(session, binding)
 
     def _schedule_sink(self, session: SessionKey, binding: _Session) -> None:
         # The journal, not an in-memory queue, buffers a slow notification

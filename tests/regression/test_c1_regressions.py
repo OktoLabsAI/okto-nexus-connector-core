@@ -222,7 +222,6 @@ def test_f02_no_effect_when_lease_expires_during_marker_persistence(tmp_path):
 
 
 # ---------------------------------------------------------------- F03
-@pytest.mark.xfail(strict=True, reason="C1/PC04 pending: unexpected EOF must fence the session (F03)")
 def test_f03_eof_with_live_process_blocks_new_submits(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
@@ -238,12 +237,17 @@ def test_f03_eof_with_live_process_blocks_new_submits(tmp_path):
             await native.queue.put(RuntimeEvent(
                 "srv", "exe", "session", "epoch", 0, "text_delta",
                 "seed.delta", {"text": "one"}))
-            await native.queue.put(None)  # iterator drains and ends (EOF)
-            async def drained():
-                while not native.queue.empty():
+            # The iterator yields the single event and then returns: EOF
+            # with the process still alive per observe().
+            async def stream_lost():
+                while True:
+                    snapshot = await runtime.inspect(SessionKey(
+                        "srv", "exe", "session"))
+                    if snapshot.turn_state == "UNKNOWN" and (
+                            snapshot.process_state == "RUNNING"):
+                        return
                     await asyncio.sleep(0.01)
-                await asyncio.sleep(0.05)
-            await asyncio.wait_for(drained(), timeout=2)
+            await asyncio.wait_for(stream_lost(), timeout=3)
             # The process is still alive per observe(); new work must be
             # refused because the Core can no longer observe replies.
             with pytest.raises(CoreError, match="EVENT_STREAM_UNAVAILABLE"):
