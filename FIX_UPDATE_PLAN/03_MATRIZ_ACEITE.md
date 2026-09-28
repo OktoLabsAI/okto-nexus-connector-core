@@ -1,557 +1,675 @@
-# Matriz C4 — cenários de aceite
+# Matriz de aceite C5
 
-Os dez primeiros casos foram executados nesta auditoria e falharam em `8677145`. Os demais são cenários complementares exigidos pelo plano; estão `NOT_RUN` nesta auditoria. Isso **não significa** que não existam testes parciais no repositório: o agente deve mapear e executar o cenário exato antes de atribuir PASS.
+56 cenários. Os estados abaixo são do snapshot auditado, não do produto após correção. `FAIL` significa cenário executado e requisito violado; `NOT_RUN` é especificação a implementar/executar. Um cenário pode mapear a múltiplos testes e um teste a múltiplos cenários, sem somar duplicatas.
 
-A expectativa das sementes Node admite uma alternativa de produto: recusa explícita e segura de layout realmente não suportado. O teste atual exige alteração do digest porque a versão atual aceita o layout; caso a correção escolha a recusa, adapte a fixture com justificativa e prova de que não houve qualificação. Não substitua por skip.
+## AC5-00-01 — Baseline e preservação
 
-Cada cenário precisa de: task/commit, ambiente, comando/node pytest, logs/XML, hash do wheel, resultado real e limitações. Dez parametrizações não equivalem a dez grupos independentes de achados. Nenhuma repetição de execução é somada à contagem de cenários.
+**Camada:** documental. **Estado na auditoria:** NOT_RUN.
 
-## C4T-01 · T01 · C4-01
+**Preparação:** ZIP identificado e HEAD atual do executor.
 
-**Camada:** fault injection Core+journal. **Estado na auditoria:** `FAIL`.
+**Ação:** Conferir hashes e diff; guardar dirty state antes de mudar.
 
-**Preparação:** Sessão própria; close retido; journal.admit da força bloqueado por Event.
+**Resultado exigido:** Nenhum reset, remoção ou sobrescrita de trabalho posterior.
 
-**Ação:** Iniciar shutdown com orçamento curto e manter storage preso.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Função física de força começa sem liberar storage; resultado de parada/persistência continua honesto.
+## AC5-00-02 — Regressões históricas
 
-**Semente:** `test_t01_emergency_force_does_not_wait_for_journal_admission` em `regressoes/test_review4.py`.
+**Camada:** regressão. **Estado na auditoria:** NOT_RUN.
 
-## C4T-02 · T02 · C4-04
+**Preparação:** C2, C3, 16 testes C4 e sementes C4 originais com adaptação documentada.
 
-**Camada:** fault injection Core+journal. **Estado na auditoria:** `FAIL`.
+**Ação:** Executar em checkout e ambiente identificados.
 
-**Preparação:** CAS renew falha comprovadamente antes de entrega.
+**Resultado exigido:** Manter as asserções causais e separar provider ausente, plataforma e defeito.
 
-**Ação:** Restaurar journal e repetir renewal válido.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Sem RECONNECT_BUSY permanente; tentativa anterior finalizada.
+## AC5-00-03 — Isolamento de dependências
 
-**Semente:** `test_t02_cas_failure_does_not_poison_future_lease_operations[renew]` em `regressoes/test_review4.py`.
+**Camada:** empacotamento. **Estado na auditoria:** NOT_RUN.
 
-## C4T-03 · T02 · C4-04
+**Preparação:** Ambiente com dependências exatas do pacote e de teste.
 
-**Camada:** fault injection Core+journal. **Estado na auditoria:** `FAIL`.
+**Ação:** Importar no processo pai e em subprocesso -I; registrar versões.
 
-**Preparação:** CAS revoke falha comprovadamente antes de entrega.
+**Resultado exigido:** Não diagnosticar ModuleNotFoundError de ambiente como falha funcional.
 
-**Ação:** Restaurar journal e repetir revogação válida.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Sem REVOKE_BUSY permanente; revogação efetivamente aplicada.
+## AC5-00-04 — Inventário de efeitos
 
-**Semente:** `test_t02_cas_failure_does_not_poison_future_lease_operations[revoke]` em `regressoes/test_review4.py`.
+**Camada:** revisão. **Estado na auditoria:** NOT_RUN.
 
-## C4T-04 · T03 · C4-02
+**Preparação:** Todos os adapters e bridges do escopo.
 
-**Camada:** bridge + adapter Codex + transporte real / stdin de laboratório. **Estado na auditoria:** `FAIL`.
+**Ação:** Mapear cada write/spawn, seus locks, filas e guardas.
 
-**Preparação:** Clock inicialmente válido; lock nativo retido; comando já passou pela bridge.
+**Resultado exigido:** Nenhum caminho produtivo sem decisão e prova própria.
 
-**Ação:** Vencer prazo durante acquire do lock e liberar.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Nenhum byte de turn/start gravado; recusa antes do efeito.
+## AC5-01-01 — Aprovação vence no write lock
 
-**Semente:** `test_t03_deadline_rechecked_after_real_codex_transport_write_lock` em `regressoes/test_review4.py`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-## C4T-05 · T04 · C4-03
+**Preparação:** Pedido válido; transporte e serializador Codex reais; stdin controlado.
 
-**Camada:** composição pública+factory+kernel / peer de laboratório. **Estado na auditoria:** `FAIL`.
+**Ação:** Bloquear lock, iniciar accept, esperar entrada, vencer relógio e liberar.
 
-**Preparação:** Open aguarda environment, ainda sem Session, com recursos da factory.
+**Resultado exigido:** Zero bytes; recusa tipada anterior ao efeito; sem consumo indevido do pedido.
 
-**Ação:** shutdown(0,0).
+**Evidência existente:** test_u01_approval_guard_reaches_native_writer_after_lock[deadline]
 
-**Obrigatório observar:** Pools não descartados enquanto abertura puder produzir efeito.
+## AC5-01-02 — Turno muda no write lock
 
-**Semente:** `test_t04_shutdown_retains_executors_while_native_open_is_pending` em `regressoes/test_review4.py`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-## C4T-06 · T04 · C4-03
+**Preparação:** Mesmo caminho, turno 1 ativo.
 
-**Camada:** composição pública+factory+kernel / peer de laboratório. **Estado na auditoria:** `FAIL`.
+**Ação:** Com accept esperando lock, trocar para turno 2 e liberar.
 
-**Preparação:** Open aguarda callback autorizado; shutdown começa/retorna.
+**Resultado exigido:** Nenhuma resposta permissiva de turno 1 atinge turno 2.
 
-**Ação:** Liberar callback depois.
+**Evidência existente:** test_u01_approval_guard_reaches_native_writer_after_lock[turn]
 
-**Obrigatório observar:** start não é alcançado; draining propaga até spawn.
+## AC5-01-03 — Spawn vence dentro do adaptador
 
-**Semente:** `test_t04b_shutdown_fences_pending_environment_before_spawn` em `regressoes/test_review4.py`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-## C4T-07 · T05 · C4-03
+**Preparação:** Runtime/kernel/journal reais; start Codex retido no lock; sentinela em spawn.
 
-**Camada:** composição pública+factory+kernel / peer de laboratório. **Estado na auditoria:** `FAIL`.
+**Ação:** Vencer autorização depois da guarda da thread, liberar lock.
 
-**Preparação:** Prepared validado; binário é modificado no callback environment.
+**Resultado exigido:** Primitiva spawn não chamada; nenhum slot liberado sem resultado conhecido.
 
-**Ação:** Prosseguir open.
+**Evidência existente:** test_u02_spawn_guard_reaches_real_adapter_after_start_lock[deadline]
 
-**Obrigatório observar:** Recusa de drift antes de start; não reaprovar automaticamente.
+## AC5-01-04 — Shutdown enquanto start espera
 
-**Semente:** `test_t05_launch_rechecks_build_after_environment_callback` em `regressoes/test_review4.py`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-## C4T-08 · T06 · C4-05
+**Preparação:** Mesma abertura com prazo ainda válido.
 
-**Camada:** Node real com pacote sintético, não Pi/provider. **Estado na auditoria:** `FAIL`.
+**Ação:** Fazer shutdown público enquanto start espera; liberar lock.
 
-**Preparação:** optionalDependency instalada/hoisted e carregada pelo entrypoint.
+**Resultado exigido:** Nenhum spawn posterior ao fechamento da guarda.
 
-**Ação:** Trocar código helper v1→v2 e executar Node.
+**Evidência existente:** test_u02_spawn_guard_reaches_real_adapter_after_start_lock[shutdown]
 
-**Obrigatório observar:** Saída muda; identidade também muda ou layout é recusado explicitamente sem qualificação falsa.
+## AC5-01-05 — Controle positivo: turno normal
 
-**Semente:** `test_t06_present_production_dependencies_are_covered[optionalDependencies]` em `regressoes/test_review4.py`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** PASS.
 
-## C4T-09 · T06 · C4-05
+**Preparação:** Writer Codex conectado ao DispatchGuards do adapter.
 
-**Camada:** Node real com pacote sintético, não Pi/provider. **Estado na auditoria:** `FAIL`.
+**Ação:** Vencer prazo durante write lock em send_turn normal.
 
-**Preparação:** peerDependency presente e carregada pelo entrypoint.
+**Resultado exigido:** Continua recusando a escrita após C5.
 
-**Ação:** Trocar código helper v1→v2 e executar Node.
+**Evidência existente:** test_control_c4_guarded_turn_refuses_after_real_write_lock
 
-**Obrigatório observar:** Mesmo requisito de cobertura; ausência de digest parcial válido.
+## AC5-01-06 — Input sensível tardio
 
-**Semente:** `test_t06_present_production_dependencies_are_covered[peerDependencies]` em `regressoes/test_review4.py`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-## C4T-10 · T07 · C4-06
+**Preparação:** Pedido de input de turno válido, dados de laboratório.
 
-**Camada:** unitário função real. **Estado na auditoria:** `FAIL`.
+**Ação:** Reter writer e revogar/mudar geração antes de liberar.
 
-**Preparação:** Orçamento32 bytes; único arquivo64 bytes.
+**Resultado exigido:** Não transmitir input; erro sem conteúdo sensível.
 
-**Ação:** Calcular identidade.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Recusar por limite antes de hash integral do arquivo.
+## AC5-01-07 — Negar/interrupt após prazo
 
-**Semente:** `test_t07_manifest_byte_budget_checked_before_reading_last_file` em `regressoes/test_review4.py`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-## C4T-11 · T01 · C4-01
+**Preparação:** Pedido e alvo ainda corretos; prazo vencido.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Enviar deny/cancel/interrupt nas rotas específicas.
 
-**Preparação:** Lease expira com journal fora de serviço.
+**Resultado exigido:** Controle seguro permanece possível; nunca traduzir em accept ou novo turno.
 
-**Ação:** Manter bloqueio além da tolerância.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Contenção entra sem depender de gravação; nenhum receipt falso.
+## AC5-01-08 — Duas operações na mesma thread reutilizada
 
-## C4T-12 · T01 · C4-01
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Preparação:** Duas sessões/identidades com contextos diferentes.
 
-**Preparação:** Close explícito travado; persistência lenta.
+**Ação:** Despachar em sequência e concorrência; uma lança erro.
 
-**Ação:** Atingir prazo de escalada.
+**Resultado exigido:** Guard é por operação, removido em finally e não reutilizado pela outra sessão.
 
-**Obrigatório observar:** Mesma independência de shutdown e lease.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-## C4T-13 · T01 · C4-01
+## AC5-01-09 — Write parcial e flush
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Força agendada com prazo distante.
+**Preparação:** Stdin conta primeira escrita e falha no flush.
 
-**Ação:** Novo shutdown zero antes do despacho.
+**Ação:** Produzir efeito parcial seguido de erro/expiração.
 
-**Obrigatório observar:** Prazo menor é respeitado; não aguarda tarefa velha dormir.
+**Resultado exigido:** OUTCOME_UNKNOWN/possível efeito; nunca not_sent ou reenvio cego.
 
-## C4T-14 · T01 · C4-01
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+## AC5-01-10 — Pi e Claude pós-lock
 
-**Preparação:** Força já emitida e sem parada observada.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Ação:** Solicitar força repetidas vezes.
+**Preparação:** Transportes reais desses adapters com peers, sem provider real.
 
-**Obrigatório observar:** Coalescência limitada; sem pool/fila ilimitada e sem repetir trabalho do agente.
+**Ação:** Aplicar barreiras em seus locks para turn, input e approvals suportados.
 
-## C4T-15 · T01 · C4-01
+**Resultado exigido:** Mesmas regras por rota; features ausentes não anunciadas.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Preparação:** Resposta do backend chega; record_receipt falha.
+## AC5-01-11 — Handshake e janela pré-spawn
 
-**Ação:** Consultar estado e recuperar storage.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Obrigatório observar:** Stop observado e commit são fatos separados; reapresentação coerente.
+**Preparação:** Adapter cria handles/espera inicialização em pontos explícitos.
 
-## C4T-16 · T01 · C4-01
+**Ação:** Bloquear antes da criação e depois da criação, então invalidar.
 
-**Camada:** backend SO. **Estado na auditoria:** `NOT_RUN`.
+**Resultado exigido:** Antes: recusa sem spawn; depois: ownership e contenção, não not_sent global.
 
-**Preparação:** Processo laboratório cria filho; envio e journal travados.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Ação:** Encerrar com força pelo caminho público.
+## AC5-01-12 — Backend de SO
 
-**Obrigatório observar:** Backend físico atinge somente árvore própria; evidência de ownership registrada.
+**Camada:** processo real. **Estado na auditoria:** NOT_RUN.
 
-## C4T-17 · T01 · C4-01
+**Preparação:** Executável inofensivo num SO qualificado e identidade de processo possuído.
 
-**Camada:** backend SO. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Repetir uma corrida no backend real sem depender de provider.
 
-**Preparação:** Sessão attach externa com processo controle.
+**Resultado exigido:** Controle alcança handle correto; nenhum processo externo é afetado.
 
-**Ação:** Shutdown/força solicitada no host.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Detach não mata árvore alheia.
+## AC5-02-01 — Resultado tardio de open cancelado
 
-## C4T-18 · T03 · C4-02
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-**Camada:** adapter real/peer. **Estado na auditoria:** `NOT_RUN`.
+**Preparação:** Start em thread controlada; runtime real; início ainda pendente.
 
-**Preparação:** Pi ou Claude aguarda própria trava de escrita.
+**Ação:** Cancelar chamador, chamar shutdown, liberar retorno tardio, chamar shutdown de novo.
 
-**Ação:** Prazo vence antes de primeira escrita.
+**Resultado exigido:** Retorno consumido e processo/peer contido; registro não perdido.
 
-**Obrigatório observar:** Recusa tardia funciona em cada adapter; teste Codex não é substituto.
+**Evidência existente:** test_u03_cancelled_open_still_supervises_late_native_result
 
-## C4T-19 · T03 · C4-02
+## AC5-02-02 — Cancelamento antes de iniciar worker
 
-**Camada:** adapter real/peer. **Estado na auditoria:** `NOT_RUN`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Approval accept ou input permissivo aguarda lock.
+**Preparação:** Tentativa reservada e unidade enfileirada, sem efeito.
 
-**Ação:** Mudar geração/turno/pedido ou vencer prazo.
+**Ação:** Cancelar espera/encerrar host antes do worker.
 
-**Obrigatório observar:** Não grava autorização antiga no novo turno.
+**Resultado exigido:** Guard impede spawn; liberação só após prova de não execução.
 
-## C4T-20 · T03 · C4-02
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Camada:** adapter real/peer. **Estado na auditoria:** `NOT_RUN`.
+## AC5-02-03 — Cancelamento depois do spawn
 
-**Preparação:** Lease vencida, alvo/ownership ainda válido.
+**Camada:** processo real. **Estado na auditoria:** NOT_RUN.
 
-**Ação:** Enviar deny/cancel/interrupt.
+**Preparação:** Handle de processo de laboratório registrado antes do handshake.
 
-**Obrigatório observar:** Ação de contenção permitida sem abrir novo trabalho.
+**Ação:** Cancelar chamador durante handshake.
 
-## C4T-21 · T03 · C4-02
+**Resultado exigido:** Supervisor independente conserva handle e consegue conter a árvore.
 
-**Camada:** adapter real/peer. **Estado na auditoria:** `NOT_RUN`.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Preparação:** Um write já enviou parte dos bytes.
+## AC5-02-04 — Cancelamentos repetidos
 
-**Ação:** Falhar no restante/flush e repetir mesmo ID.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Obrigatório observar:** OUTCOME_UNKNOWN; não classifica not_sent nem faz segundo efeito.
+**Preparação:** Tentativa com worker e cleanup em voo.
 
-## C4T-22 · T03 · C4-02
+**Ação:** Cancelar o chamador duas vezes e o shutdown uma vez.
 
-**Camada:** concorrência. **Estado na auditoria:** `NOT_RUN`.
+**Resultado exigido:** Nenhum callback órfão; ownership correto; limpeza idempotente.
 
-**Preparação:** Dois pedidos de sessões diferentes com guards diferentes.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Ação:** Alternar espera de lock e revogar só um.
+## AC5-02-05 — Start nunca responde
 
-**Obrigatório observar:** Um guard não sobrescreve o outro; somente pedido válido pode escrever.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-## C4T-23 · T03 · C4-02
+**Preparação:** Thread/peer sem retorno observável.
 
-**Camada:** integração kernel. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Expirar orçamento e solicitar shutdown.
 
-**Preparação:** Guard recusa antes de qualquer write depois de mark_possible_effect.
+**Resultado exigido:** Unknown com recurso retido e limites; nada de duplicar abertura ou declarar parado.
 
-**Ação:** Consultar/repetir recibo.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Registro seguro coerente e sem nova execução.
+## AC5-02-06 — Mesmo ID versus novo ID
 
-## C4T-24 · T03 · C4-02
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Preparação:** Abertura incerta com um slot próprio reservado.
 
-**Preparação:** Thread de dados saturada e guard fechado.
+**Ação:** Repetir ID/hash e tentar outro ID para a mesma sessão.
 
-**Ação:** Disparar força e depois liberar dados.
+**Resultado exigido:** Recibo/reconciliação ou conflito; nunca segundo spawn.
 
-**Obrigatório observar:** Força independente; dados tardios recusados.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-## C4T-25 · T04 · C4-03
+## AC5-02-07 — Disposal após resultado recuperado
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Opening enfileirado ainda não executa.
+**Preparação:** Abertura tardia resolvida, sem outros trabalhos.
 
-**Ação:** Cancelar await e iniciar shutdown.
+**Ação:** Executar shutdown/finalização pública duas vezes.
 
-**Obrigatório observar:** Unidade tardia não dá spawn; registry não perde a tentativa.
+**Resultado exigido:** Pools próprios fecham apenas ao resolver; recursos do host não são fechados.
 
-## C4T-26 · T04 · C4-03
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+## AC5-02-08 — Restart e dados legados
 
-**Preparação:** Spawn pode ter ocorrido antes de cancelar, handle chega tarde.
+**Camada:** recuperação. **Estado na auditoria:** NOT_RUN.
 
-**Ação:** Shutdown retorna orçamento esgotado e depois handle aparece.
+**Preparação:** Journal anterior contém open possivelmente iniciado, sem handle vivo no novo processo.
 
-**Obrigatório observar:** Unknown com slot preservado; contenção do handle próprio quando chega.
+**Ação:** Reabrir e tentar recuperar.
 
-## C4T-27 · T04 · C4-03
+**Resultado exigido:** Não reutilizar PID isolado nem executar de novo; bloquear/reconciliar com evidência de birth/owner.
 
-**Camada:** lifecycle público. **Estado na auditoria:** `NOT_RUN`.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Preparação:** Sem sessões/openings/forças/cleanup/CAS pendentes.
+## AC5-03-01 — Vinte segundos passam a zero
 
-**Ação:** Chamar shutdown duas vezes.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-**Obrigatório observar:** Disposal idempotente; nenhum pool interno remanescente indevido.
+**Preparação:** Close bloqueado; primeira força só agendada para o futuro.
 
-## C4T-28 · T04 · C4-03
+**Ação:** Primeiro shutdown(20,0); depois shutdown(0,0).
 
-**Camada:** lifecycle público. **Estado na auditoria:** `NOT_RUN`.
+**Resultado exigido:** Novo prazo mínimo desperta o scheduler e a força é despachada.
 
-**Preparação:** Ownership desconhecido ainda exige controle.
+**Evidência existente:** test_u04_zero_shutdown_shortens_existing_future_force
 
-**Ação:** Shutdown e final disposal.
+## AC5-03-02 — Expiração antecipa desligamento gracioso
 
-**Obrigatório observar:** Não encerra capacidade indispensável; relatório parcial explícito.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-## C4T-29 · T05 · C4-03
+**Preparação:** Shutdown longo em andamento.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Lease vence antes do prazo de força atual.
 
-**Preparação:** Build muda depois do callback enquanto start está enfileirado.
+**Resultado exigido:** Atualizar para o menor prazo aplicável, sem ampliar tolerância.
 
-**Ação:** Liberar worker.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Recusa drift no limite efetivo, não só na saída do callback.
+## AC5-03-03 — Prazo posterior não posterga
 
-## C4T-30 · T05 · C4-03
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Preparação:** Força agendada urgente.
 
-**Preparação:** Node/script/root/refs de config mudam separadamente depois do prepare.
+**Ação:** Chega pedido com prazo maior.
 
-**Ação:** Tentar iniciar sem novo prepare/escopo.
+**Resultado exigido:** Prazo existente não aumenta.
 
-**Obrigatório observar:** Mudança detectada; erros prescritivos, sem reaprovação silenciosa.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-## C4T-31 · T04,T05 · C4-03
+## AC5-03-04 — Muitos pedidos para mesma sessão
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Hash/verify de arquivos está lento e existe shutdown concorrente.
+**Preparação:** Força ainda aguardando ou já despachada.
 
-**Ação:** Fechar host antes de verify acabar.
+**Ação:** Concorrer shutdown, revogação e close.
 
-**Obrigatório observar:** Verificação não prende loop/força; resultado tardio não reabre guard.
+**Resultado exigido:** Uma tentativa lógica coalescida; não cancelar backend já iniciado.
 
-## C4T-32 · T02 · C4-04
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Camada:** journal real/fault points. **Estado na auditoria:** `NOT_RUN`.
+## AC5-03-05 — Journal e observers presos
 
-**Preparação:** Erro antes de fila, depois de fila, antes do commit, depois do commit.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Ação:** Renew/revoke em cada ponto.
+**Preparação:** Saturar observers e reter admit/receipt.
 
-**Obrigatório observar:** Classificação por prova, não tipo genérico de exceção; nenhum busy eterno seguro.
+**Ação:** Antecipar uma força.
 
-## C4T-33 · T02 · C4-04
+**Resultado exigido:** Força não espera esses recursos; sem afirmação de receipt durável inexistente.
 
-**Camada:** journal real/fault points. **Estado na auditoria:** `NOT_RUN`.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Preparação:** Await cancelado após admissão do CAS.
+## AC5-03-06 — Stop observado e alvo externo
 
-**Ação:** Deixar unidade commit e consultar estado.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Obrigatório observar:** Contexto aplica só quando permitido; tarefa rastreada; não supor rollback.
+**Preparação:** Uma sessão própria parada e uma attach externa.
 
-## C4T-34 · T02 · C4-04
+**Ação:** Pedir antecipação/força repetida.
 
-**Camada:** concorrência. **Estado na auditoria:** `NOT_RUN`.
+**Resultado exigido:** Nada executado na parada; attach somente desconecta; guardas de owner/generation intactas.
 
-**Preparação:** Callback de tentativa antiga retido; outra tentativa possui token novo.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Ação:** Liberar callback antigo.
+## AC5-04-01 — Revogação com confirmação perdida
 
-**Obrigatório observar:** Não limpa nem aplica contexto da reserva nova.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-## C4T-35 · T02 · C4-04
+**Preparação:** SQLiteJournal real com erro explicitamente pós-commit.
 
-**Camada:** concorrência. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Revogar, provar durable.revoked e tentar submit no contexto anterior.
 
-**Preparação:** Renew pendente, seguido por fence de revogação/draining.
+**Resultado exigido:** Sem send_turn; memória cercada/reconciliada com row durável.
 
-**Ação:** Commit tardio do renew.
+**Evidência existente:** test_u06_ambiguous_revoke_blocks_work_and_reconciles_committed_lease
 
-**Obrigatório observar:** Não reabre concessão de trabalho nem restaura permissions removidas.
+## AC5-04-02 — Falha comprovada pré-entrega
 
-## C4T-36 · T02 · C4-04
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Camada:** fault injection. **Estado na auditoria:** `NOT_RUN`.
+**Preparação:** Journal devolve erro tipado com evidência de não entrega.
 
-**Preparação:** CAS falha e leitura de reconciliação também falha.
+**Ação:** Falhar uma tentativa e repetir operação válida.
 
-**Ação:** Expirar lease e pedir força.
+**Resultado exigido:** Reserva correta liberada; regressão T02 não volta.
 
-**Obrigatório observar:** Unknown explícito e contenção independente; erro não vira sucesso.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-## C4T-37 · T06 · C4-05
+## AC5-04-03 — Rollback comprovado
 
-**Camada:** Node/layout. **Estado na auditoria:** `NOT_RUN`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Optional ausente, depois instalada; peer opcional ausente.
+**Preparação:** Transação falha e backend comprova rollback, sem trabalho durável restante.
 
-**Ação:** Calcular e executar layouts suportados.
+**Ação:** Consultar/finalizar tentativa e iniciar próxima.
 
-**Obrigatório observar:** Ausência normal documentada; presença relevante altera identidade.
+**Resultado exigido:** Recuperação permitida conforme prova, não pela classe genérica Exception.
 
-## C4T-38 · T06 · C4-05
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Camada:** Node/layout. **Estado na auditoria:** `NOT_RUN`.
+## AC5-04-04 — Renovação ambígua
 
-**Preparação:** Duas dependências resolvem versões distintas do mesmo nome.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Ação:** Modificar só uma versão.
+**Preparação:** CAS aceito, confirmação perdida; old lease tem prazo menor.
 
-**Obrigatório observar:** Topologia preservada; digest não colide por prefixo deps/name.
+**Ação:** Tentar consumir permissões/prazo novos.
 
-## C4T-39 · T06 · C4-05
+**Resultado exigido:** Não expandir antes de conciliar; old prazo/hold conservador e força preservados.
 
-**Camada:** Node/layout. **Estado na auditoria:** `NOT_RUN`.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Preparação:** Instalação idêntica copiada para outra pasta; irmão irrelevante adicionado.
+## AC5-04-05 — Callback antigo versus tentativa nova
 
-**Ação:** Comparar build e binding.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Obrigatório observar:** Build igual; binding físico diferente; irmão irrelevante fora do conjunto.
+**Preparação:** Tokens de tentativas diferentes; resposta atrasada anterior.
 
-## C4T-40 · T06 · C4-05
+**Ação:** Entregar resposta antiga após conclusão/cancelamento lógico.
 
-**Camada:** layout/security. **Estado na auditoria:** `NOT_RUN`.
+**Resultado exigido:** Callback não limpa nem aplica reserva de token diferente.
 
-**Preparação:** Symlink/reparse sai da raiz; nome inválido com traversal.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Ação:** Tentar qualificar.
+## AC5-04-06 — Commit ainda pendente e leitura antiga
 
-**Obrigatório observar:** Rejeição antes de ler conteúdo externo ou execução.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-## C4T-41 · T06 · C4-05
+**Preparação:** Worker retido antes do commit; leitura vê row antigo.
 
-**Camada:** migração. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Timeout/cancelamento; consultar row; liberar worker depois.
 
-**Preparação:** Candidato antigo com algoritmo v2 parcial salvo.
+**Resultado exigido:** Leitura antiga isolada não comprova que commit futuro é impossível.
 
-**Ação:** Carregar após nova versão.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Não qualifica por fallback silencioso; histórico preservado e reprepare exigido.
+## AC5-04-07 — Leitura de reconciliação também falha
 
-## C4T-42 · T06 · C4-05
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Camada:** provider real. **Estado na auditoria:** `NOT_RUN`.
+**Preparação:** Resultado CAS incerto e storage indisponível.
 
-**Preparação:** Pi do build efetivamente suportado, com paths e env aprovados.
+**Ação:** Tentar trabalho e contenção.
 
-**Ação:** Calcular hash, iniciar e executar fluxo qualificado.
+**Resultado exigido:** Work permanece cercado; contenção independente; recurso e evidência limitados.
 
-**Obrigatório observar:** Digest/versão/capacidades e limites registrados; sem alegar todos layouts.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-## C4T-43 · T07 · C4-06
+## AC5-04-08 — Segundo Journal conforme port
 
-**Camada:** unitário. **Estado na auditoria:** `NOT_RUN`.
+**Camada:** contrato. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Tamanho exato, +1, múltiplos arquivos cuja soma excede no último.
+**Preparação:** Implementação de contrato não baseada em SQLiteJournal.
 
-**Ação:** Calcular com caps reduzidos e spy de leitura.
+**Ação:** Executar sucesso, erro pré-entrega e ack pós-commit.
 
-**Obrigatório observar:** Exato permitido; excedente recusado antes do read além do orçamento.
+**Resultado exigido:** Runtime usa o contrato público, sem inferência por isinstance ou internals.
 
-## C4T-44 · T07 · C4-06
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Camada:** fault injection filesystem. **Estado na auditoria:** `NOT_RUN`.
+## AC5-05-01 — CLI Pi muda no callback
 
-**Preparação:** Arquivo cresce entre stat e leitura.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-**Ação:** Continuar streaming.
+**Preparação:** Node+CLI válidos e prepared real.
 
-**Obrigatório observar:** Contador real interrompe; não ultrapassa cap silenciosamente.
+**Ação:** Alterar CLI existente no callback de ambiente.
 
-## C4T-45 · T07 · C4-06
+**Resultado exigido:** Recusar antes de start com PROFILE_DRIFT ou equivalente estável.
 
-**Camada:** unitário filesystem. **Estado na auditoria:** `NOT_RUN`.
+**Evidência existente:** test_u05_pi_launch_revalidates_non_node_artifacts[cli]
 
-**Preparação:** Muitos diretórios vazios/profundidade com limites pequenos.
+## AC5-05-02 — Dependência Pi muda no callback
 
-**Ação:** Enumerar pacote.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-**Obrigatório observar:** Travessia limitada sem materializar todo rglob/sort primeiro.
+**Preparação:** Closure de build contém dep/index.js.
 
-## C4T-46 · T07 · C4-06
+**Ação:** Alterar dep mantendo Node, package.json e cwd.
 
-**Camada:** backend filesystem. **Estado na auditoria:** `NOT_RUN`.
+**Resultado exigido:** Mesmo bloqueio, não apenas validação de argv[0].
 
-**Preparação:** FIFO/device/loop link em árvore selecionada.
+**Evidência existente:** test_u05_pi_launch_revalidates_non_node_artifacts[dependency]
 
-**Ação:** Preparar build.
+## AC5-05-03 — Mudança depois de hash e durante fila
 
-**Obrigatório observar:** Recusa antes de read bloqueante; limitação por SO documentada.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-## C4T-47 · T07 · C4-06
+**Preparação:** Seal produzido; operação espera thread/start lock.
 
-**Camada:** concorrência. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Alterar artefato selecionado e liberar.
 
-**Preparação:** Scans lentos, await cancelado repetidamente.
+**Resultado exigido:** Recusar atualização detectável antes do efeito, sem requalificação silenciosa.
 
-**Ação:** Repetir discovery/prepare e observar recursos.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** Filas/workers limitados; controle/loop responsivos.
+## AC5-05-04 — Relações opcionais e peer
 
-## C4T-48 · TODOS · C4-07
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Camada:** regressão. **Estado na auditoria:** `NOT_RUN`.
+**Preparação:** Manifesto aprovado registra presença/ausência e topologia.
 
-**Preparação:** C2/C3 mantidos e fixtures válidas.
+**Ação:** Instalar/remover uma dependência efetiva após prepare.
 
-**Ação:** Executar antes e depois.
+**Resultado exigido:** Seal inválido; escopo não passa pelo digest antigo.
 
-**Obrigatório observar:** Nenhuma invariância relaxada; skips por camada identificados.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-## C4T-49 · TODOS · C4-07
+## AC5-05-05 — Mudança legítima no projeto
 
-**Camada:** wheel isolado. **Estado na auditoria:** `NOT_RUN`.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Wheel instalado fora da fonte com dependências declaradas.
+**Preparação:** Build e identidade da raiz permanecem; arquivo comum do workspace muda.
 
-**Ação:** Executar API/embedded/remote com -I.
+**Ação:** Abrir com o mesmo contexto e perfil autorizado.
 
-**Obrigatório observar:** Sem import privado pelo consumidor e mesmo hash de wheel.
+**Resultado exigido:** Não confundir conteúdo livre do projeto com troca do runtime; política explícita.
 
-## C4T-50 · TODOS · C4-07
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Camada:** combinado. **Estado na auditoria:** `NOT_RUN`.
+## AC5-05-06 — Custo e limites da verificação
 
-**Preparação:** Storage retido + open em callback + observer saturado.
+**Camada:** carga controlada. **Estado na auditoria:** NOT_RUN.
 
-**Ação:** Shutdown e retorno tardio das etapas.
+**Preparação:** Closure próximo dos limites declarados.
 
-**Obrigatório observar:** Sem spawn novo após draining; força disponível para ownership já existente.
+**Ação:** Verificar com timers/força ativos e fila saturada.
 
-## C4T-51 · TODOS · C4-07
+**Resultado exigido:** I/O pesado fora do loop, worker limitado; prova de pré-spawn sem pausa ilimitada.
 
-**Camada:** migração. **Estado na auditoria:** `NOT_RUN`.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Preparação:** Journal real da versão de entrada com receipts/unknown.
+## AC5-06-01 — Diretório largo
 
-**Ação:** Upgrade interrompido e retomado em pontos controlados.
+**Camada:** unit/fault-injection. **Estado na auditoria:** FAIL.
 
-**Obrigatório observar:** Dados preservados; falha de migração não concede replay.
+**Preparação:** 1.000 arquivos reais; limite=4; contador na enumeração.
 
-## C4T-52 · TODOS · C4-07
+**Ação:** Iniciar scanner.
 
-**Camada:** dois hosts reais E2. **Estado na auditoria:** `NOT_RUN`.
+**Resultado exigido:** Recusar até observar a entrada excedente; não materializar os 1.000 nomes.
 
-**Preparação:** Server local e remoto Connector usando mesmo wheel.
+**Evidência existente:** test_u07_directory_scan_enforces_budget_during_enumeration
 
-**Ação:** Abrir/interrupt/stop, perder conexão e recuperar.
+## AC5-06-02 — Muitos diretórios vazios
 
-**Obrigatório observar:** MCP HTTP direto, consumo exclusivo e resultado incerto preservados.
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
 
-## C4T-53 · TODOS · C4-07
+**Preparação:** Limite independente de diretórios/metadados.
 
-**Camada:** qualificação de release. **Estado na auditoria:** `NOT_RUN`.
+**Ação:** Enumerar árvore sem arquivos.
 
-**Preparação:** Resultados das demais camadas coletados.
+**Resultado exigido:** Limite aplica durante travessia; ausência de arquivos não remove o cap.
 
-**Ação:** Preencher decisão E0/E1/E2/E3 e manifesto.
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
 
-**Obrigatório observar:** E1 exige backend real do escopo; E2/E3 não inferidos de smoke.
+## AC5-06-03 — Ordem determinística dentro do cap
+
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** Mesmo conteúdo em ordens de criação diferentes.
+
+**Ação:** Gerar manifesto em hosts/caminhos distintos.
+
+**Resultado exigido:** Ordenação da coleção já limitada produz identidade portátil estável.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
+
+## AC5-06-04 — Symlink e especiais
+
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** Links internos/externos, ciclo e FIFO de laboratório.
+
+**Ação:** Enumerar layout conforme política.
+
+**Resultado exigido:** Escapes/especiais recusados sem leitura bloqueante; ciclo/depth contabilizados.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
+
+## AC5-06-05 — Cancelamento de varredura
+
+**Camada:** unit/fault-injection. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** Budget cancelável com trabalho em worker.
+
+**Ação:** Cancelar chamador e repetir scans sob cap de concorrência.
+
+**Resultado exigido:** Sem fila/threads ilimitadas; unidade finalizada/retida de modo rastreável.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
+
+## AC5-07-01 — Wheel e sdist
+
+**Camada:** empacotamento. **Estado na auditoria:** PASS.
+
+**Preparação:** Cópia do snapshot, setuptools e deps identificadas.
+
+**Ação:** Gerar artefatos sem alterar árvore auditada.
+
+**Resultado exigido:** Artefatos válidos com SHA; não confundir build backend com qualificação de release normalizada.
+
+**Evidência existente:** build_result.json/build.log
+
+## AC5-07-02 — Consumidores externos
+
+**Camada:** contrato. **Estado na auditoria:** PASS.
+
+**Preparação:** Wheel instalado fora do checkout; subprocessos -I.
+
+**Ação:** Executar embedded e remote sintéticos.
+
+**Resultado exigido:** Import público e contrato passam com mesmo wheel; não equivale a dois hosts reais.
+
+**Evidência existente:** installed_smoke.json
+
+## AC5-07-03 — MCP HTTP direto preservado
+
+**Camada:** integração. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** Catálogo/imports/configuração e integrações do escopo.
+
+**Ação:** Revisar e executar fluxo MCP entre harness e Server.
+
+**Resultado exigido:** Core/Connector não implementam proxy ou serviço MCP; stdio nativo preservado.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
+
+## AC5-07-04 — Backend do SO e provider
+
+**Camada:** plataforma/provider. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** SO e versões realmente declarados qualificados.
+
+**Ação:** Executar guardas, cancelamentos e teardown com processos/provider reais.
+
+**Resultado exigido:** XML/logs distinguem peer de provider; nenhum skip concede PASS.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
+
+## AC5-07-05 — E2 de verdade
+
+**Camada:** multi-host. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** Server local sem Connector e duas máquinas para remoto.
+
+**Ação:** Mesmo wheel em ambos; interrupção, desconexão, replay e MCP direto.
+
+**Resultado exigido:** E2 apenas se evidenciado; ausência dos hosts vira BLOCKED.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
+
+## AC5-07-06 — Matriz rastreável
+
+**Camada:** documental. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** C4T-13/18/19/21/25/26/30/32/33/36/45 e U01–U07.
+
+**Ação:** Revisar evidência exata de cada PASS.
+
+**Resultado exigido:** Código lido e teste de outra rota não são teste executado do requisito.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.
+
+## AC5-07-07 — Migração e decisão
+
+**Camada:** migração. **Estado na auditoria:** NOT_RUN.
+
+**Preparação:** Journal/API/contratos antigos e alterações C5.
+
+**Ação:** Testar upgrade, casos incertos, repetir conformance e emitir decisão.
+
+**Resultado exigido:** Sem reset de IDs/hashes/capabilities; E1 limitado, E2/E3 não inferidos.
+
+**Evidência existente:** Não executado nesta auditoria; o agente deve anexar nodes, comando e resultado.

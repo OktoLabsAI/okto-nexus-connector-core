@@ -309,24 +309,49 @@ class CopiedAdapterSession:
         permissive = outcome not in {
             "decline", "deny", "denied", "reject", "refuse", "cancel"}
         fence = getattr(self, "effect_fence", None)
+        guards = getattr(self._connector, "_dispatch_guards", None)
+
+        def _correlation_still_valid() -> bool:
+            if self._close_started or self._active_operation_id is None:
+                return False
+            if method in {"item/commandExecution/requestApproval",
+                          "item/fileChange/requestApproval", *INPUT_METHODS}:
+                if (not isinstance(params, dict) or
+                        params.get("turnId") != self._active_turn_id):
+                    return False
+            return True
+
+        def _frontier_check() -> None:
+            """C5/U01: the guard consulted by the TRANSPORT WRITER after
+            its lock wait - deadline/revocation via the fence PLUS the
+            request/turn correlation, so an answer authorized for turn 1
+            can never reach the wire after turn 2 took over."""
+            if permissive and fence is not None:
+                fence.check("approval_reply")
+            if not _correlation_still_valid():
+                raise RuntimeCommandNotSent(
+                    "native approval turn is not active", code="STALE_TURN")
+
         if permissive and fence is not None:
             fence.check("approval_reply")
 
         def _guarded_reply():
             if permissive and fence is not None:
                 fence.check("approval_reply")
-            # Correlation revalidation at the write frontier: a late worker
-            # must not answer an already-superseded request/turn.
-            if self._close_started or self._active_operation_id is None:
+            if not _correlation_still_valid():
                 raise RuntimeCommandNotSent(
                     "native approval turn is not active", code="STALE_TURN")
-            if method in {"item/commandExecution/requestApproval",
-                          "item/fileChange/requestApproval", *INPUT_METHODS}:
-                if (not isinstance(params, dict) or
-                        params.get("turnId") != self._active_turn_id):
-                    raise RuntimeCommandNotSent(
-                        "native approval turn changed", code="STALE_TURN")
-            return reply(self._session.session_id, projected, outcome)
+            # C5/U01: install the thread-scoped guard so the WRITER
+            # re-validates after its own lock wait, immediately before
+            # the first byte; removed in finally so nothing leaks to a
+            # later operation on the same worker thread.
+            if guards is not None:
+                guards.set(_frontier_check)
+            try:
+                return reply(self._session.session_id, projected, outcome)
+            finally:
+                if guards is not None:
+                    guards.clear()
 
         await asyncio.to_thread(_guarded_reply)
 
@@ -545,13 +570,28 @@ class CopiedAdapterFactory:
                 raise CoreError("RUNTIME_DRAINING", stage, retry_safe=True)
 
         def _launch_signature() -> tuple:
-            """C4/T05: cheap stat snapshot (size, mtime_ns) of the launch
-            artifacts, taken before the callbacks and re-verified at every
-            launch frontier. A full content hash already ran at prepare;
-            this closes the callback window for real modifications. The
-            residual window (a same-size, same-mtime rewrite) is declared,
-            not claimed atomic."""
+            """C4/T05 + C5/U05: stat seal over the REAL artifact set of
+            this launch, taken before the callbacks and re-verified at
+            every frontier. For single-binary adapters that is argv[0]+
+            cwd; for the Pi pair it is Node + CLI + the full declared
+            dependency closure (stat-only walk with the identity's caps)
+            - argv[0] is Node and proves nothing about the CLI or the
+            dependencies. Residual same-stat window declared, not atomic."""
             import os
+            launch_script = getattr(prepared.candidate, "launch_script",
+                                    None)
+            if (launch_script and
+                    prepared.candidate.adapter_id == "pi_rpc"):
+                from ..build_identity import launch_artifact_signature
+                signature = [launch_artifact_signature(
+                    prepared.argv[0], launch_script)]
+                for target in (prepared.cwd,):
+                    try:
+                        info = os.stat(target)
+                        signature.append((info.st_size, info.st_mtime_ns))
+                    except OSError:
+                        signature.append(None)
+                return tuple(signature)
             signature = []
             for target in (prepared.argv[0], prepared.cwd):
                 try:
@@ -656,6 +696,13 @@ class CopiedAdapterFactory:
         redactor = NativeSecretRedactor(secrets)
         _revalidate_launch("launch")
         _revalidate_content("launch", content_snapshot)
+        # C5/U02: the guard travels WITH the connector so the native
+        # creator itself re-validates after its OWN internal waits (start
+        # locks, bootstrap steps) - the last memory-only checkpoint
+        # before the spawn primitive. The content seal stays at the
+        # queue/thread frontiers; this callable is tiny and I/O-free.
+        if hasattr(connector, "_launch_guard") or True:
+            connector._launch_guard = _revalidate_launch
         try:
             start_kwargs = {"owning_agent_id": context.agent_id}
             if resume_grant is not None:

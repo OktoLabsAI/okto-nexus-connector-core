@@ -707,6 +707,12 @@ class CodexAppServerConnector:
             if self._early_event_failed:
                 raise EarlyEventLimitExceeded("early_event_limit_exceeded")
             if self._transport is None:
+                # C5/U02: re-validate AFTER the start-lock wait and
+                # immediately before the spawn primitive - the last
+                # memory-only checkpoint inside the adapter.
+                launch_guard = getattr(self, "_launch_guard", None)
+                if launch_guard is not None:
+                    launch_guard("codex_start")
                 self._spawn_and_initialize()
             self._thread_start_attempts += 1
 

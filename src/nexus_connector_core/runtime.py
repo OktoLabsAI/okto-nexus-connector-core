@@ -126,6 +126,12 @@ class _Session:
     force_task: asyncio.Task[None] | None = None
     force_started: asyncio.Event = field(default_factory=asyncio.Event)
     force_requested: bool = False
+    # C5/U04: scheduled-force coordination - the effective deadline is
+    # the MINIMUM of every authorized request; a WAITING worker re-reads
+    # it on wake and is never cancelled once physically DISPATCHING.
+    force_deadline: float | None = None
+    force_awake: asyncio.Event | None = None
+    force_dispatched: bool = False
     closing: bool = False
     closed: bool = False
     faulted: bool = False
@@ -205,14 +211,20 @@ class _OpeningGuard:
 
 
 class _OpeningAttempt:
-    """Traceable pending-open record (C4-03.01): completion event plus
-    the draining guard, owned by the runtime and fenced by shutdown."""
+    """Traceable pending-open record (C4-03.01 + C5/U03): completion
+    event, draining guard AND the native producer task - a cancelled
+    caller never abandons the Future that may still return a live
+    handle; the runtime supervises and contains it."""
 
-    __slots__ = ("finished", "guard")
+    __slots__ = ("finished", "guard", "native_task", "operation_id",
+                 "slot_reserved")
 
     def __init__(self) -> None:
         self.finished = asyncio.Event()
         self.guard = _OpeningGuard()
+        self.native_task: "asyncio.Task | None" = None
+        self.operation_id: str | None = None
+        self.slot_reserved = False
 
 
 class LocalRuntimeCore:
@@ -428,10 +440,26 @@ class LocalRuntimeCore:
                                 code=exc.code) from exc
                         raise
                     slot_reserved = True
-                try:
-                    native = await self._native_factory.open(
+                    attempt.operation_id = operation.operation_id
+                    attempt.slot_reserved = True
+                # C5/U03: the producer runs as its OWN task and the
+                # attempt owns it - a cancelled caller stops waiting but
+                # the Future (and any live handle it returns) stays
+                # supervised by the runtime, never abandoned.
+                open_task = asyncio.ensure_future(
+                    self._native_factory.open(
                         prepared, operation.session_id, context,
-                        **open_kwargs)
+                        **open_kwargs))
+                attempt.native_task = open_task
+                try:
+                    native = await asyncio.shield(open_task)
+                except asyncio.CancelledError:
+                    loop = asyncio.get_running_loop()
+                    open_task.add_done_callback(
+                        lambda done, _key=session_key, _attempt=attempt:
+                        loop.call_soon(self._consume_late_open, _key,
+                                       _attempt, done))
+                    raise
                 except EffectNotSent:
                     if slot_reserved:
                         await self._owned_slots.release_owned_slot(
@@ -1064,33 +1092,61 @@ class LocalRuntimeCore:
                         *, immediate: bool = False) -> None:
         # Attach is somebody else's process. Only a Core-owned managed backend
         # may expose this independent containment primitive.
-        if (binding.adapter_id == "claude_attach" or binding.force_requested or
+        if (binding.adapter_id == "claude_attach" or binding.force_dispatched or
                 not callable(getattr(binding.native, "force_stop", None))):
             return
         if binding.force_task is not None and not binding.force_task.done():
-            # A force task that already started its physical request is
-            # never cancelled: its durable receipt must land (PC01 ordering).
-            # A tighter deadline only replaces a task that has not run yet,
-            # which cannot happen once scheduled - so keep the running one.
+            # C5/U04: a WAITING worker exists - tighten to the MINIMUM
+            # deadline and WAKE it (immediate == now). A worker already
+            # DISPATCHING is never touched: the physical request in
+            # flight is not cancelled to fake rescheduling.
+            if deadline < (binding.force_deadline
+                           if binding.force_deadline is not None
+                           else deadline):
+                binding.force_deadline = deadline
+            if binding.force_awake is not None:
+                binding.force_awake.set()
             return
-        if binding.force_task is None or binding.force_task.done():
-            binding.force_started = asyncio.Event()
-            binding.force_task = asyncio.create_task(
-                self._force_after_deadline(session, binding, deadline,
-                                           binding.force_started))
+        binding.force_deadline = deadline
+        binding.force_awake = asyncio.Event()
+        binding.force_started = asyncio.Event()
+        binding.force_task = asyncio.create_task(
+            self._force_after_deadline(session, binding,
+                                       binding.force_started))
 
     async def _force_after_deadline(self, session: SessionKey,
                                     binding: _Session,
-                                    deadline: float,
                                     started: asyncio.Event) -> None:
+        """WAITING worker for one session's emergency force (C5/U04).
+
+        Waits on the wake Event with the CURRENT minimum deadline as the
+        timeout - a later, more urgent request tightens
+        ``binding.force_deadline`` and wakes the worker instead of
+        sleeping to a stale far deadline. Once DISPATCHING, the physical
+        request is never cancelled.
+        """
         try:
-            await asyncio.sleep(max(0.0, deadline -
-                                    asyncio.get_running_loop().time()))
+            loop = asyncio.get_running_loop()
+            while not binding.closed:
+                deadline = binding.force_deadline
+                if deadline is None:
+                    await binding.force_awake.wait()
+                    continue
+                now = loop.time()
+                if now >= deadline:
+                    break
+                try:
+                    await asyncio.wait_for(binding.force_awake.wait(),
+                                           timeout=deadline - now)
+                except (asyncio.TimeoutError, TimeoutError):
+                    break  # the (possibly tightened) deadline arrived
+                # woken: the deadline changed - re-read it
             if binding.closed:
                 return
             force_stop = getattr(binding.native, "force_stop", None)
             if not callable(force_stop):
                 return
+            binding.force_dispatched = True
             binding.force_requested = True
             started.set()
             # C4/T01: the PHYSICAL force is dispatched FIRST; the durable
@@ -1266,6 +1322,8 @@ class LocalRuntimeCore:
             binding.closed = True
             if binding.lease_task is not None and binding.lease_task is not asyncio.current_task():
                 binding.lease_task.cancel()
+            if binding.force_awake is not None:
+                binding.force_awake.set()  # release a WAITING worker
             self._schedule_eviction(session, binding)
             if binding.force_requested and reported != "forced":
                 return "unknown"
@@ -1416,18 +1474,16 @@ class LocalRuntimeCore:
                                 session, binding, context, revoke=False))
                             raise
                         except BaseException:
-                            # C4/T02: the journal CAS is ONE atomic sqlite
-                            # transaction - an error from the completed unit
-                            # PROVES nothing committed (rollback), so this
-                            # attempt finalizes safely and a retry may
-                            # proceed once storage recovers. Enqueue refusals
-                            # (JOURNAL_FULL before any delivery) are the
-                            # trivial case of the same proof. Never cleared
-                            # in a `finally`: only on this evidenced path,
-                            # leaving accepted-but-unawaited units (late
-                            # commit) correctly reserved.
-                            if cas.done():
-                                binding.lease_cas_pending = False
+                            # C5/U06: reconcile against the durable record
+                            # before touching the reservation - a Future
+                            # that finished with an exception proves
+                            # nothing about the commit (the port allows
+                            # confirmation loss after the write). Pre-
+                            # delivery refusals resolve here as "no row
+                            # change"; a committed revocation closes the
+                            # fences immediately.
+                            await self._reconcile_cas_error(
+                                session, binding, context, revoke=False)
                             raise
                         async with self._lock:
                             binding.lease_cas_pending = False
@@ -1445,6 +1501,127 @@ class LocalRuntimeCore:
         snapshot = await self.inspect(session)
         await self._lease_event(session, binding, "core.lease_renewed", {})
         return snapshot
+
+    async def _reconcile_cas_error(self, session: SessionKey,
+                                    binding: _Session,
+                                    context: ExecutionContext, *,
+                                    revoke: bool) -> None:
+        """Reconcile a CAS error against the DURABLE record (C5/U06).
+
+        A completed-with-exception Future proves nothing about the
+        commit: the public port allows confirmation loss AFTER the
+        durable write. The reservation is only finalized on a proven
+        outcome read from storage; a revoked row closes the in-memory
+        fences immediately (no work may flow under the old context);
+        an unreadable store keeps the conservative BUSY hold - with
+        containment unaffected either way.
+        """
+        try:
+            lease = await self._journal.get_session_lease(session)
+        except Exception:
+            return  # conservative hold; retry after storage recovers
+        if lease is None:
+            # No durable row exists: this CAS never committed.
+            binding.lease_cas_pending = False
+            return
+        if lease.revoked:
+            if self._sessions.get(session) is binding:
+                binding.context = replace(
+                    binding.context,
+                    lease_deadline_monotonic=self._clock.monotonic(),
+                    allowed_actions=frozenset())
+                binding.lease_expired = True
+                binding.revoked = True
+            binding.lease_cas_pending = False
+            return
+        if (not revoke and
+                lease.authorization_revision == context.authorization_revision
+                and lease.connection_generation == context.connection_generation
+                and self._sessions.get(session) is binding and
+                not (binding.closed or binding.closing or binding.revoked)):
+            # The renewal DID commit before the confirmation was lost.
+            binding.context = context
+            binding.lease_expired = False
+        binding.lease_cas_pending = False
+
+    def _consume_late_open(self, session: SessionKey,
+                           attempt: _OpeningAttempt,
+                           task: "asyncio.Task") -> None:
+        """Consume a cancelled open's native producer result (C5/U03).
+
+        Runs on the loop when the producer task completes - independent
+        of the caller that stopped waiting. A producer error left no
+        handle (the factory closes its own half-spawned resources); a
+        returned native session is CONTAINED by the runtime: ownership
+        is never assumed from an operation whose caller already
+        received an unknown outcome, and never abandoned either.
+        """
+        if task.cancelled():
+            attempt.finished.set()
+            return
+        exc = task.exception()
+        if exc is not None:
+            # No handle was produced; the conservative uncertain-open
+            # retention stays (the receipt already recorded unknown).
+            attempt.finished.set()
+            return
+        native = task.result()
+        if native is None:
+            attempt.finished.set()
+            return
+        supervisor = asyncio.create_task(
+            self._contain_late_open(session, attempt, native))
+        self._cleanup_tasks.add(supervisor)
+        supervisor.add_done_callback(self._cleanup_tasks.discard)
+
+    async def _contain_late_open(self, session: SessionKey,
+                                 attempt: _OpeningAttempt,
+                                 native) -> None:
+        """Contain a live handle returned after its open was cancelled."""
+        try:
+            if self._sessions.get(session) is not None:
+                # A live binding owns this scope now; never fight it.
+                attempt.finished.set()
+                return
+            contained = False
+            close = getattr(native, "close", None)
+            if callable(close):
+                try:
+                    await close()
+                except BaseException:
+                    pass
+            try:
+                state, _ = await native.observe()
+            except Exception:
+                state = "UNKNOWN"
+            if state != "STOPPED":
+                force = getattr(native, "force_stop", None)
+                if callable(force):
+                    try:
+                        await force()
+                    except BaseException:
+                        pass
+                    try:
+                        state, _ = await native.observe()
+                    except Exception:
+                        state = "UNKNOWN"
+            contained = state == "STOPPED"
+            if contained:
+                if attempt.slot_reserved and attempt.operation_id:
+                    try:
+                        await self._owned_slots.release_owned_slot(
+                            OperationKey(session.server_id,
+                                         session.executor_id,
+                                         attempt.operation_id),
+                            session.session_id)
+                    except CoreError:
+                        pass
+                self._uncertain_opens.discard(session)
+            attempt.finished.set()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            attempt.finished.set()
 
     def _late_cas_applier(self, session: SessionKey, binding: _Session,
                           context: ExecutionContext, *, revoke: bool):
@@ -1545,12 +1722,11 @@ class LocalRuntimeCore:
                                 session, binding, context, revoke=True))
                             raise
                         except BaseException:
-                            # C4/T02: same evidenced finalization as the
-                            # renewal path - the atomic-transaction proof
-                            # releases the reservation; accepted-but-unwaited
-                            # units keep theirs for the late applier.
-                            if cas.done():
-                                binding.lease_cas_pending = False
+                            # C5/U06: same durable reconciliation as the
+                            # renewal path - never infer rollback from the
+                            # failed Future; a committed revocation applies.
+                            await self._reconcile_cas_error(
+                                session, binding, context, revoke=True)
                             raise
                         async with self._lock:
                             binding.lease_cas_pending = False
@@ -1724,6 +1900,8 @@ class LocalRuntimeCore:
             if (binding.lease_task is not None and
                     binding.lease_task is not asyncio.current_task()):
                 binding.lease_task.cancel()
+            if binding.force_awake is not None:
+                binding.force_awake.set()  # release a WAITING worker
             self._schedule_eviction(session, binding)
             if binding.force_requested and reported != "forced":
                 return "unknown"

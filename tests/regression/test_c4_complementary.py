@@ -92,42 +92,50 @@ def test_c4t50_storage_retained_close_blocked_force_still_dispatched(
     asyncio.run(run())
 
 
-def report_unknown(runtime, key):
-    return True  # outcome asserted via force dispatch above
-
-
 def test_c4t13_zero_shutdown_shortens_scheduled_force_deadline(tmp_path):
-    """C4T-13: a scheduled far-future force is re-deadlined by a zero
-    shutdown; the dispatch does not wait for the old sleep."""
+    """C4T-13 rewritten per C5-03.06: a force genuinely scheduled for a
+    FAR deadline (first shutdown, long budget) is ANTICIPATED by a later
+    zero-budget shutdown - two real requests with barriers, no tautology.
+    """
+    from tests.regression.test_c5_audit import _CloseBlockedForceNative
+
     clock = FakeClock(100.0)
 
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
-        native = _CloseBlockedNative()  # close never confirms -> escalation
+        native = _CloseBlockedForceNative()  # close never confirms
         runtime = _runtime_with(tmp_path, journal, native, clock=clock)
         key = SessionKey("srv", "exe", "session")
         try:
             await _open(runtime, clock)
             started = time.monotonic()
-            await asyncio.wait_for(
-                runtime.shutdown(ShutdownPolicy(drain_seconds=0.05,
-                                                interrupt_seconds=0.05)),
+            # 1) LONG budget: the force is scheduled ~40s out and the
+            # worker is WAITING on that far deadline.
+            first = asyncio.create_task(runtime.shutdown(
+                ShutdownPolicy(drain_seconds=20.0, interrupt_seconds=20.0)))
+            await asyncio.sleep(0.3)
+            # 2) ZERO budget: must tighten to now and dispatch.
+            second = await asyncio.wait_for(
+                runtime.shutdown(ShutdownPolicy(drain_seconds=0.0,
+                                                interrupt_seconds=0.0)),
                 timeout=5)
+            assert second.session_outcomes[key] == "unknown"
             assert await asyncio.wait_for(
                 asyncio.get_running_loop().run_in_executor(
-                    None, native.force_called.wait, 1.0), timeout=5), (
-                "zero shutdown did not shorten the scheduled force")
-            assert time.monotonic() - started < 3, (
-                "shutdown waited for the previously scheduled deadline")
-            assert report_unknown(runtime, key)
+                    None, native.contained.wait, 2.0), timeout=6), (
+                "the scheduled force was not anticipated")
+            assert time.monotonic() - started < 10
         finally:
             native.close_gate.set()
+            try:
+                await asyncio.wait_for(first, timeout=10)
+            except BaseException:
+                pass
             await asyncio.wait_for(
                 runtime.shutdown(ShutdownPolicy()), timeout=10)
             journal.close()
 
     asyncio.run(run())
-
 
 def test_c4t35_late_renew_commit_does_not_reopen_revoked_session(tmp_path):
     """C4T-35: a late renew commit is applied conservatively (never

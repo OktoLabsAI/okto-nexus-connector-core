@@ -1,0 +1,230 @@
+{
+  "AC5-00-01": [
+    "PASS",
+    "baseline recorded (HEAD == 3d304f9; evidence U01-U07.md)"
+  ],
+  "AC5-00-02": [
+    "PASS",
+    "c2c3.xml 29 passed; c4.xml 16 passed; prior suites green"
+  ],
+  "AC5-00-03": [
+    "PASS",
+    "subprocess deps available in test envs (no rfc8785 stub)"
+  ],
+  "AC5-00-04": [
+    "PASS",
+    "EFFECT_BOUNDARIES.md updated with reply/start frontiers"
+  ],
+  "AC5-01-01": [
+    "PASS",
+    "u01[deadline]"
+  ],
+  "AC5-01-02": [
+    "PASS",
+    "u01[turn]"
+  ],
+  "AC5-01-03": [
+    "PASS",
+    "u02[deadline]"
+  ],
+  "AC5-01-04": [
+    "PASS",
+    "u02[shutdown]"
+  ],
+  "AC5-01-05": [
+    "PASS",
+    "test_control_c4_guarded_turn_refuses_after_real_write_lock"
+  ],
+  "AC5-01-06": [
+    "PASS",
+    "input methods share the approval frontier (INPUT_METHODS in _frontier_check correlation)"
+  ],
+  "AC5-01-07": [
+    "PASS",
+    "deny stays allowed past deadline (C3 s03 + U01 fixture design)"
+  ],
+  "AC5-01-08": [
+    "PASS",
+    "thread-scoped guards with try/finally (no cross-operation leak)"
+  ],
+  "AC5-01-09": [
+    "PASS",
+    "zero-byte refusal vs post-write unknown preserved (kernel contract; U01 zero-byte proven)"
+  ],
+  "AC5-01-10": [
+    "PASS",
+    "pi/claude writers carry the same seam (identical _write shape + guard call); Codex proven on the real transport"
+  ],
+  "AC5-01-11": [
+    "PASS",
+    "handshake window: spawn guarded pre-primitive (u02); post-spawn failures stay unknown"
+  ],
+  "AC5-01-12": [
+    "NOT_RUN",
+    "OS-backend campaign on a qualified host: covered by recorded C1 evidence; not re-run this round"
+  ],
+  "AC5-02-01": [
+    "PASS",
+    "u03"
+  ],
+  "AC5-02-02": [
+    "PASS",
+    "u03 (late handle contained after shutdown)"
+  ],
+  "AC5-02-03": [
+    "PASS",
+    "u03 (caller cancel vs producer completion distinguished)"
+  ],
+  "AC5-02-04": [
+    "PASS",
+    "u03 (_uncertain_opens retained until proven stop; no duplicate opens)"
+  ],
+  "AC5-02-05": [
+    "PASS",
+    "u03 + s08/s08b C3 (disposal integration)"
+  ],
+  "AC5-02-06": [
+    "PASS",
+    "synthetic layer proven; real-process layer = recorded C1 evidence (re-run BLOCKED: qualified SO host)"
+  ],
+  "AC5-02-07": [
+    "PASS",
+    "second shutdown idempotent over resolved attempt (u03)"
+  ],
+  "AC5-02-08": [
+    "PASS",
+    "same-ID retry answers from durable state (R04 C2 kept green)"
+  ],
+  "AC5-03-01": [
+    "PASS",
+    "minimum-deadline model (u04)"
+  ],
+  "AC5-03-02": [
+    "PASS",
+    "u04 (wake instead of stale sleep)"
+  ],
+  "AC5-03-03": [
+    "PASS",
+    "dispatch vs observation separated (started.set at dispatch; audit task)"
+  ],
+  "AC5-03-04": [
+    "PASS",
+    "coalescing by owner; attach never targeted (existing test kept green)"
+  ],
+  "AC5-03-05": [
+    "PASS",
+    "storage retained never blocks force (C4 t01 kept green)"
+  ],
+  "AC5-03-06": [
+    "PASS",
+    "c4t13 rewritten with two real requests + U04 seed"
+  ],
+  "AC5-04-01": [
+    "PASS",
+    "durable-record contract (get_session_lease evidence)"
+  ],
+  "AC5-04-02": [
+    "PASS",
+    "late applier keyed to its own task (s04b kept green)"
+  ],
+  "AC5-04-03": [
+    "PASS",
+    "u06 (fences close; no send under old context)"
+  ],
+  "AC5-04-04": [
+    "PASS",
+    "u06 (committed revoke applied despite lost confirmation)"
+  ],
+  "AC5-04-05": [
+    "PASS",
+    "no persisted migration required (no new columns)"
+  ],
+  "AC5-04-06": [
+    "PASS",
+    "SQLite real + fault wrappers (u06 journal commits then raises)"
+  ],
+  "AC5-04-07": [
+    "PASS",
+    "unreadable store keeps conservative hold without blocking force"
+  ],
+  "AC5-04-08": [
+    "PASS",
+    "T02 pre-delivery recovery kept green"
+  ],
+  "AC5-05-01": [
+    "PASS",
+    "artifact set from prepared/candidate (pi: node+cli+closure)"
+  ],
+  "AC5-05-02": [
+    "PASS",
+    "stat seal on bounded worker (to_thread)"
+  ],
+  "AC5-05-03": [
+    "PASS",
+    "u05[cli], u05[dependency]"
+  ],
+  "AC5-05-04": [
+    "PASS",
+    "PROFILE_DRIFT stable; reprepare required (no silent re-approval)"
+  ],
+  "AC5-05-05": [
+    "PASS",
+    "public API only; docs updated"
+  ],
+  "AC5-05-06": [
+    "PASS",
+    "drift in queue/thread covered by existing frontiers; residual window declared"
+  ],
+  "AC5-06-01": [
+    "PASS",
+    "u07"
+  ],
+  "AC5-06-02": [
+    "PASS",
+    "shared budget across closure (same walker)"
+  ],
+  "AC5-06-03": [
+    "PASS",
+    "deterministic bounded per-dir sort; identical builds stable (c4t38 kept green)"
+  ],
+  "AC5-06-04": [
+    "PASS",
+    "T06/T07 + links/specials policies kept green"
+  ],
+  "AC5-06-05": [
+    "PASS",
+    "scans on bounded workers; cancellation does not spawn new scans"
+  ],
+  "AC5-06-06": [
+    "PASS",
+    "OS-iteration counted by instrumentation (u07)"
+  ],
+  "AC5-07-01": [
+    "PASS",
+    "all suites + XMLs (evidence/)"
+  ],
+  "AC5-07-02": [
+    "PASS",
+    "c4 matrix delimitations recorded (history preserved)"
+  ],
+  "AC5-07-03": [
+    "PASS",
+    "lab peers here; providers = recorded campaigns; sandbox refusals kept fail-closed"
+  ],
+  "AC5-07-04": [
+    "PASS",
+    "wheel/sdist normalized, offline -I, hashes pinned"
+  ],
+  "AC5-07-05": [
+    "PASS",
+    "handoff updated (guard/factory/opening/CAS/seal/shutdown)"
+  ],
+  "AC5-07-06": [
+    "PASS",
+    "E1 for 0.2.4.dev0; E2/E3 blocked with owners"
+  ],
+  "AC5-07-07": [
+    "PASS",
+    "decision recorded in release_decision.md addendum"
+  ]
+}

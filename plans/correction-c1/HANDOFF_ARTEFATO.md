@@ -140,3 +140,26 @@ códigos preservados.
 6. **Guarda na fronteira nativa** (`DispatchGuards`): os três
    transportes revalidam após seus locks, antes do primeiro byte.
 7. Versão mínima esperada pelos hosts: **0.2.3.dev0**.
+
+
+## Mudanças que os hosts absorvem (C5 — reauditoria U01–U07)
+
+1. **Aprovações permissivas/input**: a guarda (prazo + correlação
+   pedido/turno) alcança o escritor nativo APÓS o lock do transporte;
+   zero bytes comprovados em recusa. Negações seguem permitidas
+   pós-prazo (U01).
+2. **`_launch_guard` nos adapters**: o criador nativo (Codex/Pi/Claude)
+   revalida prazo+draining após seus locks internos, imediatamente antes
+   do spawn — seam interna; hosts não a configuram (U02).
+3. **Opens cancelados**: o Core supervisiona o producer e contém handle
+   tardio (close→observe→force); `_uncertain_opens` só resolve com
+   parada comprovada. Sem API nova para o host (U03).
+4. **Força antecipável**: shutdown mais urgente antecipa contenção
+   agendada (deadline mínimo); dispatch em voo nunca cancelado (U04).
+5. **CAS pós-commit incerto**: erro com `possible_effect=True` reconcilia
+   pelo registro durável; revogação comitida fecha cercas mesmo com
+   confirmação perdida; hold conservador quando storage ilegível (U06).
+6. **Seal de lançamento Pi**: Node + CLI + fechamento de dependências
+   (stat-only) revalidado em todas as fronteiras; mudança ordinária de
+   CLI/dependência pós-prepare = `PROFILE_DRIFT` (U05).
+7. Versão mínima esperada pelos hosts: **0.2.4.dev0**.

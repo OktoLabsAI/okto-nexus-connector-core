@@ -1,0 +1,94 @@
+{
+  "round": "C5",
+  "base_commit": "3d304f9ccb1982f71410acb0a0622b0b8685a06f",
+  "phases": {
+    "C5-00": {
+      "tasks": {
+        "C5-00.01": "DONE",
+        "C5-00.02": "DONE",
+        "C5-00.03": "DONE",
+        "C5-00.04": "DONE",
+        "C5-00.05": "DONE",
+        "C5-00.06": "DONE"
+      },
+      "note": "baseline 10 FAIL + 1 control; EFFECT_BOUNDARIES updated; layers classified"
+    },
+    "C5-01": {
+      "tasks": {
+        "C5-01.01": "DONE",
+        "C5-01.02": "DONE (U01)",
+        "C5-01.03": "DONE (U02; codex/pi/claude)",
+        "C5-01.04": "DONE (all three adapters carry the frontier)",
+        "C5-01.05": "DONE (zero-byte vs possible-effect preserved)",
+        "C5-01.06": "DONE (control + U01 barriers)"
+      },
+      "note": "DispatchGuards per-operation incl. approval replies; launch_guard at native creators"
+    },
+    "C5-02": {
+      "tasks": {
+        "C5-02.01": "DONE",
+        "C5-02.02": "DONE (U03)",
+        "C5-02.03": "DONE",
+        "C5-02.04": "DONE",
+        "C5-02.05": "DONE",
+        "C5-02.06": "DONE (synthetic layer; OS campaign = existing evidence)"
+      },
+      "note": "producer task owned by the attempt; late handle contained"
+    },
+    "C5-03": {
+      "tasks": {
+        "C5-03.01": "DONE",
+        "C5-03.02": "DONE (U04)",
+        "C5-03.03": "DONE",
+        "C5-03.04": "DONE",
+        "C5-03.05": "DONE (_ForceAudit kept)",
+        "C5-03.06": "DONE (c4t13 rewritten)"
+      },
+      "note": "WAITING worker, minimum deadline, wake-on-tighten"
+    },
+    "C5-04": {
+      "tasks": {
+        "C5-04.01": "DONE (durable-record contract)",
+        "C5-04.02": "DONE",
+        "C5-04.03": "DONE (U06)",
+        "C5-04.04": "DONE",
+        "C5-04.05": "DONE (no persisted migration required)",
+        "C5-04.06": "DONE (T02 pre-delivery still green)"
+      },
+      "note": "never infer rollback from a failed Future"
+    },
+    "C5-05": {
+      "tasks": {
+        "C5-05.01": "DONE",
+        "C5-05.02": "DONE (stat seal)",
+        "C5-05.03": "DONE (U05)",
+        "C5-05.04": "DONE",
+        "C5-05.05": "DONE",
+        "C5-05.06": "DONE"
+      },
+      "note": "node+CLI+closure seal; residual window declared"
+    },
+    "C5-06": {
+      "tasks": {
+        "C5-06.01": "DONE (U07)",
+        "C5-06.02": "DONE",
+        "C5-06.03": "DONE (bounded per-dir sort)",
+        "C5-06.04": "DONE (T06/T07 green)",
+        "C5-06.05": "DONE (workers already bounded)",
+        "C5-06.06": "DONE (OS-iteration counted)"
+      },
+      "note": "incremental scandir with per-name budget"
+    },
+    "C5-07": {
+      "tasks": {
+        "C5-07.01": "DONE",
+        "C5-07.02": "DONE (c4 matrix delimitations)",
+        "C5-07.03": "DONE (lab peers; providers = recorded campaigns)",
+        "C5-07.04": "DONE",
+        "C5-07.05": "DONE",
+        "C5-07.06": "DONE (E1 for 0.2.4.dev0)"
+      },
+      "note": "matrix below; artifacts pinned"
+    }
+  }
+}

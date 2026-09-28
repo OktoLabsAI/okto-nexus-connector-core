@@ -1,66 +1,47 @@
-# Entregar ao agente responsável pelo Core — C4
+# Executar correções C5 — instrução pronta
 
-Copie esta pasta para `plans/correction-c4/` no repositório de trabalho. Preserve os planos anteriores. O snapshot de referência é `8677145c3050b9ba270bc24ae6343d6cb391a168` (v0.2.2.dev0), mas o trabalho deve ocorrer sobre o HEAD atual sem reset nem perda de mudanças posteriores.
+Copie **o pacote inteiro**, incluindo regressoes/, evidencias/, backlog.json e matriz_aceite.json, para uma pasta de planejamento do repositório ou forneça seu caminho ao agente. Não é suficiente copiar só este Markdown. Os testes importam helpers do próprio repo; devem ser executados com root e src no PYTHONPATH pelo runner.
 
-## Prompt pronto
+## Prompt
 
 ```text
-Implemente o plano C4 deste diretório. Leia primeiro 01_RELATORIO_REAVALIACAO.md,
-02_PLANO_CORRECAO_C4.md, 03_MATRIZ_ACEITE.md e 04_HANDOFF_CONSUMIDORES.md.
-Não devolva apenas outro plano: faça as alterações, execute os testes e entregue evidências.
+Você é o executor do nexus-connector-core. Leia 01_RELATORIO_REAVALIACAO.md,
+02_PLANO_CORRECAO_C5.md, 03_MATRIZ_ACEITE.md e regressoes/test_review5.py
+DESTE PACOTE. A referência auditada é 3d304f9ccb1982f71410acb0a0622b0b8685a06f, 0.2.3.dev0,
+mas trabalhe sobre o HEAD atual sem reset nem perda de alterações posteriores.
 
-1. Registre HEAD, dirty state e diferenças desde 8677145. Preserve correções posteriores.
-2. Incorpore regressoes/test_review4.py como tests/regression/test_c4_audit.py.
-   Execute baseline dos arquivos C2/C3 e das dez parametrizações C4 antes de editar.
-3. Implemente as 47 tarefas de C4-00 a C4-07, atualizando backlog.json e matrix.json.
-   Priorize T01/T03/T04, mas não declare E1 com os P2 do escopo ainda abertos.
-4. Corrija as abstrações comuns: contenção não espera journal; guard chega ao write/spawn
-   após os locks; OpeningAttempt existe antes da Session e fica fenced no shutdown;
-   tentativa CAS tem dono/resultado e não deixa busy permanente; build Pi cobre o layout
-   aceito; quotas impedem leitura/enumeração além dos limites.
-5. Preserve todas as correções válidas C3. Não crie MCP stdio/server/proxy no Core ou
-   Connector; harness usa MCP HTTP direto com o Nexus Server. Identidade é do agente.
-6. Não use finally indiscriminado para liberar CAS ainda pendente, cancelamento de await
-   como prova de parada de thread, ou unknown como licença para iniciar outra execução.
-7. Use barreiras/eventos e relógio inicialmente válido. Não substitua o cenário por
-   fence previamente fechado. Se adaptar fixtures, documente a mesma condição causal.
-8. Execute os 53 cenários na camada correspondente ou registre BLOCKED/NOT_RUN com motivo.
-   Dez sementes são executáveis; os outros 43 são especificações complementares que devem
-   ser implementadas ou mapeadas para testes existentes com evidência exata.
-9. Qualifique o backend real do SO e providers no escopo. Hosts synthetic embedded/remote
-   não demonstram E2. Não remova preflight para fazer o sandbox passar.
-10. Gere wheel/sdist em árvore limpa, fixe hashes, teste consumidor -I fora da fonte,
-    preserve estado/receipts legados e entregue o handoff de API/lifecycle/algoritmo aos
-    dois consumidores. Não implemente correções duplicadas nos outros repositórios.
+Implemente C5-00 a C5-07 (48 tarefas). Não substitua a execução por outro plano.
+Antes de editar, reproduza os 11 casos novos: no baseline há dez FAIL e um PASS.
+Os 16 testes C4 entregues e as dez sementes C4 originais adaptadas passaram na
+auditoria; preserve-os. Adapte fixtures somente para API/causalidade legítima,
+registrando o diff. Nunca inverta asserts, use skip/xfail ou ignore erro para
+concluir uma tarefa.
 
-Resultado final: commits/diff, matriz por T01–T07 e C4T-01–C4T-53, comandos/XMLs,
-versões/hashes, EFFECT_BOUNDARIES.md preenchido, limitações e decisão E0/E1/E2/E3
-com escopo preciso. Não publique, faça push ou release sem autorização específica.
+Prioridade: guardas por operação no writer de approvals e no spawn DEPOIS de
+locks; supervisor do Future/handle de open cancelado; antecipação da força;
+CAS pós-commit incerto; conjunto real de artefatos Pi e scanner incremental.
+Não mantenha apenas markers sem produtor associado. Não infira rollback de
+Future.done()/Exception. Não deixe contenção depender de storage/observers.
+
+Preserve MCP HTTP direto harness→Server, identidade centrada no agente e
+Core único compartilhado. Nada de MCP stdio, proxy/servidor MCP, novo cadastro
+de usuário, cópia de adapter no host ou imports privados no consumidor.
+
+Atualize backlog e matriz com commits/tests/evidências. Revise PASSs C4 que
+usam cenário diferente ou inspeção de código como prova. Registre plataforma,
+Python, provider/build quando real, comandos/XMLs, wheel/sdist/manifest SHA,
+contratos/migrações e limites. Gate de SO não pode ser removido para aprovar
+ambiente incompatível.
+
+E1 exige os P1 resolvidos e evidência no escopo qualificado. E2 exige Server e
+Connector REAIS em dois hosts, além de modo local sem Connector. Smokes de
+wheel, peers e schemas não provam isso. Não publique/push sem autorização.
 ```
 
-## Execução inicial
+## Ordem operacional
 
-Na raiz do repositório, copie a semente com a ferramenta apropriada ao sistema e prepare o ambiente:
+Começar em C5-00; depois C5-01/02. C5-06 pode avançar independentemente após baseline. Integrar C5-03/04 e C5-05 antes da campanha C5-07. Os outros repositórios podem trabalhar em E0 com pin, mas não contornar esta biblioteca.
 
-```bash
-python -m pip install -e ".[test]"
-python -m pytest -q tests/regression/test_c2_regressions.py tests/regression/test_c3_regressions.py
-python -m pytest -q tests/regression/test_c4_audit.py
-```
+## Condição de encerramento
 
-Os testes novos dependem das fixtures do repositório e do Node para as duas provas de conteúdo. Node ausente é bloqueio dessa camada; não equivale a PASS. O restante não exige login de provider. Qualificação de processo real exige um ambiente que atenda ao preflight.
-
-## Arquivos do pacote
-
-| Arquivo | Utilização |
-|---|---|
-| 01_RELATORIO_REAVALIACAO.md | Achados, prova, escopo e limites |
-| 02_PLANO_CORRECAO_C4.md | Implementação detalhada por tarefa |
-| 03_MATRIZ_ACEITE.md | 53 cenários e resultados obrigatórios |
-| 04_HANDOFF_CONSUMIDORES.md | Contratos/integração Server e Connector |
-| backlog.json / matrix.json | Estado rastreável de tarefas e testes |
-| regressoes/test_review4.py | Dez casos executáveis reproduzíveis |
-| evidencias/ | Logs, XMLs, comandos, hashes e trechos exatos |
-| templates/ | Registro de evidência e relatório final |
-
-Não copie `evidencias/changes.diff` como patch de correção: ele é somente a diferença histórica entre as duas versões recebidas.
+Resposta do agente precisa dizer o que corrigiu e provou, o que não executou, riscos e gate alcançado. Mudar somente o texto da decisão E1 sem corrigir o produto não atende. Código sem evidência exigida também não encerra qualificação. Não há promessa de que 11 testes cubram todas as falhas possíveis: os 56 cenários detalham a campanha necessária.

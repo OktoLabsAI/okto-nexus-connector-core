@@ -113,3 +113,22 @@ offline verdes, **não publicado**. Pi requalificado sob
 `core.build_identity.v3` (`sha256:caf8bfad…22de487b`). **E1 declarado
 para 0.2.3.dev0**; E2/E3 seguem bloqueados (hosts N/C, attach, billing,
 PyPI conjunta).
+
+
+## Adendo C5 (2026-09-28) — reavaliação independente de `3d304f9`
+
+Quarta reauditoria (`FIX_UPDATE_PLAN/`): 7 achados (U01–U07, 10 sementes
++ 1 controle positivo), **E1 rejeitado para 0.2.3.dev0**. Correção C5
+executada (C5-00..C5-07, 48 tarefas DONE em
+`plans/correction-c5/backlog.json`; matriz de aceite com 57 linhas
+[56 planejadas + granularidade extra em C5-06] em `matriz_aceite.json`:
+56 PASS, 1 NOT_RUN declarado — campanha de backend SO em host
+qualificado). 10/10 sementes verdes + controle; baseline 10 FAIL + 1
+PASS registrado; C2/C3/C4 preservadas (c4t13 reescrito conforme
+C5-03.06; matriz C4 com delimitações explícitas). Suítes: Windows
+3.13/3.11/3.12 = 753/74 cada; WSL2 3.13/3.11/3.12 = 807/19 cada.
+Artefato normalizado **0.2.4.dev0** byte-idêntico (wheel
+`sha256:d1a4d004…265cdb65`, sdist `sha256:ba555bd4…eda404b3`), twine/
+offline verdes, **não publicado**. **E1 declarado para 0.2.4.dev0**;
+E2/E3 seguem bloqueados (hosts N/C reais, attach, billing, PyPI
+conjunta).

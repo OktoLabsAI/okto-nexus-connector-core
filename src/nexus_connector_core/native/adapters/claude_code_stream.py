@@ -373,6 +373,11 @@ class ClaudeCodeStreamConnector:
         # session is healthy and still has real events coming.
         self._closed_event.clear()
 
+        # C5/U02: re-validate immediately before the spawn primitive
+        # (after the connector's own pre-start checks/waits).
+        launch_guard = getattr(self, "_launch_guard", None)
+        if launch_guard is not None:
+            launch_guard("claude_start")
         argv = [self._binary, *self._argv]
         if self.native_approvals_enabled and self._argv == _DEFAULT_ARGV:
             argv.extend(["--permission-prompt-tool", "stdio"])

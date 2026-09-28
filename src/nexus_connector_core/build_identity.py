@@ -89,25 +89,42 @@ def executable_build_identity(executable: str | os.PathLike) -> str:
 
 
 def _iter_tree_files(directory: Path):
-    """Bounded, incremental enumeration (C4/T07): os.walk with directory,
-    depth and file caps; regular files only; in-scope symlinks followed
-    by content, anything escaping the walked root refuses. Nothing is
-    materialized beyond the entry cap."""
+    """Bounded, INCREMENTAL enumeration (C4/T07 + C5/U07): os.scandir
+    consumed entry-by-entry with a per-NAME budget - a wide directory
+    never materializes a full name list before the cap refuses. Regular
+    files only; in-scope symlinks followed by content, anything escaping
+    the walked root refuses. The iterator is closed on every path.
+    """
     dirs_visited = 0
+    names_seen = 0
     collected = []
 
     def walk(current: Path, depth: int) -> None:
-        nonlocal dirs_visited
+        nonlocal dirs_visited, names_seen
         if depth > _MAX_DEPTH:
             raise ValueError("pi package tree exceeds bounded depth")
         dirs_visited += 1
         if dirs_visited > _MAX_DIRECTORIES:
             raise ValueError("pi package tree exceeds bounded directories")
+        names = []
         try:
-            names = sorted(os.listdir(current))
+            iterator = os.scandir(current)
         except OSError as exc:
-            raise ValueError(f"unreadable directory in package") from exc
-        for name in names:
+            raise ValueError("unreadable directory in package") from exc
+        try:
+            for entry in iterator:
+                names_seen += 1
+                if names_seen > _MAX_MANIFEST_ENTRIES + 1:
+                    # Cap+1: the budget refused at the FIRST overflowing
+                    # name, never after materializing the directory.
+                    raise ValueError(
+                        "pi package manifest exceeds bounded size")
+                names.append(entry.name)
+        except OSError as exc:
+            raise ValueError("unreadable entry in package") from exc
+        finally:
+            iterator.close()
+        for name in sorted(names):
             if len(collected) > _MAX_MANIFEST_ENTRIES:
                 raise ValueError("pi package manifest exceeds bounded size")
             path = current / name
@@ -116,9 +133,9 @@ def _iter_tree_files(directory: Path):
             except OSError as exc:
                 raise ValueError("unreadable entry in package") from exc
             if stat.S_ISLNK(st.st_mode):
-                # Layout policy (C4/T06): links INSIDE the walked root are
-                # covered by content; a link escaping it refuses - the
-                # identity never reads outside the authorized scope.
+                # Layout policy (C4/T06): links INSIDE the walked root
+                # are covered by content; a link escaping it refuses -
+                # the identity never reads outside the authorized scope.
                 try:
                     target = path.resolve(strict=True)
                 except OSError as exc:
@@ -327,3 +344,60 @@ def _resolve_node_modules_package(package_dir: Path, name: str,
             break
         current = current.parent
     return None
+
+def launch_artifact_signature(node: str | os.PathLike,
+                              cli: str | os.PathLike) -> tuple:
+    """Lightweight launch seal for the Pi Node+CLI pair (C5/U05).
+
+    Stat-only aggregate over the REAL artifact set the qualified build
+    covers: the Node binary, the CLI entrypoint and every file of the
+    declared dependency closure (same walker/caps as the identity, no
+    hashing). Used at the launch frontiers to detect ordinary drift of
+    the CLI or any dependency after prepare - argv[0] alone is Node and
+    proves nothing about the rest. Residual window: a rewrite that
+    preserves every (size, mtime_ns) is not representable without
+    re-hashing; declared, not claimed atomic.
+    """
+    node_path = Path(node).resolve(strict=True)
+    cli_path = Path(cli).resolve(strict=True)
+    package_root = cli_path.parents[2]
+    install_root = _node_install_root(package_root)
+    count = 0
+    total = 0
+    newest = 0
+    for path in _iter_tree_files(package_root):
+        try:
+            st = path.stat()
+        except OSError as exc:
+            raise ValueError("unreadable file in launch seal") from exc
+        count += 1
+        total += st.st_size
+        newest = max(newest, st.st_mtime_ns)
+    queue = [(package_root, "@")]
+    seen = {package_root.resolve()}
+    while queue:
+        package_dir, _logical = queue.pop(0)
+        for name, _required in _declared_relations(package_dir):
+            resolved = _resolve_node_modules_package(package_dir, name,
+                                                     install_root)
+            if resolved is None or resolved in seen:
+                continue
+            seen.add(resolved)
+            for path in _iter_tree_files(resolved):
+                try:
+                    st = path.stat()
+                except OSError as exc:
+                    raise ValueError(
+                        "unreadable file in launch seal") from exc
+                count += 1
+                total += st.st_size
+                newest = max(newest, st.st_mtime_ns)
+            queue.append((resolved, _logical))
+    def _stat_tuple(path: Path):
+        try:
+            st = path.stat()
+            return (st.st_size, st.st_mtime_ns)
+        except OSError:
+            return None
+    return (_stat_tuple(node_path), _stat_tuple(cli_path),
+            count, total, newest)

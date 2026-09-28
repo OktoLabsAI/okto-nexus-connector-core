@@ -23,3 +23,16 @@ Invariantes transversais: nenhuma guarda depende do polling do watcher
 escrita parcial → OUTCOME_UNKNOWN, nunca `not_sent`/`retry_safe`); força
 nunca espera journal/observers/close; nenhum efeito de concessão após
 draining; cancelamento de await nunca é prova de parada de thread.
+
+
+## Adendo C5 — fronteiras estendidas (U01/U02/U03/U06)
+
+| Operação | Última espera interna | Guarda na fronteira | Teste |
+|---|---|---|---|
+| approval accept / input permissivo (escrita) | `_write_lock` do transporte | `DispatchGuards` instalada por `_guarded_reply` com fence **+ correlação pedido/turno** (`_frontier_check`), consultada após o lock, zero bytes | **u01[deadline/turn]** + controle |
+| spawn Codex | `_start_lock` + bootstrap | `connector._launch_guard` após o lock, antes de `_spawn_and_initialize` | **u02[deadline/shutdown]** |
+| spawn Pi | `_start_lock` | `_launch_guard` após o lock, antes de construir/spawnar o transporte | mesmo mecanismo (u02) |
+| spawn Claude | pre-start checks | `_launch_guard` imediatamente antes de `spawn_owned_process` | mesmo mecanismo |
+| open cancelado com handle tardio | thread do producer | producer task possuída pela tentativa (`shield`) + `_consume_late_open`/`_contain_late_open` (close→observe→force→observe; slot liberado só com parada comprovada) | **u03** |
+| força agendada | deadline distante | worker WAITING em Event; novo prazo = mínimo; wake-on-tighten; DISPATCHING nunca cancelado | **u04** + c4t13 reescrito |
+| CAS pós-commit incerto | — | `_reconcile_cas_error` lê o registro durável; row revoked fecha cercas; sem prova → hold conservador | **u06** |

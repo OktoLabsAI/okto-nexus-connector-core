@@ -757,6 +757,11 @@ class PiRpcConnector:
                 self._ended = False
                 self._awaiting_settle_generation = None
 
+            # C5/U02: re-validate after the start-lock wait, right
+            # before building/spawning the transport process.
+            launch_guard = getattr(self, "_launch_guard", None)
+            if launch_guard is not None:
+                launch_guard("pi_start")
             argv = self._build_argv(session_id)
             transport = _PiTransport(
                 argv,

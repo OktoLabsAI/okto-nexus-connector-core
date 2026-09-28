@@ -49,7 +49,7 @@
   ],
   "C4T-13": [
     "PASS",
-    "test_c4_complementary.py::test_c4t13_zero_shutdown_shortens_scheduled_force_deadline"
+    "test_c4_complementary.py::test_c4t13_zero_shutdown_shortens_scheduled_force_deadline | RESCOPED (C5-03.06): rewritten to the real far-deadline-then-zero sequence; see test_c4t13_zero_shutdown_shortens_scheduled_force_deadline + U04 seed."
   ],
   "C4T-14": [
     "PASS",
@@ -69,11 +69,11 @@
   ],
   "C4T-18": [
     "PASS",
-    "pi/claude transports carry the same DispatchGuards frontier (mechanism proven by t03)"
+    "pi/claude transports carry the same DispatchGuards frontier (mechanism proven by t03) | DELIMITED (C5): pi/claude carry the same seam by construction; Codex proven by U01/control on the real transport. Per-adapter race proofs beyond Codex remain C5-01-10 (NOT_RUN)."
   ],
   "C4T-19": [
     "PASS",
-    "C3 s03 approval reply guard + correlation"
+    "C3 s03 approval reply guard + correlation | SUPERSEDED by U01: approval guard now provably reaches the transport writer after the lock (deadline + turn)."
   ],
   "C4T-20": [
     "PASS",
@@ -81,7 +81,7 @@
   ],
   "C4T-21": [
     "PASS",
-    "post-write failures remain OUTCOME_UNKNOWN (kernel; legacy suites)"
+    "post-write failures remain OUTCOME_UNKNOWN (kernel; legacy suites) | DELIMITED: post-write failures remain OUTCOME_UNKNOWN by kernel contract; the zero-byte/partial distinction is proven by U01 (zero byte) - partial/flush fault points remain C5-01-09 (mapped to kernel tests)."
   ],
   "C4T-22": [
     "PASS",
@@ -97,11 +97,11 @@
   ],
   "C4T-25": [
     "PASS",
-    "t04b + _uncertain_opens retention"
+    "t04b + _uncertain_opens retention | DELIMITED (C5): superseded by U03 - cancelled open with a LATE returning handle is now supervised and contained."
   ],
   "C4T-26": [
     "PASS",
-    "uncertain opens keep slot/capacity (runtime open error paths)"
+    "uncertain opens keep slot/capacity (runtime open error paths) | DELIMITED (C5): late handle containment proven by U03 (_contain_late_open); slot retained until stop observed."
   ],
   "C4T-27": [
     "PASS",
@@ -117,7 +117,7 @@
   ],
   "C4T-30": [
     "PASS",
-    "PROFILE_DRIFT before effect; no silent re-approval"
+    "PROFILE_DRIFT before effect; no silent re-approval | DELIMITED: node/root changes detected; config-ref drift covered by the same seal mechanism (C5-05)."
   ],
   "C4T-31": [
     "PASS",
@@ -125,11 +125,11 @@
   ],
   "C4T-32": [
     "PASS",
-    "t02 + C3 s04b fault points"
+    "t02 + C3 s04b fault points | DELIMITED (C5): pre-delivery errors still recoverable (T02 kept green); post-commit confirmation loss now U06."
   ],
   "C4T-33": [
     "PASS",
-    "C3 s04b"
+    "C3 s04b | DELIMITED (C5): cancelled-then-committed renew handled by the late applier (s04b) and reconciler (U06)."
   ],
   "C4T-34": [
     "PASS",
@@ -141,7 +141,7 @@
   ],
   "C4T-36": [
     "PASS",
-    "covered by c4t50 combined test (unknown + independent force)"
+    "covered by c4t50 combined test (unknown + independent force) | DELIMITED: unknown + independent force proven by c4t50 combined test; reconcile-read failure keeps the conservative hold (C5-04)."
   ],
   "C4T-37": [
     "PASS",
@@ -177,7 +177,7 @@
   ],
   "C4T-45": [
     "PASS",
-    "test_c4_complementary.py::test_c4t45_enumeration_caps_stop_before_materializing"
+    "test_c4_complementary.py::test_c4t45_enumeration_caps_stop_before_materializing | DELIMITED (C5): superseded by U07 - the per-NAME budget now stops enumeration incrementally."
   ],
   "C4T-46": [
     "PASS",

@@ -1,160 +1,164 @@
-# Reavaliação do Core 8677145 — plano C4
+# Reavaliação do nexus-connector-core — 0.2.3.dev0
 
-## 1. Conclusão
+## Decisão
 
-**A implementação corrigiu os cenários C3 anteriores, mas ainda existem sete grupos de problemas confirmados por dez regressões independentes. Não ratifico E1 para esta versão.** Três grupos são P1: força condicionada a storage, guarda antes — e não depois — do lock nativo de escrita, e shutdown de aberturas ainda pendentes. Os quatro P2 afetam recuperação CAS, configuração efetiva, cobertura do build Pi e limites de leitura.
+A versão corrige os dez cenários T do relatório anterior e preserva os cenários C2/C3 verificados. Há, porém, sete grupos remanescentes U01–U07, reproduzidos em dez casos independentes. Não ratifico E1 para o escopo afetado enquanto essas falhas de autorização, supervisão e contenção persistirem. E0/integração experimental com pin exato pode continuar. Isso não é uma recomendação de reescrita nem uma recusa baseada apenas na ausência dos outros dois aplicativos.
 
-Não é recomendada uma reescrita. O plano C4 propõe mudanças localizadas nas abstrações compartilhadas para fechar as mesmas invariantes em todos os caminhos. As obrigações não surgiram nesta rodada: C1 e as ações S01–S08 já exigiam guarda depois de esperas, força independente de storage, descarte condicionado à resolução e cobertura/limites do conteúdo qualificado.
+## Baseline e método
 
-### Baseline
+Snapshot `3d304f9ccb1982f71410acb0a0622b0b8685a06f`, pacote `0.2.3.dev0`, extraído de `okto-nexus-connector-core-main (3).zip`. SHA do ZIP: `162e71f8674793a6a81f5b9bc664ff42ae7b01920047d5ddc3a92f0749d34083`. O commit foi obtido do comentário do arquivo; o ZIP não contém histórico Git completo. Comparação com `8677145c3050b9ba270bc24ae6343d6cb391a168`, revisão C4 e gates C1/R3 fornecidos. Os 347 arquivos originais permaneceram inalterados (hashes anexos). O build foi feito em uma cópia, não na árvore auditada.
 
-- Commit do ZIP: `8677145c3050b9ba270bc24ae6343d6cb391a168`.
-- Versão: `0.2.2.dev0`.
-- ZIP: `okto-nexus-connector-core-main (2)(1).zip`.
-- SHA-256 do ZIP: `a05e9059745d8aa7b14fc16413de3341ea022da527487ee6a38d147061d18859`.
-- Comparação: `7a7a248db695296bb92b3f681791cc6eb2dea8c7`, v0.2.1.dev0.
-- 334 arquivos originais comparados por hash; todos permaneceram inalterados. Há 21 arquivos novos/alterados em relação ao snapshot anterior. Builds foram feitos numa cópia separada.
-- Os trechos consultados pelo GitHub foram fixados ao mesmo commit e seus blobs correspondem aos arquivos do ZIP. O HEAD remoto não substituiu o upload.
+Foram lidos o código, a matriz e as evidências C4; executados testes do repo, as sementes originais da rodada anterior com adaptação compatível, novas regressões, build e consumidores instalados. As evidências Windows/WSL2 e providers existentes no repo são declarações/campanhas do executor, não execuções reproduzidas por esta auditoria. Aqui usamos Linux/Python 3.13.5. Não executamos provider real nem fluxo Server–Connector em dois hosts.
 
-## 2. Execuções nesta auditoria
+Os testes novos isolam explicitamente qualificação/build/plataforma quando precisam alcançar uma fronteira interna. Esse isolamento NÃO concede qualificação a um provider ou a um build sintético. Não foi desabilitado o gate da suíte completa.
 
-| Campanha | Resultado | Observação |
-|---|---|---|
-| Arquivos de regressões C2 + C3 completos | 28 PASS, 1 SKIP, 1 warning | Inclui as sementes e casos adicionais desses arquivos; não somar à suíte completa. |
-| Novas regressões C4 | 10 FAIL | Sete achados, três com parametrização/mais de uma prova. |
-| Repetição das novas regressões | 10 FAIL | Mesmas falhas, sem warnings; não conta como novos casos. |
-| Suíte completa após corrigir ambiente de dependência | 657 PASS, 123 FAIL, 20 SKIP, 2 warnings | Limitada pelo backend Linux deste sandbox. |
-| Wheel/sdist | Build passou | Usado backend setuptools.build_meta diretamente; não foi executado `python -m build` nem twine nesta auditoria. |
-| Importação instalada e bundle NXL | Passou | Bundle explicitamente development-partial. |
-| Consumidores isolados embedded e remote | Passaram | `-I`, mesmo wheel, biblioteca dentro do prefixo da venv; hosts sintéticos, não duas máquinas reais. |
+## Resultados reproduzidos
 
-### Ambiente e dependências
+| Execução | Passaram | Falharam | Ignorados |
+|---|---:|---:|---:|
+| Testes C4 entregues no repo | 16 | 0 | 0 |
+| Arquivos C2/C3 | 28 | 0 | 1 |
+| Dez sementes originais C4, com wiring adaptado | 10 | 0 | 0 |
+| Regressões novas + controle positivo | 1 | 10 | 0 |
+| Repetição das regressões novas | 1 | 10 | 0 |
+| Suíte completa no ambiente validado | 673 | 123 | 20 |
 
-Python 3.13.5, Linux x86-64; pytest 9.0.2; Node v22.16.0. `rfc8785==0.1.4` não estava instalado e pip não conseguiu obter rede. Usei os arquivos upstream exatos, com blobs Git verificados (`_impl.py` = `3137d3326b98938affadb1be711ee411eb2ab86e`, `__init__.py` = `5a1f9d919643fa3bcaa0999ea66d9c535568c42a`). Não foi usado substituto simplificado de canonicalização. jsonschema 4.26.0 veio do ambiente existente.
+Subconjuntos sobrepõem a suíte completa; não somar números como se fossem testes diferentes. As dez falhas novas são asserções do comportamento correto, não dez exceções inesperadas de setup. Distribuição: U01=2; U02=2; U03=1; U04=1; U05=2; U06=1; U07=1. O controle positivo prova que send_turn normal está corretamente guardado após o lock; o problema de U01 é outra entrada no mesmo transporte.
 
-Na primeira suíte, dois testes subprocesso falharam porque sobrescreviam PYTHONPATH e não encontravam essa dependência. Depois de torná-la disponível no ambiente de teste, repeti a suite: esses dois passaram. Resultado inicial 655/125/20 está preservado somente como histórico de setup; o resultado final é 657/123/20. A venv de consumers também recebeu a dependência exata e os pacotes já instalados; não afirmo instalação inteiramente resolvida por pip offline.
+A suíte completa teve dois warnings de fixtures (documentados nos logs); a repetição final nova não teve warnings. As 123 falhas agrupam-se em limitações/efeitos do backend Linux deste sandbox: 11 recusas de preflight, 86 erros por slots próprios retidos, 24 observações/probes sem prova de parada e dois casos de diagnóstico/guardian relacionados. O ambiente não possui a interface `/proc/self/task/<pid>/children` esperada. Não são 123 causas independentes, e não fundamentam isoladamente a rejeição de E1. Também não afirmamos que a suíte completa passou aqui.
 
-### As 123 falhas da suíte completa
+A primeira campanha completa tinha mais duas falhas porque subprocessos não importavam rfc8785 do ambiente de auditoria. Isso foi corrigido somente no ambiente e a suíte foi repetida; o resultado final acima não contém essas duas falhas de dependência. Testes originais C4 precisaram apenas conectar o novo DispatchGuards do adapter ao transporte manual da fixture: a mudança e os hashes estão anexos. Uma tentativa inicial do novo controle positivo omitia poll() no processo de laboratório; foi corrigida antes das execuções finais. Esses erros de fixture/setup não são achados de produto.
 
-Agrupamento por assinatura: 86 `capacity exhausted` por árvores não resolvidas; 24 probes sem confirmação de parada; 9 recusas `proc_children`; 2 expectativas de outro erro interrompidas antes pelo preflight; 1 assertion do guardian e 1 assertion do preflight. Este Linux não disponibiliza `/proc/self/task/<pid>/children` no formato exigido pelo backend. Isso causa falhas em cascata e retenção conservadora de slots.
+## O que deve ser preservado
 
-Esse resultado não equivale a 123 bugs independentes nem comprova regressão de plataforma. Também não permite afirmar suíte verde aqui. Uma campanha em backend Linux/Windows realmente compatível continua necessária. Não removi o gate para contornar o ambiente.
+A força já não espera journal.admit antes de despachar; os testes T01 passam. O erro CAS comprovado antes da entrega deixa de envenenar permanentemente a reserva. O envio normal Codex passa a consultar DispatchGuards depois de _write_lock. Shutdown fecha guardas de aberturas que ainda esperam callbacks; disposal considera _opening. O algoritmo de identidade Pi inclui optional/peer efetivamente instaladas e o orçamento de bytes projetado antes da leitura foi corrigido. Preservar igualmente relógio default, DTO público de resume, discovery público e MCP HTTP direto.
 
-Dois warnings correspondem a closes de fixtures `_ClockLateNative` e `_SlowThreadNative` declarados assíncronos, mas usados em fronteira síncrona. São pendências da qualidade dos testes, não os bloqueadores deste relatório.
+Essas melhorias são reais. O que falha é estender a conclusão de uma rota testada para as demais rotas ou para resultados de falha com semântica diferente.
 
-**Nenhum provider real, campanha Windows/WSL2 ou fluxo Server–Connector em dois hosts foi executado nesta auditoria.** O Node dos dois testes de conteúdo executou pacotes sintéticos locais, não o Pi real. As evidências Windows/WSL2/Pi do repositório são afirmações apresentadas pelo projeto; não foram reproduzidas aqui.
+## Achados remanescentes
 
-## 3. O que melhorou em C3
+### U01 — Aprovação não instala a guarda no escritor nativo
 
-O default agora compartilha relógio efetivo; o spawn enfileirado revalida no começo da thread; aprovações permissivas consultam fence na bridge; CAS saiu do lock global; força usa pool separado dos observers; o conteúdo integral dos pacotes listados passou a compor a identidade; CoreError possui código estável e mensagem separada; shutdown tenta dispor a factory quando resolvido. Esses avanços são reais e seus testes anteriores passaram.
+**Prioridade:** P1. **Relação com C4:** C4-02.01/02/03/06.
 
-A leitura correta é **cenários anteriores resolvidos, garantia transversal ainda parcial**:
+**Âncoras no snapshot:** `src/nexus_connector_core/native/runtime_bridge.py:269–331; native/adapters/codex.py:1127–1171,334–373`. Intervalos são auxiliares; buscar símbolos no HEAD.
 
-| Correção C3 | Limite remanescente |
-|---|---|
-| Guarda no começo da thread | T03: existe outra espera no lock de escrita do adapter. |
-| CAS fora do lock global | T02: exceção ordinária deixa reserva pendente; T01: outra rota aguarda o próprio journal antes de force. |
-| Pool exclusivo de força | T01: semáforo de storage ainda impede sequer despachar nesse pool. |
-| Disposal em shutdown resolvido | T04: aberturas em `_opening` não entram no predicado de resolução. |
-| Árvore completa por dependency | T06: seleção omite relações optional/peer presentes; T07: orçamento soma depois da validação. |
-| Verificação de prepared | T05: verificação antecede o callback de ambiente, que pode atravessar uma atualização local. |
+**Observação executada:** Duas parametrizações atravessaram bridge, adapter e serializer Codex reais com stdin de laboratório. A guarda começou válida. Depois de o caminho esperar em _write_lock, venceu o deadline ou mudou o turno. Em ambos os casos foi escrito o JSON-RPC id=7 com decision=accept.
 
-MCP HTTP direto e a separação Core/Server/Connector continuam preservados nas alterações inspecionadas. Não identifiquei novo MCP stdio/server/proxy nesta revisão. Isso não é uma prova formal de ausência em qualquer código futuro.
+**Causa:** reply_native_approval verifica a autorização/correlação antes de invocar reply, mas não instala DispatchGuards para a chamada síncrona. O escritor possui a checagem pós-lock; nesta entrada ela não recebe a guarda pertinente. Uma guarda só temporal também não revalida o pedido/turno na fronteira.
 
-## 4. Achados confirmados
+**Limite da prova:** Não foi iniciada sessão de provider real. O byte stream produzido pelo transporte real é a observação, não somente uma flag de fake.
 
-### T01 — P1 — A força de emergência espera a persistência
+**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
 
-**Fonte:** `runtime.py:_force_after_deadline`, aproximadamente 1014–1077. O método aguarda `journal.admit(... critical=True, effect_imminent=True)` antes de chamar `force_stop`. A exceção é tratada, mas uma gravação retida continua segurando o fluxo.
+### U02 — Abertura espera no adaptador depois da última verificação
 
-**Reprodução:** close do peer espera Event; a admissão do comando interno de força espera outro Event. Após o orçamento de shutdown e mais 150 ms, a função física de força ainda não foi alcançada. Somente liberar storage permite avançar. O teste usa Core e journal reais com fault injection específico, sem provider.
+**Prioridade:** P1. **Relação com C4:** C4-02.05; C4-03.02.
 
-**Impacto:** falha de armazenamento pode impedir a contenção de um runtime já pertencente ao Core. Não é falta de threads e não é resolvido pelo pool dedicado.
+**Âncoras no snapshot:** `src/nexus_connector_core/native/runtime_bridge.py:664–681; native/adapters/codex.py:292–312,684–747`. Intervalos são auxiliares; buscar símbolos no HEAD.
 
-**Correção:** C4-01. Separar despacho de contenção e auditoria, manter estado/ownership e journal limitado em caminho não bloqueante para força. Unknown é resultado correto enquanto não observar parada; gravar antes de poder parar é a dependência indevida.
+**Observação executada:** Duas parametrizações usaram o start do adaptador Codex real, preso em _start_lock. Após deadline vencer ou shutdown público retornar, a trava foi liberada e spawn_owned_process foi alcançado.
 
-### T02 — P2 — CAS deixa busy permanente depois de erro
+**Causa:** A unidade de thread verifica antes de connector.start, mas start contém esperas adicionais. A guarda de abertura não é propagada até o ponto de criação do processo.
 
-**Fonte:** `runtime.py:renew_lease/revoke_lease`, aproximadamente 1297–1336 e 1414–1447. `lease_cas_pending=True` é configurado antes da espera; há recuperação de CancelledError, mas erro normal pode sair sem limpar/finalizar a tentativa.
+**Limite da prova:** A primitiva de spawn foi substituída por uma sentinela que registra e lança OSError antes de criar qualquer processo. Isso comprova alcance indevido da fronteira, não execução de Codex real.
 
-**Reprodução:** a primeira chamada CAS lança `JOURNAL_FULL` comprovadamente antes de entregar qualquer gravação. O journal normal é restaurado. Renewal válido recebe RECONNECT_BUSY; revogação válida recebe REVOKE_BUSY. As duas parametrizações falharam.
+**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
 
-**Impacto:** armazenamento recuperado não restaura a operação daquela lease. Não execute reset da sessão como workaround.
+### U03 — Cancelamento perde o resultado nativo tardio de open
 
-**Correção:** C4-04. Identidade de tentativa e resultado explícito: falha segura libera reserva; unidade aceita/incerta é reconciliada. `finally: pending=False` universal seria outra falha porque permite competir com commit tardio.
+**Prioridade:** P1. **Relação com C4:** C4-03.01/03/04/07.
 
-### T03 — P1 — Escrita após vencimento dentro do adapter Codex
+**Âncoras no snapshot:** `src/nexus_connector_core/runtime.py:207–215,open/finally (~490); native/runtime_bridge.py:674–681`. Intervalos são auxiliares; buscar símbolos no HEAD.
 
-**Fonte:** `native/runtime_bridge.py:send/_guarded_dispatch` e `native/adapters/codex.py:_CodexTransport._write`, aproximadamente 332–365. A bridge consulta o guard, mas `_write` aguarda `_write_lock` e depois escreve/flush sem consultar novamente.
+**Observação executada:** Um start de laboratório foi bloqueado dentro da thread. O chamador de open foi cancelado. close ocorreu antes do nascimento simulado, _opening ficou vazio e _uncertain_opens reteve apenas o scope. Após shutdown e liberação da thread, o adapter retornou um handle ativo que nenhum supervisor recuperou; outro shutdown não solicitou força.
 
-**Reprodução:** CodexAppServerConnector, bridge e serializer reais; stdin é StringIO de laboratório, não processo. A autorização é inicialmente válida. O lock avisa quando o comando chegou e o relógio só então passa do deadline. Ao liberar o lock, o sink recebe JSON-RPC `turn/start` expirado.
+**Causa:** A tentativa mantém Event/guard, mas não o Future produtor e um observador independente do chamador. O resultado de asyncio.to_thread fica perdido após cancelamento; o finally encerra o rastreamento específico e a factory só tenta close cedo.
 
-**Impacto:** a guarda ficou na entrada da unidade de thread, não no limite nativo depois de todas as esperas. O mesmo princípio precisa ser verificado em Pi/Claude e respostas de approval/input; esses outros caminhos são critérios de teste, não defeitos adicionais já demonstrados nesta rodada.
+**Limite da prova:** O teste não criou processo de SO. Ele demonstra perda de ownership do resultado pelo lifecycle real do Core. Unknown e slot retido são conservadores, mas não substituem consumir o handle que efetivamente retorna.
 
-**Correção:** C4-02. Guard por operação até o writer/spawner, consulta após a trava e antes da tentativa de efeito. Depois de bytes possíveis, preserve unknown; não transforme erro de flush em not_sent.
+**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
 
-### T04 — P1 — Shutdown descarta recursos e permite abertura tardia
+### U04 — Urgência maior não antecipa força já agendada
 
-**Fonte:** `runtime.py:open/shutdown/_dispose_factory_if_resolved`; `native/runtime_bridge.py:factory.open`. O predicado de disposal verifica uncertain/live/cleanup, mas não `_opening`. O guard de start verifica deadline, sem acompanhar draining de uma abertura que já passou da primeira verificação no Core.
+**Prioridade:** P1. **Relação com C4:** C4T-13; C4-01.02/05.
 
-**Reprodução A:** abertura pela composição pública aguarda environment. `shutdown(0,0)` retorna relatório com resultado incerto, `_opening` ainda existe e a factory está marcada como disposta.
+**Âncoras no snapshot:** `src/nexus_connector_core/runtime.py:1062–1088`. Intervalos são auxiliares; buscar símbolos no HEAD.
 
-**Reprodução B:** liberar o mesmo callback depois do shutdown alcança `start` do adapter de laboratório. Não foi iniciado um Codex real; foi comprovado o alcance da fronteira de start depois de draining.
+**Observação executada:** Um primeiro shutdown com orçamento de 20 segundos iniciou close travado e agendou força. Um segundo shutdown público com orçamento zero retornou sem antecipar o despacho; a sentinela de força permaneceu não chamada.
 
-**Impacto:** uma abertura pode produzir efeito sem ter recebido fence do shutdown, com recursos de controle já descartados. São duas falhas relacionadas, não somente uma checagem booleana faltante.
+**Causa:** _schedule_force retorna quando force_task existe e ainda não terminou, mesmo se apenas dorme aguardando um prazo futuro. O parâmetro immediate não muda esse estado.
 
-**Correção:** C4-03. Registro de OpeningAttempt antes de callbacks/fila, guard fechado pelo shutdown, ownership de futures/handles mesmo sem Session, disposal somente quando toda capacidade de iniciar/controlar efeito estiver resolvida.
+**Limite da prova:** Foi usado peer sintético para observar dispatch, sem inferir morte física. O teste libera o close no teardown e não espera 20 segundos; a decisão errada é verificável antes do prazo antigo.
 
-### T05 — P2 — Atualização local do binário depois de verify não é detectada
+**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
 
-**Fonte:** `runtime.py:341–347` valida prepared antes de entrar na factory. A factory aguarda environment/resume/action e verifica tempo, mas não repete a comprovação de conteúdo no ponto de lançamento.
+### U05 — Verificação final do Pi ignora CLI e dependências
 
-**Reprodução:** environment altera o executável selecionado depois da primeira verificação e retorna normalmente. O adapter sintético alcança start com o arquivo modificado. A fixture de qualification é controlada para isolar a política de drift; não é qualificação de um provider nem alegação de ataque.
+**Prioridade:** P2. **Relação com C4:** C4-03.05/06.
 
-**Impacto:** uma atualização local ou alteração concorrente pode fazer a execução diferir do build/binding aprovado. Recusar drift ao iniciar é parte da promessa já documentada, não novo requisito de sandbox absoluto.
+**Âncoras no snapshot:** `src/nexus_connector_core/native/runtime_bridge.py:547–572; profiles.py:verify_prepared`. Intervalos são auxiliares; buscar símbolos no HEAD.
 
-**Correção:** C4-03. Revalidar snapshot de lançamento depois de callbacks/esperas, sem hash pesado no event loop. Preservar separação entre build e binding e declarar janela residual real de filesystem, em vez de prometer atomicidade universal.
+**Observação executada:** Prepare/build verification reais produziram um Pi Node+CLI+dependência. O callback de ambiente modificou a CLI ou um index.js dependente. Node e diretório de trabalho permaneceram iguais; o start sentinela foi alcançado em ambos os casos.
 
-### T06 — P2 — Build Pi ignora optional/peer presentes
+**Causa:** _launch_signature só coleta size/mtime de argv[0] e cwd. Para Pi, argv[0] é Node, não a CLI nem o conjunto qualificado. Não é uma corrida same-size/same-mtime: os arquivos omitidos foram alterados normalmente.
 
-**Fonte:** `build_identity.py:_declared_dependencies`, aproximadamente 164–181, seleciona somente `dependencies`.
+**Limite da prova:** Qualificação e gate de SO foram isolados para testar a janela de conteúdo; nenhum Pi real foi lançado e o teste não reivindica suporte a essa fixture como build de produção.
 
-**Reprodução:** pacote Pi de laboratório declara `helper` em optionalDependencies ou peerDependencies. O helper está instalado em node_modules e é carregado pelo entrypoint. O Node real imprime v1; o arquivo muda e passa a imprimir v2. O digest fica igual nas duas modalidades.
+**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
 
-**Impacto:** o algoritmo pode qualificar conteúdo diferente com a mesma identidade para layouts que aceita. A árvore completa de cada dependency não resolve pacotes excluídos da seleção.
+### U06 — Erro de confirmação após commit deixa revogação só no journal
 
-**Correção:** C4-05. Cobrir relações instaladas relevantes com resolução/topologia correta ou recusar explicitamente o layout antes de qualificá-lo. Não incorporar todos pacotes irrelevantes da máquina. Versionar algoritmo e requalificar Pi real separadamente.
+**Prioridade:** P1. **Relação com C4:** C4-04.01/02/03/04/05.
 
-### T07 — P2 — Orçamento de bytes aceita o arquivo que ultrapassa o limite
+**Âncoras no snapshot:** `src/nexus_connector_core/runtime.py:1418–1488,1530–1571; ports.py:Journal; journal.py:cas_session_lease`. Intervalos são auxiliares; buscar símbolos no HEAD.
 
-**Fonte:** `build_identity.py:_add_entry`, aproximadamente 140–149. A checagem observa `total >= limite`, depois obtém tamanho, calcula digest e soma. Não verifica o total projetado para essa entrada.
+**Observação executada:** Um wrapper do SQLiteJournal real executou e confirmou o CAS de revogação, depois lançou CoreError(possible_effect=True,retry_safe=False). A consulta durável provou revoked=True. Em seguida o Core aceitou submit com o contexto anterior e chamou send_turn no peer.
 
-**Reprodução:** limite reduzido para 32 bytes, último e único arquivo com 64 bytes. O cálculo retorna em vez de recusar. Não foi usado arquivo gigante nem provocado consumo destrutivo.
+**Causa:** O tratamento de Exception usa cas.done() como evidência suficiente para limpar a reserva. O resultado não é reconciliado e a memória não fica cercada. Future terminado com exceção não comprova rollback; o port permite implementar a entrega do resultado separada do commit.
 
-**Impacto:** o limite documentado não é efetivo na fronteira; um arquivo final pode excedê-lo. Há também enumeração eager por rglob/sort a revisar, mas este último ponto é hardening estático, não uma segunda reprodução de consumo massivo.
+**Limite da prova:** É fault injection explícita de confirmação perdida no port público do Journal, não uma alegação de que sqlite3 normalmente comita quando a própria transação falha. O teste usa persistência real e erro que declara efeito possível.
 
-**Correção:** C4-06. Validar orçamento projetado antes da leitura e bytes reais durante streaming; tornar enumeração/memória/profundidade limitadas e recusar arquivos especiais/layouts não suportados.
+**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
 
-## 5. Plano entregue
+### U07 — Enumeração materializa nomes antes de aplicar o limite
 
-`02_PLANO_CORRECAO_C4.md`: oito fases, 47 tarefas com implementação, âncoras, dependências e aceite; estados mínimos de abertura/CAS; matriz de efeitos; comandos e gates.
+**Prioridade:** P2. **Relação com C4:** C4-06; C4T-45.
 
-`03_MATRIZ_ACEITE.md`: 53 cenários. Dez são regressões executadas e FAIL no snapshot. Os 43 complementares estão NOT_RUN nesta auditoria. Parte pode ser coberta por testes existentes: o agente deve mapear o cenário exato, não duplicar contagens.
+**Âncoras no snapshot:** `src/nexus_connector_core/build_identity.py:91–145`. Intervalos são auxiliares; buscar símbolos no HEAD.
 
-`regressoes/test_review4.py`: sementes com expectativas corretas, sem xfail. `backlog.json` e `matrix.json` acompanham o estado inicial de execução. `00_ENTREGAR_AO_AGENTE.md` é o prompt de implementação. `04_HANDOFF_CONSUMIDORES.md` define coordenação dos outros repositórios.
+**Observação executada:** Com 1.000 arquivos reais e limite reduzido para 4 entradas, o scanner obteve 1.000 nomes por os.listdir antes de recusar a árvore. A expectativa de interrupção incremental era no máximo o quinto nome.
 
-A prioridade é implementar C4-01/02/03 como garantia comum. C4-04 corrige a recuperação sem reabrir os problemas de lock. C4-05/06 podem avançar em paralelo. C4-07 só encerra com evidência proporcional ao nível declarado.
+**Causa:** sorted(os.listdir(current)) aloca a lista completa e a ordena antes do teste de orçamento dentro do laço. Limitar a lista final de arquivos não limita essa alocação intermediária.
 
-## 6. Decisão E1 e limites
+**Limite da prova:** Não foi simulada falta de memória nem medido um OOM. Foi contado o trabalho efetivamente realizado pelo caminho atual; o requisito de interrupção antecipada não foi atendido.
 
-A decisão de não ratificar E1 decorre dos três P1 e dos gaps de recuperação/build/limites no escopo, não da ausência de attach ou dos outros repositórios. E0 para desenvolvimento experimental com versão fixada continua adequado. E2 exige fluxo real local/remoto; não foi demonstrado aqui.
+**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
 
-Não é possível afirmar que esta revisão esgota todo possível defeito. Os testes confirmam problemas específicos e as correções precisam de regressão, fault injection e qualificação operacional. Não foi feito pentest nem prova formal de concorrência.
+## A qualidade da evidência ainda precisa ser corrigida
 
-## 7. Fontes e evidência
+O arquivo `plans/correction-c4/matrix.json` marca 52 cenários PASS e um BLOCKED. A análise encontrou mapeamentos que não demonstram o cenário alegado. Isso não autoriza apagar os testes que passam; requer delimitar a conclusão.
 
-Arquivos de código exatos em `evidencias/SOURCE_EXCERPTS.md`, hash de todos originais em `evidencias/metadata.json`, logs/XMLs e comandos em `evidencias/`. Fontes externas primárias de apoio: Python asyncio/concurrent.futures; npm package.json; Node CommonJS modules, listadas no plano. O conteúdo principal deste relatório é inspeção e experimentação sobre o upload do usuário.
+Exemplo concreto: `test_c4t13_zero_shutdown_shortens_scheduled_force_deadline` só chama um shutdown de 0,05 + 0,05 segundo. Não cria primeiro uma força agendada para prazo distante e depois pede encurtamento. Além disso, `report_unknown()` retorna True, sem ler o resultado. O novo U04 faz as duas solicitações reais e demonstra a ausência de antecipação. O teste anterior pode continuar útil para força após prazo curto, mas precisa de nome/escopo correto.
 
-Wheel produzido nesta auditoria: `7c1f6aa3182d53f03d15cfdb3359d660768afcaf81da0cf435e741f589f33cb1`. Ele não é o artefato normalizado citado pelo desenvolvedor; não foi testada reprodução byte a byte do processo de normalização. Manifesto NXL: `sha256:a4fd84304de7ba12041721c07f4edce29d3f39d17d8bd24f375de24b0a728630`, revisão `nxl-1-agent-centric-http-only-2026-09-25-r3`, status `development-partial`.
+C4T-25/26 associam cancelamento e retorno tardio a cenário que só segura callback antes do spawn e à existência de `_uncertain_opens`. U03 demonstra a diferença entre registrar incerteza e manter o Future/handle supervisionado. C4T-19 associa aprovação à guarda na bridge; U01 mostra a espera interna posterior. C4T-45 limita arquivos coletados, não a lista intermediária criada por `listdir`. C4T-32/33 tratam erros pré-commit, não entrega perdida após commit (U06).
 
-Nenhum código original foi corrigido, nenhum commit/push/release foi realizado. O pacote é uma auditoria com plano e regressões, não uma nova versão do produto.
+A evidência do executor afirma que recebeu somente Markdown e reconstruiu as sementes T. Não presumimos o que foi copiado para seu ambiente. Este pacote inclui as sementes originais e a adaptação necessária, mais o novo arquivo completo, para que a próxima rodada não dependa de reconstrução por descrição.
+
+## Empacotamento e conformance
+
+Wheel e sdist foram gerados pela interface `setuptools.build_meta` em cópia do repo, com log e hashes. Esta auditoria não executou toda a campanha normalizada cross-platform do projeto, nem publicação ou twine. Os hashes locais não precisam coincidir com a campanha normalizada apresentada pelo executor; não tratamos essa diferença isolada como defeito.
+
+O wheel foi instalado na venv de auditoria, fora da árvore-fonte. `tools/consumer_smoke.py` rodou via `python -I -c` em diretório vazio nos modos embedded e remote. Ambos passaram usando o mesmo artefato. O bundle instalado passou com `allow_development_partial=True`, revision/status explicitados. Esses exemplos usam peers/projeções sintéticos: NÃO são Nexus Server e Connector executando distribuídos.
+
+Nenhuma implementação de MCP stdio, servidor/proxy MCP foi identificada nas alterações revisadas. Isso não substitui o teste end-to-end do MCP HTTP direto, pertencente à campanha E2.
+
+## Prioridade e ordem recomendada
+
+Primeiro, C5-01/02: guardas finais de approvals/spawn e supervisor das aberturas. Em seguida C5-03/04: urgência de força e incerteza de CAS. Completar C5-05/06: conteúdo real do Pi e limites de enumeração. C5-00 organiza evidências antes das alterações; C5-07 valida artefatos/qualificação depois de integrar.
+
+Server e Connector podem continuar desenvolvimento paralelo em E0 com versão fixada. Não devem contornar o Core copiando adaptadores ou chamando APIs privadas. A definição C1 de E1 permite escopo delimitado; a ausência de attach/multi-host não é, sozinha, o bloqueador desta avaliação. Os P1 reproduzidos são o impedimento.
+
+## Arquivos entregues
+
+`00_ENTREGAR_AO_AGENTE.md` é o prompt e a ordem de execução. `02_PLANO_CORRECAO_C5.md` contém 8 fases e 48 tarefas explícitas. `03_MATRIZ_ACEITE.md` contém 56 cenários, incluindo os executados e os ainda propostos; não é uma alegação de 56 testes implementados. `regressoes/test_review5.py` é executável e suas expectativas não devem ser invertidas. Evidências incluem logs, XMLs, hashes, resultados e diffs de fixture. Código do produto não foi alterado nem corrigido nesta auditoria.
