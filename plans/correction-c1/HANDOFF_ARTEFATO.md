@@ -224,3 +224,31 @@ códigos preservados.
    de força em voo (uma por recurso); nova unidade só após conclusão;
    recurso já parado é observado e nunca re-forçado (X03).
 4. Versão mínima esperada pelos hosts: **0.2.7.dev0**.
+
+
+## Mudanças que os hosts absorvem (C9 — catálogo + recuperação)
+
+1. **Catálogo público (o primeiro contrato do seletor)**:
+   `get_runtime_catalog()` → `RuntimeCatalog(core_version,
+   format_version, runtimes)` com `RuntimeDescriptor` por adapter
+   (`adapter_id`, `display_name`, `harness_family`, `native_kind`,
+   `connection_mode`, `implementation_platforms`, `support_status`,
+   `discoverable`). Server/Connector/UI enumeram por essa API — **sem
+   arrays próprios e sem `native.registry`**; `claude_attach` =
+   `registered_unqualified` (nunca elegível por existir).
+2. **`DiscoveryRequest(adapter_ids=None)`**: pergunta ao catálogo quais
+   adapters admitem discovery neste host; tupla explícita continua
+   filtro; IDs desconhecidos recusados como antes.
+3. **Gerador de contratos** deriva os enums do registry (fonte única);
+   os schemas regenerados são byte-idênticos — nenhum impacto em
+   consumidores atuais.
+4. **Y01**: a contenção de handles tardios nunca é gated por observação
+   travada (cache do último estado; observe = unidade própria
+   orçamentada).
+5. **Y02**: shutdown é orçamentado mesmo com release durável pendente;
+   obrigação + release em voo sobrevivem ao timeout e convergem no
+   próximo lifecycle; contenção de recursos vivos roda antes das
+   liberações duráveis.
+6. Versão mínima esperada pelos hosts: **0.2.8.dev0** (a validação
+   recomenda iniciar Connector e integração Server AGORA, com este wheel
+   pinado).

@@ -1,4 +1,4 @@
-# Core API (`0.2.7.dev0`)
+# Core API (`0.2.8.dev0`)
 
 This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,
@@ -10,6 +10,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | --- | --- |
 | `RuntimeCore`, `LocalRuntimeCore`, `create_runtime` | Async port, local implementation and the supported composition factory. `create_runtime(journal=…, environment=…, candidates=…, workspace_roots=…, …)` builds the real runtime from typed host inputs (trusted callbacks for Codex client identity/resume/Pi native action, budgets, optional installation ledger, clock and event sink); hosts never import the private adapter bridge. A `native_factory` parameter exists for contract-level smokes with fakes. |
 | `ExecutionContext` | Host-issued server/executor/binding/agent/workspace identity, revisions, generations, monotonic lease deadline and allowed actions. Never derive it from a peer payload. |
+| `RuntimeCatalog`, `RuntimeDescriptor`, `get_runtime_catalog`, `CATALOG_FORMAT_VERSION` | Single-source runtime catalog (C9): enumerate what this Core knows - adapter IDs, family, connection mode, implementation platforms, support status (`claude_attach` = `registered_unqualified`, never READY by existing) - cheap, sync, no native provider modules, no spawn/journal/credentials. `DiscoveryRequest(adapter_ids=None)` asks the catalog which adapters admit discovery; availability/eligibility are separate concepts (local inventory + Server-side binding policy). |
 | `DiscoveryRequest`, `Inventory`, `InstallationCandidate` | Discover or pass explicitly selected local native candidates; discovery is not qualification. |
 | `LaunchIntent`, `PreparedLaunch`, `OpenOperation` | Prepare a selected managed launch and open a session. `open` revalidates binary/profile/root before native effect. |
 | `TurnOperation`, `ControlOperation`, `CloseOperation` | Submit text, interrupt/steer a targeted turn, or close an owned session. Steer targeting is adapter-specific (see below). Use a new operation ID for each new intent. |

@@ -179,3 +179,24 @@ C2–C7 preservadas (29+16+11+6+9); suítes: Windows 3.13/3.11/3.12 =
 `sha256:7ab63138…659aec46`), twine/offline verdes, **não publicado**.
 **E1 declarado para 0.2.7.dev0**; E2/E3 seguem bloqueados pelos hosts
 reais, attach, billing e PyPI conjunta.
+
+
+## Adendo C9 (2026-09-30) — validação independente de `6a43e90`
+
+Oitava rodada (`FIX_UPDATE_PLAN/`): validação com 2 achados de
+recuperação (Y01 P1: retry de força gated por observer travado; Y02 P2:
+release durável pendente prende shutdown) + a lacuna de contrato **C01**
+(catálogo público de runtimes ausente). Desenvolvimento paralelo de
+Server/Connector explicitamente RECOMENDADO pela validação. Correção C9
+executada: catálogo público (`RuntimeCatalog`/`RuntimeDescriptor`/
+`get_runtime_catalog`, fonte única = registry; attach =
+`registered_unqualified`; `DiscoveryRequest(None)` pergunta ao catálogo;
+gerador de contratos deriva enums — bytes idênticos) + Y01 (observação
+possuída/coalescida/orçamentada com cache do último estado) + Y02
+(release = produtor possuído coalescido com orçamento; contenção de
+vivos antes das liberações duráveis). Baseline 2 FAIL registrado; C8/C7
+preservadas. Suítes: Windows 3.13/3.11/3.12 = 780/74; WSL2 = 835/19.
+Artefato **0.2.8.dev0** byte-idêntico (wheel
+`sha256:6f4823f3…de0e23a`, sdist `sha256:9bed1b62…62daec5`), twine/
+offline verdes, **não publicado**. **E1 declarado para 0.2.8.dev0**;
+E2/E3 seguem bloqueados pelos hosts reais.

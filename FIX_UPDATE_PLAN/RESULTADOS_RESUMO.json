@@ -1,67 +1,69 @@
 {
-  "snapshot": "9f0ebabcfb314f3f2da2221467d16a85134e475e",
-  "version": "0.2.6.dev0",
-  "zip_sha256": "52c862969e81d181fa9dc39806d8e08276f945cc38f664f3019ae164b72fdad0",
-  "campaigns": {
-    "c7_delivered": {
-      "total": 9,
-      "passed": 9,
-      "failed": 0,
-      "errors": 0,
-      "skipped": 0
-    },
-    "c7_original": {
-      "total": 9,
-      "passed": 9,
-      "failed": 0,
-      "errors": 0,
-      "skipped": 0
-    },
-    "validated_new": {
-      "total": 5,
-      "passed": 2,
-      "failed": 3,
-      "errors": 0,
-      "skipped": 0
-    },
-    "validated_repeat": {
-      "total": 5,
-      "passed": 2,
-      "failed": 3,
-      "errors": 0,
-      "skipped": 0
-    },
-    "historical_final": {
-      "total": 62,
-      "passed": 61,
-      "failed": 0,
-      "errors": 0,
-      "skipped": 1
-    },
-    "full": {
-      "total": 842,
-      "passed": 699,
-      "failed": 123,
-      "errors": 0,
-      "skipped": 20
-    }
+  "c8_both": {
+    "tests": 10,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 10,
+    "time_seconds": 8.575
   },
-  "overlap": "C7 delivered and C2-C6 historical are subsets of full. Repeats are not additional tests. Original C7 seeds are separate from reconstructed delivered tests.",
+  "c7_original": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 9,
+    "time_seconds": 2.656
+  },
+  "history": {
+    "tests": 71,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 70,
+    "time_seconds": 72.668
+  },
+  "new_final": {
+    "tests": 2,
+    "failures": 2,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 0,
+    "time_seconds": 4.842
+  },
+  "new_final_repeat": {
+    "tests": 2,
+    "failures": 2,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 0,
+    "time_seconds": 4.892
+  },
+  "full": {
+    "tests": 847,
+    "failures": 123,
+    "errors": 0,
+    "skipped": 20,
+    "passed": 704,
+    "time_seconds": 178.462
+  },
+  "scope": {
+    "snapshot": "6a43e90a787f3a87af8e26f3f93d4c708cf8a0a8",
+    "version": "0.2.7.dev0",
+    "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
+    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+    "native_providers_executed": false,
+    "real_hosts_integration": false,
+    "original_source_files": 390,
+    "modified_original_files": 0
+  },
   "packaging": {
     "wheel": "PASS",
     "sdist": "PASS",
-    "isolated_import": "PASS",
-    "bundle": "PASS; explicit development-partial",
-    "embedded_consumer": "PASS; synthetic",
-    "remote_consumer": "PASS; synthetic"
-  },
-  "providers_real": "NOT_RUN",
-  "two_hosts_real": "NOT_RUN",
-  "Windows_WSL_campaigns": "not reproduced; executor-provided evidence only",
-  "environment_limit": "proc_children unavailable in sandbox; full suite has 123 related failures, not 123 independently confirmed product defects",
-  "findings": {
-    "X01": "confirmed; P1; newer observed durable fence does not block old-context submit",
-    "X02": "confirmed; P2; failed late-slot release forgotten",
-    "X03": "confirmed; P2; repeated public shutdown overlaps physical force on same handle"
+    "embedded_synthetic": "PASS",
+    "remote_synthetic": "PASS",
+    "bundle": "PASS with explicit development-partial",
+    "catalogue_public_contract": "MISSING",
+    "internal_catalogue": "PRESENT"
   }
 }

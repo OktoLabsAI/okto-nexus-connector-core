@@ -9,6 +9,16 @@ from pathlib import Path
 
 import rfc8785
 
+# C9/C01: the adapter enums derive from the SINGLE registry source -
+# never a second hand-maintained list. The generated JSON contains
+# copies of the values; it is not another edited authority.
+_SRC = Path(__file__).resolve().parents[1] / "src"
+if str(_SRC) not in sys.path:
+    sys.path.insert(0, str(_SRC))
+from nexus_connector_core.native.registry import adapter_specs  # noqa: E402
+
+ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()]
+
 REVISION = "nxl-1-agent-centric-http-only-2026-09-25-r3"
 DESTINATION = Path(__file__).resolve().parents[1] / "src/nexus_connector_core/contracts/nxl/v1"
 SCHEMA = "https://json-schema.org/draft/2020-12/schema"
@@ -83,8 +93,7 @@ CANDIDATE = {
     "type": "object", "required": ["candidate_id", "adapter_id", "fingerprint",
                                    "trust"],
     "properties": {
-        "candidate_id": ID, "adapter_id": {"enum": ["codex_app_server", "pi_rpc",
-                                                       "claude_stream", "claude_attach"]},
+        "candidate_id": ID, "adapter_id": {"enum": ADAPTER_IDS},
         "fingerprint": HASH, "trust": {"enum": ["selected", "untrusted", "rejected"]},
         "version": {"type": ["string", "null"], "maxLength": 80},
         "architecture": {"type": ["string", "null"], "maxLength": 80},
@@ -98,8 +107,7 @@ INVENTORY = object_schema("inventory", ["server_id", "executor_id", "revision",
 CAPABILITY = object_schema("capability", ["adapter_id", "native_version",
                                            "platform", "conversation",
                                            "managed_work", "tool_path"], {
-    "adapter_id": {"enum": ["codex_app_server", "pi_rpc", "claude_stream",
-                            "claude_attach"]},
+    "adapter_id": {"enum": ADAPTER_IDS},
     "native_version": {"type": ["string", "null"], "maxLength": 80},
     "platform": {"type": "string", "minLength": 1, "maxLength": 80},
     "conversation": {"type": "boolean"},

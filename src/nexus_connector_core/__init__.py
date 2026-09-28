@@ -38,10 +38,14 @@ from .models import (
 from .protocol import CONTRACT_REVISION, intent_hash, submit_frame_intent_hash
 from .ports import OwnedSlotLedger, RuntimeCore
 from .composition import create_runtime
+from .catalog import (
+    RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog,
+    CATALOG_FORMAT_VERSION,
+)
 from .runtime import LocalRuntimeCore
 from .slot_ledger import SQLiteOwnedSlotLedger
 
-__version__ = "0.2.7.dev0"
+__version__ = "0.2.8.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
@@ -51,5 +55,6 @@ __all__ = [
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ReconcileRequest",
     "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
     "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",
+    "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "CATALOG_FORMAT_VERSION",
     "SQLiteOwnedSlotLedger",
 ]

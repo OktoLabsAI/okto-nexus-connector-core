@@ -1,0 +1,52 @@
+{
+  "round": "C9",
+  "base_commit": "6a43e90a787f3a87af8e26f3f93d4c708cf8a0a8",
+  "phases": {
+    "C9-00": {
+      "tasks": {
+        "C9-00.01": "DONE",
+        "C9-00.02": "DONE",
+        "C9-00.03": "DONE"
+      },
+      "note": "baseline 2 FAIL recorded; layers separated"
+    },
+    "C9-01": {
+      "tasks": {
+        "C9-01.01": "DONE (catalog.py, single source)",
+        "C9-01.02": "DONE (support_status; attach never READY)",
+        "C9-01.03": "DONE (adapter_ids=None from catalog)",
+        "C9-01.04": "DONE (availability stays inventory-based)",
+        "C9-01.05": "DONE (generator derives enums; bytes identical)",
+        "C9-01.06": "DONE (consumer contract in handoff)"
+      },
+      "note": "5 catalog tests PASS"
+    },
+    "C9-02": {
+      "tasks": {
+        "C9-02.01": "DONE (last_state cache)",
+        "C9-02.02": "DONE (owned/budgeted/coalesced observe)",
+        "C9-02.03": "DONE (X03 coalescence kept green)",
+        "C9-02.04": "DONE (y01 + X03 + w03 seeds)"
+      },
+      "note": "Y01 PASS"
+    },
+    "C9-03": {
+      "tasks": {
+        "C9-03.01": "DONE (owned coalesced producer + budget)",
+        "C9-03.02": "DONE (containment before releases)",
+        "C9-03.03": "DONE (obligation survives timeout)",
+        "C9-03.04": "DONE (y02: budget return + exact convergence)"
+      },
+      "note": "Y02 PASS"
+    },
+    "C9-04": {
+      "tasks": {
+        "C9-04.01": "DONE (campaign, no inflation)",
+        "C9-04.02": "DONE (artifact + isolated consumers)",
+        "C9-04.03": "DONE (contract delivered to both hosts)",
+        "C9-04.04": "DONE (E1 for 0.2.8.dev0)"
+      },
+      "note": "evidence + XMLs recorded"
+    }
+  }
+}

@@ -239,7 +239,10 @@ class PreparedLaunch:
 
 @dataclass(frozen=True, slots=True)
 class DiscoveryRequest:
-    adapter_ids: tuple[str, ...]
+    # C9/C01: None asks the CATALOG which adapters admit discovery on
+    # this host (managed executables) - the caller never needs its own
+    # adapter array; an explicit tuple remains a filter; () is "none".
+    adapter_ids: tuple[str, ...] | None = None
 
 
 @dataclass(frozen=True, slots=True)

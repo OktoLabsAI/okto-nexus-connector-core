@@ -1,44 +1,50 @@
-# Instruções de execução — C8
+# Entrega ao agente — C9
 
-Copie **todo o pacote**, incluindo regressoes, para o repositório ou mantenha-o em pasta acessível ao executor. Os Markdown não contêm os testes executáveis. O objetivo é implementar as três correções no HEAD atual, não gerar novo plano.
+Copie este diretório inteiro, incluindo `regressoes/`, para uma pasta de planejamento do repositório. Não entregue somente os Markdown. As correções C8 passaram na auditoria; preservar os avanços.
 
-## Prompt pronto
+## Prompt
 
 ```text
-Trabalhe no HEAD atual do okto-nexus-connector-core. Leia 01_RELATORIO_REAVALIACAO.md,
-02_PLANO_CORRECAO_C8.md e 03_MATRIZ_ACEITE.md. A referência auditada é
-9f0ebabcfb314f3f2da2221467d16a85134e475e / 0.2.6.dev0; não faça reset.
+Leia 01_RELATORIO_VALIDACAO.md, 02_PLANO_C9_CATALOGO_E_RECUPERACAO.md e
+03_MATRIZ_ACEITE.md. Trabalhe sobre o HEAD atual do Core, sem reset para a
+referência 6a43e90 (0.2.7.dev0) nem perda de alterações posteriores.
 
-Implemente C8-00 a C8-04. Priorize X01 (contexto antigo aceito depois de observar
-fence durável mais novo), e feche X02/X03 no MESMO coordenador de recursos tardios:
-obrigação de release durável preservada e força física coalescida.
+Implemente as correções Y01/Y02 e publique o catálogo de runtimes C01.
+A fonte única deve ser o registro do Core, com projeção pública sem detalhes
+de carregamento; Server, Connector e UI não mantêm arrays autoritativos.
+Separe conhecido, instalado, qualificado, pronto para runtime e autorizado
+para binding. Não criar MCP stdio, servidor/proxy MCP ou protocolo remoto
+novo no Core.
 
-Execute primeiro os testes reais do pacote. Preserve as nove sementes C7, os dois
-controles positivos C8 e a prova stage=lease_cas. Em X03, a primeira thread precisa
-continuar ativa ao observar a segunda chamada. Não substituir por mocks que
-recusam antes da fronteira, não xfail, não remover guards e não reescrever adapters.
+Execute as regressões fornecidas e preserve C8/C7. No retry de força,
+uma observação bloqueada não pode impedir a contenção sobre recurso próprio.
+Não regredir a coalescência de força física. No release persistente, o prazo
+do shutdown encerra só a espera, mantendo obrigação/produtor e recuperação.
 
-Não use producer_done como prova de rollback, não limpe estado após erro de ledger
-e não confunda cancelamento de await com término do produtor físico. Não conserte
-isso nos consumers, com atributos privados ou cópia de código. Preserve MCP HTTP
-direto no Server, identidade do agente, stdio nativo e ausência de proxy MCP.
+Os agentes de Server e Connector podem desenvolver em paralelo consumindo o
+contrato público. Entregue primeiro a API do catálogo, depois wheel pinado
+com os reparos. Não compense gaps nos hosts copiando adapters/imports privados.
 
-Atualize tarefas e matriz com commits, test nodes, comandos, XMLs, hashes e limites.
-Reporte qualificação real separada de peers sintéticos. E1 precisa dessas garantias
-no escopo declarado; E2/E3 não são demonstrados por smokes do wheel. Não publique
-release sem autorização. Entregue implementação e evidências, não outro plano.
+Registre testes/camadas, XMLs, hashes, mudanças de contrato e pendências.
+Testes sintéticos não qualificam provider real nem integração de dois hosts.
+Não marque NOT_RUN/BLOCKED como PASS. Não publique release sem autorização.
 ```
 
-## Verificação inicial
+## Executar
 
-Com Python >=3.11, pytest e as dependências reais do pyproject já instalados:
+Instale no ambiente de trabalho as dependências reais do projeto e de teste. Depois:
 
 ```bash
-python executar_verificacao.py --repo /caminho/okto-nexus-connector-core --output /caminho/evidencias-c8-inicial
+python executar_verificacao.py --repo /caminho/do/core --output /caminho/evidencias
 ```
 
-O runner não instala dependências, não modifica fonte de produto e não desliga contenção. Ele executa C8 e C7 original; `--historical` acrescenta a campanha histórica e `--full` a suíte completa. Cada saída deve ser uma pasta nova. Repita contra o código corrigido em outra pasta.
+O runner não instala dependências, não modifica fontes e não remove gates de contenção. Nesta auditoria, os dois testes C9 falham; C8 original tem cinco PASS e C7 original nove PASS. Contagens de campanhas repetidas/subconjuntos não somam ao total da suíte.
 
-No baseline: C8 = 3 FAIL / 2 PASS; C7 original = 9 PASS. Falha de import/setup é distinta de falha funcional. Os testes usam peers limitados e teardown que libera todos os workers. Uma finalização por timeout do processo de testes não comprova parada de quaisquer recursos nativos; consulte logs.
+## Conteúdo
 
-O pacote inclui resultados prévios e rascunhos separados em evidencias/preliminares. Somente validated_new/validated_repeat são as reproduções finais C8. As duas fontes rfc8785 utilizadas pelo auditor foram conferidas pelos hashes Git; não há stub no pacote e o executor usa a dependência normal de pyproject.
+`01_RELATORIO_VALIDACAO.md`: resultado e decisão.  
+`02_PLANO_C9_CATALOGO_E_RECUPERACAO.md`: trabalho explícito por fase.  
+`03_MATRIZ_ACEITE.md`: 24 cenários com camadas/estados.  
+`regressoes/`: testes C9 e sementes originais C8/C7.  
+`evidencias/`: logs, XMLs, observação do catálogo, trecho de código e hashes.  
+`artefatos/`: wheel/sdist gerados na auditoria, sem correções; não são a futura versão C9.

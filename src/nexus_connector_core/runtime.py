@@ -202,19 +202,23 @@ class _ReleaseObligation:
     spawning or forcing an already-stopped resource again.
     """
 
-    __slots__ = ("key", "session_id", "attempt")
+    __slots__ = ("key", "session_id", "attempt", "retry_task")
 
     def __init__(self, key: "OperationKey", session_id: str,
                  attempt: "_OpeningAttempt"):
         self.key = key
         self.session_id = session_id
         self.attempt = attempt
+        # C9/Y02: the owned durable-release producer (coalesced; the
+        # obligation survives a budget-expired wait).
+        self.retry_task: "asyncio.Task | None" = None
 
 
 class _LateHandleRecord:
     """Strongly-owned late handle awaiting proven stop (C6/V02b)."""
 
-    __slots__ = ("native", "attempt", "close_task", "force_task")
+    __slots__ = ("native", "attempt", "close_task", "force_task",
+                 "observe_task", "last_state")
 
     def __init__(self, native, attempt: "_OpeningAttempt"):
         self.native = native
@@ -223,6 +227,11 @@ class _LateHandleRecord:
         # in-flight close/force instead of dispatching a duplicate.
         self.close_task: "asyncio.Task | None" = None
         self.force_task: "asyncio.Task | None" = None
+        # C9/Y01: the observation is ALSO an owned, coalesced unit with
+        # its own budget - a stalled observer never gates the force
+        # decision, which uses the LAST KNOWN state instead.
+        self.observe_task: "asyncio.Task | None" = None
+        self.last_state: "str | None" = None
 
 
 class _ForceAudit:
@@ -375,8 +384,21 @@ class LocalRuntimeCore:
         self._factory_disposed = False
 
     async def discover(self, request: DiscoveryRequest) -> Inventory:
+        # C9/C01: a request without explicit IDs asks the single-source
+        # catalog which adapters admit discovery - no host-side adapter
+        # array. Attach (no executable/discoverable=False) is skipped;
+        # an explicit tuple keeps its filter semantics (unknown IDs are
+        # refused by discover_path as before).
+        if request.adapter_ids is None:
+            from .catalog import get_runtime_catalog
+            adapter_ids = tuple(
+                descriptor.adapter_id
+                for descriptor in get_runtime_catalog().runtimes
+                if descriptor.discoverable)
+        else:
+            adapter_ids = request.adapter_ids
         candidates = []
-        for adapter_id in request.adapter_ids:
+        for adapter_id in adapter_ids:
             found = await asyncio.to_thread(
                 discover_path, adapter_id,
                 trusted_roots=self._trusted_discovery_roots)
@@ -1165,22 +1187,23 @@ class LocalRuntimeCore:
                     timeout=self._cleanup_budget_seconds + 1.0)
             except (asyncio.TimeoutError, TimeoutError):
                 pass
-        # C8/X02: retry durable release obligations (proven-stopped
-        # resources; NO new spawn or force) before any disposal.
-        if self._release_obligations:
-            await self._retry_release_obligations()
-        # C6/V02b: recovery pass over still-owned late handles before
-        # deciding disposal - an unproven stop is re-contained, never
-        # silently dropped.
+        # C9/Y02: containment of STILL-LIVE resources first - a stopped
+        # resource's blocked durable release never delays another
+        # resource's force/recovery.
         if self._late_handles:
             self._retry_late_handles(policy)
-            try:
-                await asyncio.wait_for(
-                    asyncio.gather(*tuple(self._cleanup_tasks),
-                                   return_exceptions=True),
-                    timeout=self._cleanup_budget_seconds + 1.0)
-            except (asyncio.TimeoutError, TimeoutError):
-                pass
+        # C8/X02 + C9/Y02: the durable release retries run as an OWNED
+        # coalesced producer bounded by the cleanup budget; the public
+        # return never waits unboundedly and the obligation survives.
+        if self._release_obligations:
+            await self._retry_release_obligations()
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tuple(self._cleanup_tasks),
+                               return_exceptions=True),
+                timeout=self._cleanup_budget_seconds + 1.0)
+        except (asyncio.TimeoutError, TimeoutError):
+            pass
         # C3/S08: dispose factory-owned executors through the PUBLIC
         # lifecycle - never by the host reaching into privates - once the
         # shutdown is fully resolved. Uncertain ownership (unknown closes,
@@ -1769,20 +1792,21 @@ class LocalRuntimeCore:
                     close_task.cancel()  # cooperative; not awaited
 
             # C8/X03: a shared IN-FLIGHT unit is awaited, never
-            # duplicated; a CONCLUDED unit's outcome is OBSERVED before
-            # any retry (a resource proven stopped - by the shared unit
-            # or by a graceful close - is never re-forced).
+            # duplicated.
             if force_task is not None and not force_task.done():
                 try:
                     await asyncio.shield(force_task)
                 except BaseException:
                     pass
-            try:
-                state, _ = await native.observe()
-            except asyncio.CancelledError:
-                raise
-            except Exception:
-                state = "UNKNOWN"
+
+            # C9/Y01: the observation is an OWNED, coalesced unit with
+            # its own budget - and the force-retry decision uses the
+            # LAST KNOWN state, never a fresh blocking consultation. A
+            # stalled observer can therefore not gate containment of a
+            # still-owned resource; a proven STOPPED (cached) still
+            # prevents any re-force.
+            state = await self._observed_state(record, native)
+
             if (state != "STOPPED" and not force_created_here and
                     force_task is not None and force_task.done() and
                     callable(force)):
@@ -1798,12 +1822,9 @@ class LocalRuntimeCore:
                     await asyncio.shield(force_task)
                 except BaseException:
                     pass
-                try:
-                    state, _ = await native.observe()
-                except asyncio.CancelledError:
-                    raise
-                except Exception:
-                    state = "UNKNOWN"
+                # Best-effort post-force observation (budgeted, owned);
+                # its absence never blocks the containment flow.
+                state = await self._observed_state(record, native)
             if state == "STOPPED":
                 released = True
                 if attempt.slot_reserved and attempt.operation_id:
@@ -1838,22 +1859,111 @@ class LocalRuntimeCore:
                 session, _LateHandleRecord(native, attempt))
             attempt.finished.set()
 
+    async def _observed_state(self, record: "_LateHandleRecord",
+                              native) -> str:
+        """Owned, coalesced, budgeted observation (C9/Y01).
+
+        The unit lives on the record: an IN-FLIGHT observe is shared
+        (never duplicated, never cancelled by a budget expiry - only the
+        WAIT ends); a CONCLUDED one updates ``last_state`` and is not
+        re-run within the same pass. The returned state is the LAST
+        KNOWN one: a stalled observer yields the previous observation
+        (or UNKNOWN) instead of blocking the caller indefinitely.
+        """
+        if record.observe_task is None or record.observe_task.done():
+            if record.observe_task is not None:
+                try:
+                    record.last_state, _ = record.observe_task.result()
+                except BaseException:
+                    pass  # UNKNOWN stays; the error is the unit's result
+            observe = getattr(native, "observe", None)
+            if callable(observe):
+                record.observe_task = asyncio.ensure_future(observe())
+                done, _pending = await asyncio.wait(
+                    {record.observe_task},
+                    timeout=self._cleanup_budget_seconds)
+                if record.observe_task in done:
+                    try:
+                        record.last_state, _ = \
+                            record.observe_task.result()
+                    except BaseException:
+                        pass
+                # else: the unit keeps running owned; the WAIT simply
+                # ended - last_state (possibly None => UNKNOWN) returns.
+        else:
+            done, _pending = await asyncio.wait(
+                {record.observe_task},
+                timeout=self._cleanup_budget_seconds)
+            if record.observe_task in done:
+                try:
+                    record.last_state, _ = record.observe_task.result()
+                except BaseException:
+                    pass
+        return record.last_state if record.last_state is not None \
+            else "UNKNOWN"
+
+    def _schedule_release_retries(self) -> "asyncio.Task | None":
+        """Schedule ONE coalesced release-retry producer (C9/Y02).
+
+        Each obligation's durable release runs as an OWNED task; the
+        scheduler waits only within the cleanup budget. A blocked or
+        slow ledger ends the WAIT - never the producer: the obligation
+        and its in-flight release stay for the next public lifecycle
+        call, and no other resource's containment waits behind it.
+        """
+        pending = [o for o in self._release_obligations.values()
+                   if o.retry_task is None or o.retry_task.done()]
+        for obligation in pending:
+            obligation.retry_task = asyncio.ensure_future(
+                self._owned_slots.release_owned_slot(
+                    obligation.key, obligation.session_id))
+            self._cleanup_tasks.add(obligation.retry_task)
+            obligation.retry_task.add_done_callback(
+                self._cleanup_tasks.discard)
+
+        async def _collect() -> None:
+            tasks = [o.retry_task for o in
+                     self._release_obligations.values()
+                     if o.retry_task is not None]
+            if tasks:
+                await asyncio.wait(set(tasks),
+                                   timeout=self._cleanup_budget_seconds)
+            for session, obligation in list(
+                    self._release_obligations.items()):
+                task = obligation.retry_task
+                if task is None or not task.done():
+                    continue  # in flight: obligation stays, retry shared
+                try:
+                    task.result()
+                    del self._release_obligations[session]
+                    self._uncertain_opens.discard(session)
+                    self._opening.pop(session, None)
+                    obligation.attempt.finished.set()
+                except BaseException:
+                    # Pre-delivery refusal or uncertain outcome: the
+                    # obligation stays retryable (C8/X02 semantics);
+                    # the finished task is cleared so a later lifecycle
+                    # call may retry.
+                    obligation.retry_task = None
+
+        collector = asyncio.ensure_future(_collect())
+        self._cleanup_tasks.add(collector)
+        collector.add_done_callback(self._cleanup_tasks.discard)
+        return collector
+
     async def _retry_release_obligations(self) -> None:
-        """Retry durable slot releases for proven-stopped resources
-        (C8/X02): idempotent, no native effects, converges when the
-        ledger answers again."""
-        for session, obligation in list(
-                self._release_obligations.items()):
-            try:
-                await self._owned_slots.release_owned_slot(
-                    obligation.key, obligation.session_id)
-                del self._release_obligations[session]
-                self._uncertain_opens.discard(session)
-                self._opening.pop(session, None)
-                attempt = obligation.attempt
-                attempt.finished.set()
-            except CoreError:
-                continue  # obligation stays for the next lifecycle call
+        """Backwards-compatible bounded await over the coalesced
+        producer (C9/Y02): never unbounded - the cleanup budget bounds
+        the wait; obligations/in-flight releases survive the timeout."""
+        collector = self._schedule_release_retries()
+        if collector is None:
+            return
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(collector),
+                timeout=self._cleanup_budget_seconds + 0.05)
+        except (asyncio.TimeoutError, TimeoutError):
+            pass  # the producer keeps running owned
 
     def _retry_late_handles(self, policy: ShutdownPolicy) -> None:
         """Re-contain every still-owned late handle (C6/V02b)."""
