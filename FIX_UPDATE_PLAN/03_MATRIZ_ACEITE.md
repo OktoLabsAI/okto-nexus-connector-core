@@ -1,435 +1,291 @@
-# Matriz de aceite C7
+# Matriz de aceite C8
 
-Estados refletem exclusivamente esta revisão. PASS não significa provider real salvo indicação explícita. Cenários podem compartilhar testes.
+24 cenários: três FAIL, dois controles PASS, dezoito NOT_RUN e um BLOCKED. Os cinco resultados novos executados não são somados a campanhas históricas. Os demais descrevem critérios de validação do código a corrigir.
 
-## AC7-00-01 — Integridade do snapshot
+## AC8-01-01 — Linha de conexão mais nova já observada
 
-**Estado:** PASS · **Fase:** C7-00
+**Fase:** C8-01. **Estado na auditoria:** FAIL.
 
-**Preparação:** ZIP original e diretório extraído.
+**Preparação:** Contexto 3; sessão aberta; duas conexões SQLite reais.
 
-**Ação:** Conferir comentário de commit e hash de cada arquivo original.
+**Ação:** Peer avança para 5; renew propõe 4/expected 3; conferir erro no estágio lease_cas; enviar trabalho pelo contexto 3.
 
-**Resultado exigido:** Baseline identificada; nenhuma alteração nos 366 arquivos originais.
+**Resultado exigido:** Zero send_turn e recusa tipada; não instalar permissões a partir da linha.
 
-**Evidência:** evidencias/source_manifest.json
+**Evidência:** test_x01_observed_newer_durable_fence_blocks_old_context; validated_new.xml e validated_repeat.xml
 
-## AC7-00-02 — Dependências autênticas
+## AC8-01-02 — Controle: renew normal
 
-**Estado:** PASS · **Fase:** C7-00
+**Fase:** C8-01. **Estado na auditoria:** PASS.
 
-**Preparação:** rfc8785 ausente no ambiente; rede PyPI indisponível.
+**Preparação:** Mesma API, sem peer avançando a linha.
 
-**Ação:** Recuperar dois arquivos upstream 0.1.4 e comparar Git blob SHA; testar imports isolados.
+**Ação:** Renovar com contexto seguinte válido e enviar tarefa explicitamente solicitada.
 
-**Resultado exigido:** Sem stub/implementação substituta e sem diagnosticar erro de setup como defeito.
+**Resultado exigido:** Uma tarefa SUBMITTED, sem falso bloqueio.
 
-**Evidência:** evidencias/environment.json; isolated_import_final.log
+**Evidência:** test_control_normal_renewal_still_allows_authorized_work; validated_new.xml e validated_repeat.xml
 
-## AC7-01-01 — Close demora a terminar cancelamento
+## AC8-01-03 — Falha segura e linha antiga
 
-**Estado:** FAIL · **Fase:** C7-01
+**Fase:** C8-01. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Abertura cancelada, producer devolve handle; close cooperativo aguarda recurso.
+**Preparação:** Produtor recusado antes da entrega; primeira leitura indisponível.
 
-**Ação:** Fazer shutdown zero; close observa cancelamento mas continua aguardando.
+**Ação:** Restaurar leitura da linha anterior exata; usar classificador corrigido.
 
-**Resultado exigido:** Força é despachada sem terminar close nem o seu cancelamento.
+**Resultado exigido:** Finalizar só tentativa; novo submit explícito funciona; não repetir CAS.
 
-**Evidência:** test_c7_review.py::test_w03_force_does_not_wait_for_close_cancellation_to_finish
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-01-02 — Observer bloqueado e segunda recuperação
+## AC8-01-04 — Avanço de owner, autorização e configuração
 
-**Estado:** FAIL · **Fase:** C7-01
+**Fase:** C8-01. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Primeira força falha temporariamente; observe aguarda.
+**Preparação:** Parametrizar componente durável que avança, com conexão/scopes válidos.
 
-**Ação:** Shutdown esgota espera; restaurar observer e repetir shutdown.
+**Ação:** Produzir conflito real e tentar concessão pelo contexto anterior.
 
-**Resultado exigido:** Segunda força alcança o mesmo handle, sem novo spawn.
+**Resultado exigido:** Nenhum contexto superado permanece produtivo; erro estável e controle seguro disponíveis.
 
-**Evidência:** test_c7_review.py::test_w03b_second_shutdown_can_retry_late_handle_after_observer_stalls
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-01-03 — Retenção simples de handle não encerrado
+## AC8-01-05 — Commit confirmado e ACK perdido
 
-**Estado:** PASS · **Fase:** C7-01
+**Fase:** C8-01. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Força falha e observe retorna RUNNING sem travar.
+**Preparação:** CAS real que comita revogação ou renew; wrapper perde confirmação.
 
-**Ação:** Retirar referências da fixture, coletar lixo.
+**Ação:** Reconciliação por leitura consistente, inclusive com indisponibilidade inicial.
 
-**Resultado exigido:** Core conserva handle enquanto STOPPED não foi observado.
+**Resultado exigido:** Revogação restringe; renew só aplica proposta autorizada exata e binding compatível; sem confundir término com rollback.
 
-**Evidência:** test_c6_original_adaptado.py::test_v02b_unconfirmed_late_handle_remains_owned_for_recovery; fixture_c6.diff
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-01-04 — Persistência após STOPPED
+## AC8-01-06 — Linha ausente ou resultado não conclusivo
 
-**Estado:** NOT_RUN · **Fase:** C7-01
+**Fase:** C8-01. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Parada comprovada; release_owned_slot falha.
+**Preparação:** Tentativa com prova de entrega incerta ou linha inesperadamente ausente.
 
-**Ação:** Recuperar o journal e repetir lifecycle público.
+**Ação:** Finalizar/reconciliar sem prova de falha segura.
 
-**Resultado exigido:** Obrigação de liberação permanece identificada até o commit; nenhum pool necessário descartado.
+**Resultado exigido:** Conserva fence e recuperação explícita; não concede somente por terminar o Future.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-01-05 — Duas chamadas concorrentes de shutdown
+## AC8-01-07 — Callback de tentativa velha
 
-**Estado:** NOT_RUN · **Fase:** C7-01
+**Fase:** C8-01. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Mesmo handle em OWNED_UNKNOWN.
+**Preparação:** Barreira retém leitura de finalizador; uma transição posterior torna contexto inválido.
 
-**Ação:** Repetir shutdown em paralelo e com prazos menores.
+**Ação:** Liberar callback antigo após mudança de token/revisão/shutdown.
 
-**Resultado exigido:** Controles coalescidos, menor deadline preservado; nada executado sobre outro owner.
+**Resultado exigido:** Não limpa hold nem aplica contexto da tentativa nova; compara token após await.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-01-06 — Journal bloqueado na adoção tardia
+## AC8-01-08 — Idempotência e controles durante fence
 
-**Estado:** NOT_RUN · **Fase:** C7-01
+**Fase:** C8-01. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Handle retornado; storage retido.
+**Preparação:** Recibo conhecido e sessão com generation fence fechado.
 
-**Ação:** Iniciar close/force e manter storage bloqueado.
+**Ação:** Repetir mesma operação conhecida, tentar tarefa nova, negar pedido válido e solicitar contenção.
 
-**Resultado exigido:** Propriedade registrada em memória e despacho da força não dependem do armazenamento.
+**Resultado exigido:** Recibo sem novo efeito; tarefa produtiva recusada; controles seguros preservados no escopo autorizado.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-01-07 — Cancelamentos sucessivos
+## AC8-02-01 — Falha de release após STOPPED
 
-**Estado:** NOT_RUN · **Fase:** C7-01
+**Fase:** C8-02. **Estado na auditoria:** FAIL.
 
-**Preparação:** Waiter e shutdown cancelados em fronteiras diferentes.
+**Preparação:** Open cancelado retorna peer tardio; parada comprovada; SQLite real.
 
-**Ação:** Restaurar backend e consultar/parar via API pública.
+**Ação:** Recusar uma liberação antes do commit; restaurar storage e chamar shutdown duas vezes.
 
-**Resultado exigido:** Registro forte e task produtora continuam reconciliáveis; nada removido por cancelamento de waiter.
+**Resultado exigido:** Reserva liberada com confirmação, ou obrigação ainda explicitamente recuperável até a confirmação; nunca apagada silenciosamente.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** test_x02_late_stop_keeps_failed_slot_release_recoverable; validated_new.xml e validated_repeat.xml
 
-## AC7-01-08 — Backend físico qualificado
+## AC8-02-02 — Controle: release com ledger disponível
 
-**Estado:** BLOCKED · **Fase:** C7-01
+**Fase:** C8-02. **Estado na auditoria:** PASS.
 
-**Preparação:** SO com backend de contenção suportado; processo de laboratório.
+**Preparação:** Mesmo retorno tardio sem falha no ledger.
 
-**Ação:** Segurar handshake/close e encerrar sobre handle com birth token.
+**Ação:** Encerrar e consultar owned_slot_page.
 
-**Resultado exigido:** Despacho, propriedade e parada comprovados sem matar processo externo.
+**Resultado exigido:** Zero reservas após STOPPED e commit; sem retenção artificial.
 
-**Evidência:** Neste sandbox proc_children não está disponível; campanha física requerida em ambiente qualificado.
+**Evidência:** test_control_late_stop_with_available_ledger_releases_slot; validated_new.xml e validated_repeat.xml
 
-## AC7-02-01 — Renew falha antes da entrega e storage volta
+## AC8-02-03 — Release com confirmação perdida
 
-**Estado:** FAIL · **Fase:** C7-02
+**Fase:** C8-02. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** CAS recusado com JOURNAL_FULL antes de enfileirar; primeira leitura falha.
+**Preparação:** Ledger confirma release real e perde ACK.
 
-**Ação:** Deixar terminar toda a campanha real de reconciliação; ler linha antiga.
+**Ação:** Retomar pelo lifecycle público; consultar chave exata.
 
-**Resultado exigido:** Tentativa segura converge, hold da tentativa é resolvido; novo trabalho explicitamente solicitado pode seguir.
+**Resultado exigido:** Converge idempotentemente sem duplicar semântica, erro fictício ou liberar outra reserva.
 
-**Evidência:** test_c7_review.py::test_w02_recovery_finishes_failed_attempt_when_old_row_is_proven[renew]
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-02-02 — Revoke falha antes da entrega e storage volta
+## AC8-02-04 — Falha persistente sem relatório vazio
 
-**Estado:** FAIL · **Fase:** C7-02
+**Fase:** C8-02. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Mesmo cenário, pedido de revogação.
+**Preparação:** STOPPED observado e release indisponível por toda a campanha.
 
-**Ação:** Restauração da leitura e término do produtor comprovados.
+**Ação:** Encerrar com orçamento curto e consultar resultado público.
 
-**Resultado exigido:** Não confundir falha comprovadamente não entregue com commit ainda possível; nenhuma repetição de CAS.
+**Resultado exigido:** Informa pendência durável; não omite tudo como resolvido; retry limitado e nenhum novo kill/spawn.
 
-**Evidência:** test_c7_review.py::test_w02_recovery_finishes_failed_attempt_when_old_row_is_proven[revoke]
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-02-03 — Commit tardio com ACK perdido
+## AC8-02-05 — Reabertura do ledger
 
-**Estado:** PASS · **Fase:** C7-02
+**Fase:** C8-02. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Chamador cancelado; CAS comita revoke e perde confirmação.
+**Preparação:** Ledger com reserva original e obrigação de release; backend encerrado/reaberto em teste.
 
-**Ação:** Consultar durable revoked e tentar novo submit pelo contexto antigo.
+**Ação:** Retomar obrigação quando a prova de parada/ownership ainda é válida; simular ausência dessa prova em variante.
 
-**Resultado exigido:** Nenhum send produtivo.
+**Resultado exigido:** Com prova, release exato; sem prova, unknown conservador e nenhuma inferência por PID; não apagar história.
 
-**Evidência:** test_c6_original_adaptado.py::test_v01_uncertain_revocation_never_allows_old_work[cancel_then_lost_ack]
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-02-04 — Commit sem leitura de recuperação
+## AC8-02-06 — Finalização concorrente e disposal
 
-**Estado:** PASS · **Fase:** C7-02
+**Fase:** C8-02. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Revoke comitado; ACK falha; read indisponível.
+**Preparação:** Dois waiters aguardam a mesma obrigação de release.
 
-**Ação:** Tentar trabalho antes de o finalizador obter prova.
+**Ação:** Completar commit e encerrar consumidores.
 
-**Resultado exigido:** Hold impede trabalho, sem transformar a recusa em tarefa executada.
+**Resultado exigido:** Uma finalização lógica; relatório convergente; descarta apenas pools não utilizados; nenhum import privado exigido.
 
-**Evidência:** test_c6_original_adaptado.py::test_v01_uncertain_revocation_never_allows_old_work[read_unavailable_after_commit]
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-02-05 — Callback de tentativa antiga
+## AC8-03-01 — Força física duplicada por shutdown
 
-**Estado:** NOT_RUN · **Fase:** C7-02
+**Fase:** C8-03. **Estado na auditoria:** FAIL.
 
-**Preparação:** Tentativa A resolvida; B corrente em outra revisão.
+**Preparação:** Peer executa força síncrona bloqueada numa thread; open waiter cancelado.
 
-**Ação:** Liberar callback atrasado de A depois de B.
+**Ação:** Com primeiro worker ainda ativo, executar shutdown e deixar expirar orçamento de espera.
 
-**Resultado exigido:** Token capturado impede limpar ou aplicar estado da tentativa B.
+**Resultado exigido:** No máximo uma unidade física em voo para a mesma força/handle; segundo waiter reutiliza.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** test_x03_repeat_shutdown_coalesces_physical_force_in_flight; validated_new.xml e validated_repeat.xml
 
-## AC7-02-06 — Linha nova e confirmação antiga
+## AC8-03-02 — Retry legítimo após falha concluída
 
-**Estado:** NOT_RUN · **Fase:** C7-02
+**Fase:** C8-03. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Registro durável possui revisão/owner mais novo.
+**Preparação:** Primeira unidade física retorna falha/unknown e terminou realmente.
 
-**Ação:** Finalizar tentativa antiga que lê a linha nova.
+**Ação:** Backend volta; nova solicitação pública sobre mesmo recurso.
 
-**Resultado exigido:** Nenhum contexto antigo aplicado; comparação completa e estado conservador.
+**Resultado exigido:** Segunda unidade permitida sem sobreposição; atinge STOPPED se backend comprovar; nenhum novo spawn.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-02-07 — Recibo conhecido durante hold
+## AC8-03-03 — Close lento, inclusive ao cancelar
 
-**Estado:** NOT_RUN · **Fase:** C7-02
+**Fase:** C8-03. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Operação já persistida; lease entra em UNKNOWN.
+**Preparação:** Close observa cancelamento e aguarda seu backend.
 
-**Ação:** Repetir exatamente ID/hash e depois tentar operação nova.
+**Ação:** Expirar prazo da contenção enquanto close continua retido.
 
-**Resultado exigido:** Recibo conhecido permanece consultável; nova operação segue bloqueada, sem duplicação.
+**Resultado exigido:** Força começa independentemente; preservar sementes W03 originais contra implementação alterada.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-02-08 — Recovery após esgotar retries sem prova
+## AC8-03-04 — Waiters cancelados repetidamente
 
-**Estado:** NOT_RUN · **Fase:** C7-02
+**Fase:** C8-03. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Store continua indisponível ao fim do orçamento.
+**Preparação:** Unidade física começou; vários chamadores pedem shutdown e deixam de aguardar.
 
-**Ação:** Restaurar depois; usar gatilho público/coalescido documentado.
+**Ação:** Cancelar waiters antes/depois de timeout sem liberar worker.
 
-**Resultado exigido:** Recuperação prossegue sem alterar flags privadas; hold não é liberado por tempo.
+**Resultado exigido:** Produtor físico retido; sem despacho duplicado nem Task exception não observada; recuperação continua pública.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-03-01 — Decline público após prazo
+## AC8-03-05 — Limites entre recursos distintos
 
-**Estado:** FAIL · **Fase:** C7-03
+**Fase:** C8-03. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Pedido observado e ainda válido; lease produtiva passa do prazo.
+**Preparação:** Vários handles, um com força travada e outros respondendo; pools limitados.
 
-**Ação:** Chamar decide_native_approval com decline.
+**Ação:** Flood limitado de chamadas repetidas em cada recurso.
 
-**Resultado exigido:** Uma resposta negativa; identidade, allowed_actions e correlação preservadas.
+**Resultado exigido:** Por recurso coalescido, limites globais obedecidos e outros recursos não bloqueados por lock global; backpressure explícito.
 
-**Evidência:** test_c7_review.py::test_w04_public_approval_distinguishes_containment_from_new_permission[decline]
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-03-02 — Cancel público após prazo
+## AC8-03-06 — Storage e observer indisponíveis
 
-**Estado:** FAIL · **Fase:** C7-03
+**Fase:** C8-03. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Mesmo cenário, decisão cancel.
+**Preparação:** Força com journal/observer bloqueados, handle registrado.
 
-**Ação:** Usar API pública.
+**Ação:** Pedir contenção e aguardar entrada física antes de liberar os bloqueios.
 
-**Resultado exigido:** Resposta nativa explicitamente negativa, sem concessão de trabalho.
+**Resultado exigido:** Força independente; sem inferir parada nem commit; retry mantém mesma unidade em voo.
 
-**Evidência:** test_c7_review.py::test_w04_public_approval_distinguishes_containment_from_new_permission[cancel]
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-03-03 — Accept público após prazo continua recusado
+## AC8-04-01 — Regressões históricas após a correção
 
-**Estado:** PASS · **Fase:** C7-03
+**Fase:** C8-04. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Mesmo alvo e prazo de decline/cancel.
+**Preparação:** Versão final a ser produzida pelo executor, matriz C2–C7.
 
-**Ação:** Tentar accept.
+**Ação:** Executar sementes originais/reconstruídas e suite no SO disponível.
 
-**Resultado exigido:** AGENT_REVOKED e zero respostas no peer.
+**Resultado exigido:** Preserva correções; registra resultados por campanha sem somar sobreposições. Os PASS da auditoria são baseline, não prova do futuro diff.
 
-**Evidência:** test_c7_review.py::test_w04_public_approval_distinguishes_containment_from_new_permission[accept]
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-03-04 — Reserva recuperável no adaptador
+## AC8-04-02 — Wheel e consumidores após a correção
 
-**Estado:** PASS · **Fase:** C7-03
+**Fase:** C8-04. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Accept chega ao writer e vence antes do primeiro byte.
+**Preparação:** Wheel/sdist finais, ambiente fora do repo.
 
-**Ação:** Recusar e depois negar o mesmo pedido pelo adaptador/bridge.
+**Ação:** Instalar e testar API/erros/estado de recuperação com -I e bundle hash fixado.
 
-**Resultado exigido:** Zero byte no accept e uma resposta negativa posterior.
+**Resultado exigido:** Mesmo artefato nos consumidores; nenhuma dependência de internals; synthetic não prova hosts reais.
 
-**Evidência:** test_c6_original_adaptado.py::test_v03_prewrite_refused_accept_can_still_be_declined
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.
 
-## AC7-03-05 — Input não vira exceção produtiva
+## AC8-04-03 — Backend de processo real
 
-**Estado:** NOT_RUN · **Fase:** C7-03
+**Fase:** C8-04. **Estado na auditoria:** BLOCKED.
 
-**Preparação:** Pedido de input com conteúdo ou erro de validação.
+**Preparação:** SO com backend de contenção disponível, processo de laboratório inofensivo.
 
-**Ação:** Tentar accept de input expirado e cancelar pedido com schema próprio.
+**Ação:** Qualificar cancelamento tardio, chamadas repetidas, nascimento/ownership e parada.
 
-**Resultado exigido:** Input não é enviado por classificação genérica de contenção; cancel só usa formato negativo suportado.
+**Resultado exigido:** Comprovar unidades físicas e STOPPED; nunca atingir processo externo.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado: sandbox desta auditoria não disponibiliza proc_children exigido; não desativar gate.
 
-## AC7-03-06 — Outro agente, turno ou capability
+## AC8-04-04 — MCP HTTP direto e identidade preservados
 
-**Estado:** NOT_RUN · **Fase:** C7-03
+**Fase:** C8-04. **Estado na auditoria:** NOT_RUN.
 
-**Preparação:** Pedido válido pertence a outro scope ou perdeu correlação.
+**Preparação:** Diff final e consumers qualificados quando disponíveis.
 
-**Ação:** Tentar decline/accept sem autoridade pertinente.
+**Ação:** Inspecionar dependências/entrypoints e provar que nenhuma mudança cria proxy MCP ou nova identidade.
 
-**Resultado exigido:** Recusa antes do writer; exceção temporal não remove autenticação ou escopo.
+**Resultado exigido:** Core segue biblioteca de runtime; Server mantém autoridade; não altera transporte remoto por efeito colateral.
 
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
-
-## AC7-03-07 — Escrita parcial
-
-**Estado:** NOT_RUN · **Fase:** C7-03
-
-**Preparação:** Writer enviou bytes e falha no flush.
-
-**Ação:** Tentar classificar e repetir operação.
-
-**Resultado exigido:** Possível efeito/unknown preservado; não restaurar pending para resposta cega.
-
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
-
-## AC7-04-01 — Submit de sessão nunca existente
-
-**Estado:** FAIL · **Fase:** C7-04
-
-**Preparação:** Contexto válido; nenhum runtime aberto.
-
-**Ação:** Enviar TurnOperation para missing.
-
-**Resultado exigido:** CoreError SESSION_UNKNOWN; zero send.
-
-**Evidência:** test_c7_review.py::test_w01_unknown_session_returns_typed_error[submit]
-
-## AC7-04-02 — Steer de sessão nunca existente
-
-**Estado:** FAIL · **Fase:** C7-04
-
-**Preparação:** Contexto com capability steer; nenhuma sessão.
-
-**Ação:** Enviar controle steer com alvo sintático válido.
-
-**Resultado exigido:** CoreError SESSION_UNKNOWN; zero efeito.
-
-**Evidência:** test_c7_review.py::test_w01_unknown_session_returns_typed_error[steer]
-
-## AC7-04-03 — Recibo depois de evicção
-
-**Estado:** NOT_RUN · **Fase:** C7-04
-
-**Preparação:** Operação persistida; sessão fechada e retirada do registro.
-
-**Ação:** Repetir ID/hash e depois mesmo ID com outro hash.
-
-**Resultado exigido:** Recibo original e conflito tipado; não exigir sessão viva para replay.
-
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
-
-## AC7-04-04 — Não ocultar erro de autorização
-
-**Estado:** NOT_RUN · **Fase:** C7-04
-
-**Preparação:** Sessão real de outro agente.
-
-**Ação:** Enviar submit/steer por contexto incorreto.
-
-**Resultado exigido:** BINDING_NOT_AUTHORIZED ou contrato equivalente já documentado; nunca criar sessão para contornar.
-
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
-
-## AC7-04-05 — Draining e sessão ausente
-
-**Estado:** NOT_RUN · **Fase:** C7-04
-
-**Preparação:** Shutdown iniciado, ID ausente.
-
-**Ação:** Enviar nova operação.
-
-**Resultado exigido:** Erro tipado consistente com precedência documentada; sem AttributeError.
-
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
-
-## AC7-05-01 — Histórico preservado
-
-**Estado:** PASS · **Fase:** C7-05
-
-**Preparação:** Arquivos C2/C3/C4 do snapshot mais originais C5.
-
-**Ação:** Rodar sem remover guardas.
-
-**Resultado exigido:** 44 PASS e 1 SKIP no subconjunto histórico; C5 original 11 PASS, contagens não aditivas à suíte completa.
-
-**Evidência:** evidencias/c6_original_runner/summary.json
-
-## AC7-05-02 — Build e importação instalada
-
-**Estado:** PASS · **Fase:** C7-05
-
-**Preparação:** Backend setuptools, cópia separada e ambiente auditado.
-
-**Ação:** Gerar wheel/sdist, instalar wheel fora da árvore e importar com -I.
-
-**Resultado exigido:** Artefato importável; dependências reais verificadas.
-
-**Evidência:** evidencias/build_metadata.json; isolated_import_final.log
-
-## AC7-05-03 — Bundle com status explícito
-
-**Estado:** PASS · **Fase:** C7-05
-
-**Preparação:** Manifesto sha256:a4fd84304de7ba12041721c07f4edce29d3f39d17d8bd24f375de24b0a728630.
-
-**Ação:** Verificar bundle instalado com opt-in development-partial.
-
-**Resultado exigido:** Schemas/fixtures/vetores válidos; não alegar status normativo.
-
-**Evidência:** evidencias/bundle.log
-
-## AC7-05-04 — Consumidores sintéticos
-
-**Estado:** PASS · **Fase:** C7-05
-
-**Preparação:** Mesmo wheel instalado.
-
-**Ação:** Executar exemplos embedded_consumer e remote_consumer fora do checkout.
-
-**Resultado exigido:** Ambos terminam OK; isto não demonstra dois hosts reais.
-
-**Evidência:** evidencias/embedded.log; remote.log
-
-## AC7-05-05 — Providers reais
-
-**Estado:** NOT_RUN · **Fase:** C7-05
-
-**Preparação:** Versões/SOs explicitamente qualificados, credenciais fornecidas em ambiente adequado.
-
-**Ação:** Campanha de cada capability anunciada.
-
-**Resultado exigido:** Evidência de provider separada de peers sintéticos; sem cobrança/configuração por inferência.
-
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
-
-## AC7-05-06 — Integração dos dois produtos
-
-**Estado:** NOT_RUN · **Fase:** C7-05
-
-**Preparação:** Server e Connector reais em hosts distintos, mesmo wheel.
-
-**Ação:** Executar local sem Connector e remoto com recuperação, MCP HTTP direto.
-
-**Resultado exigido:** Gate E2 apenas com evidência própria dos consumidores.
-
-**Evidência:** Não executado nesta revisão; registrar evidência na implementação.
+**Evidência:** Não executado nesta auditoria; implementar/relacionar teste equivalente.

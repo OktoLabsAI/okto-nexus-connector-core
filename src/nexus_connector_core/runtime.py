@@ -152,6 +152,11 @@ class _Session:
     # Monotonic token of the CURRENT lease-update attempt; finalizers and
     # late callbacks may only touch the attempt whose token still matches.
     lease_attempt_token: int = 0
+    # C8/X01: the binding OBSERVED a newer durable fence (another
+    # authorized writer advanced the lease): the local context is known
+    # obsolete - productive grants are fenced (containment stays), and
+    # only the host-authorized reconcile/reopen cycle can clear it.
+    superseded: bool = False
     lease_reconcile_task: "asyncio.Task | None" = None
     eviction_scheduled: bool = False
     normal_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -187,14 +192,37 @@ class _SessionTombstones:
         return self._entries.get(session)
 
 
+class _ReleaseObligation:
+    """Durable slot-release obligation after a proven stop (C8/X02).
+
+    STOPPED is a physical fact; the ledger release is a separate
+    durable fact. A refused/pre-commit-failed release keeps THIS
+    lightweight record (no heavy adapter) so the next public lifecycle
+    call retries the exact reservation until confirmation - never
+    spawning or forcing an already-stopped resource again.
+    """
+
+    __slots__ = ("key", "session_id", "attempt")
+
+    def __init__(self, key: "OperationKey", session_id: str,
+                 attempt: "_OpeningAttempt"):
+        self.key = key
+        self.session_id = session_id
+        self.attempt = attempt
+
+
 class _LateHandleRecord:
     """Strongly-owned late handle awaiting proven stop (C6/V02b)."""
 
-    __slots__ = ("native", "attempt")
+    __slots__ = ("native", "attempt", "close_task", "force_task")
 
     def __init__(self, native, attempt: "_OpeningAttempt"):
         self.native = native
         self.attempt = attempt
+        # C8/X03: the OWNED physical control units - a retry SHARES an
+        # in-flight close/force instead of dispatching a duplicate.
+        self.close_task: "asyncio.Task | None" = None
+        self.force_task: "asyncio.Task | None" = None
 
 
 class _ForceAudit:
@@ -341,6 +369,8 @@ class LocalRuntimeCore:
         # C6/V02b: late native handles with unproven stop - strongly
         # referenced so recovery can re-contain the SAME object.
         self._late_handles: dict[SessionKey, _LateHandleRecord] = {}
+        # C8/X02: durable slot-release obligations after proven stops.
+        self._release_obligations: dict[SessionKey, _ReleaseObligation] = {}
         # C3/S08: one-shot public disposal of factory-owned executors.
         self._factory_disposed = False
 
@@ -512,7 +542,8 @@ class LocalRuntimeCore:
                         lambda: (binding.closed, binding.closing,
                                  binding.revoked,
                                  binding.lease_expired or
-                                 binding.lease_hold,
+                                 binding.lease_hold or
+                                 binding.superseded,
                                  binding.faulted),
                         clock=self._clock.monotonic,
                         deadline_probe=lambda:
@@ -778,7 +809,9 @@ class LocalRuntimeCore:
                 else:
                     error = "SESSION_CLOSING"
                 raise CoreError(error, "admission", retry_safe=True)
-            if (fence_binding is not None and fence_binding.lease_hold and
+            if (fence_binding is not None and
+                    (fence_binding.lease_hold or
+                     fence_binding.superseded) and
                     semantic.action in {"turn.submit", "turn.steer",
                                         "approval.decide", "input.provide"}):
                 # A permissive decision grants work: it shares the lease
@@ -790,7 +823,8 @@ class LocalRuntimeCore:
             elif (fence_binding is not None and
                   semantic.action in {"turn.submit", "turn.steer"} and
                     (fence_binding.lease_expired or
-                     fence_binding.lease_hold)):
+                     fence_binding.lease_hold or
+                     fence_binding.superseded)):
                 # C6/V01: an uncertain lease update (notably a reserved or
                 # unconfirmed revocation) fences NEW work grants; the
                 # refusal is its own operation's safe outcome - it never
@@ -1131,6 +1165,10 @@ class LocalRuntimeCore:
                     timeout=self._cleanup_budget_seconds + 1.0)
             except (asyncio.TimeoutError, TimeoutError):
                 pass
+        # C8/X02: retry durable release obligations (proven-stopped
+        # resources; NO new spawn or force) before any disposal.
+        if self._release_obligations:
+            await self._retry_release_obligations()
         # C6/V02b: recovery pass over still-owned late handles before
         # deciding disposal - an unproven stop is re-contained, never
         # silently dropped.
@@ -1158,7 +1196,7 @@ class LocalRuntimeCore:
         # C4/T04: a pending open can still produce an effect (callbacks,
         # queued spawn units) - its capacity is NOT disposable.
         if (self._opening or self._uncertain_opens or self._cleanup_tasks
-                or self._late_handles):
+                or self._late_handles or self._release_obligations):
             return
         for binding in self._sessions.values():
             if not binding.closed:
@@ -1575,7 +1613,8 @@ class LocalRuntimeCore:
                             # fences immediately.
                             await self._finalize_lease_attempt(
                                 session, binding, context, revoke=False,
-                                producer_done=cas.done())
+                                producer_done=cas.done(),
+                                base_context=old)
                             raise
                         async with self._lock:
                             binding.lease_cas_pending = False
@@ -1694,26 +1733,34 @@ class LocalRuntimeCore:
                 self._late_handles.pop(session, None)
                 attempt.finished.set()
                 return
-            # Graceful close: owned task. At the budget it is CANCELLED
-            # cooperatively - and the cancellation's CONCLUSION is never
-            # awaited as a precondition (a close that observes
-            # CancelledError but keeps waiting its backend cannot delay
-            # the force, C7/W03).
+            # C8/X03: the RECORD owns the physical units. A retry that
+            # finds an IN-FLIGHT close/force SHARES it (one physical
+            # dispatch per resource); a new unit is only created after
+            # the previous one CONCLUDED.
+            record = self._late_handles.setdefault(
+                session, _LateHandleRecord(native, attempt))
             close = getattr(native, "close", None)
-            close_task = None
-            if callable(close):
-                close_task = asyncio.create_task(close())
-                self._cleanup_tasks.add(close_task)
-                close_task.add_done_callback(self._cleanup_tasks.discard)
+            close_task = record.close_task
+            if (close_task is None or close_task.done()) and callable(close):
+                close_task = asyncio.ensure_future(close())
+                record.close_task = close_task
+                # C8/X03: the RECORD owns the physical units - they are
+                # NEVER members of the cancellable cleanup gather. A
+                # budget expiry cancels only the WAITING coroutine; the
+                # thread unit underneath keeps running and the next
+                # retry SHARES this exact task.
 
-            # Physical force in PARALLEL from the start: never gated on
-            # the close task, a stuck observer or storage.
+            # Physical force in PARALLEL with the close (C7/W03): the
+            # unit is created ONCE per resource and owned by the record
+            # - never a member of the cancellable gather. A budget
+            # expiry cancels only the waiting coroutine; the thread unit
+            # underneath keeps running and every retry SHARES it.
             force = getattr(native, "force_stop", None)
-            force_task = None
-            if callable(force):
-                force_task = asyncio.create_task(force())
-                self._cleanup_tasks.add(force_task)
-                force_task.add_done_callback(self._cleanup_tasks.discard)
+            force_task = record.force_task
+            force_created_here = force_task is None
+            if force_task is None and callable(force):
+                force_task = asyncio.ensure_future(force())
+                record.force_task = force_task
 
             if close_task is not None:
                 done, _pending = await asyncio.wait(
@@ -1721,7 +1768,11 @@ class LocalRuntimeCore:
                 if close_task not in done:
                     close_task.cancel()  # cooperative; not awaited
 
-            if force_task is not None:
+            # C8/X03: a shared IN-FLIGHT unit is awaited, never
+            # duplicated; a CONCLUDED unit's outcome is OBSERVED before
+            # any retry (a resource proven stopped - by the shared unit
+            # or by a graceful close - is never re-forced).
+            if force_task is not None and not force_task.done():
                 try:
                     await asyncio.shield(force_task)
                 except BaseException:
@@ -1732,19 +1783,48 @@ class LocalRuntimeCore:
                 raise
             except Exception:
                 state = "UNKNOWN"
+            if (state != "STOPPED" and not force_created_here and
+                    force_task is not None and force_task.done() and
+                    callable(force)):
+                # C8/X03 retry on a LATER lifecycle call: the PREVIOUS
+                # containment's unit concluded without a proven stop -
+                # a NEW unit is created here (never overlapping: the old
+                # one is done). A unit created by THIS containment that
+                # concluded unproven leaves the record OWNED_UNKNOWN for
+                # the next call instead (v02b semantics).
+                force_task = asyncio.ensure_future(force())
+                record.force_task = force_task
+                try:
+                    await asyncio.shield(force_task)
+                except BaseException:
+                    pass
+                try:
+                    state, _ = await native.observe()
+                except asyncio.CancelledError:
+                    raise
+                except Exception:
+                    state = "UNKNOWN"
             if state == "STOPPED":
+                released = True
                 if attempt.slot_reserved and attempt.operation_id:
+                    key = OperationKey(session.server_id,
+                                       session.executor_id,
+                                       attempt.operation_id)
                     try:
                         await self._owned_slots.release_owned_slot(
-                            OperationKey(session.server_id,
-                                         session.executor_id,
-                                         attempt.operation_id),
-                            session.session_id)
+                            key, session.session_id)
                     except CoreError:
-                        pass
-                self._uncertain_opens.discard(session)
-                self._late_handles.pop(session, None)
-                self._opening.pop(session, None)
+                        # C8/X02: the durable release failed - keep the
+                        # obligation identifiable for the next public
+                        # lifecycle call; NEVER silently drop it.
+                        released = False
+                        self._release_obligations[session] = \
+                            _ReleaseObligation(key, session.session_id,
+                                               attempt)
+                if released:
+                    self._uncertain_opens.discard(session)
+                    self._late_handles.pop(session, None)
+                    self._opening.pop(session, None)
             # else: OWNED_UNKNOWN - the record stays registered; the
             # next public lifecycle call re-contains the SAME handle.
             attempt.finished.set()
@@ -1757,6 +1837,23 @@ class LocalRuntimeCore:
             self._late_handles.setdefault(
                 session, _LateHandleRecord(native, attempt))
             attempt.finished.set()
+
+    async def _retry_release_obligations(self) -> None:
+        """Retry durable slot releases for proven-stopped resources
+        (C8/X02): idempotent, no native effects, converges when the
+        ledger answers again."""
+        for session, obligation in list(
+                self._release_obligations.items()):
+            try:
+                await self._owned_slots.release_owned_slot(
+                    obligation.key, obligation.session_id)
+                del self._release_obligations[session]
+                self._uncertain_opens.discard(session)
+                self._opening.pop(session, None)
+                attempt = obligation.attempt
+                attempt.finished.set()
+            except CoreError:
+                continue  # obligation stays for the next lifecycle call
 
     def _retry_late_handles(self, policy: ShutdownPolicy) -> None:
         """Re-contain every still-owned late handle (C6/V02b)."""
@@ -1771,7 +1868,8 @@ class LocalRuntimeCore:
                                       binding: _Session,
                                       context: ExecutionContext, *,
                                       revoke: bool,
-                                      producer_done: bool) -> str:
+                                      producer_done: bool,
+                                      base_context=None) -> str:
         """ONE finalizer for every lease-update termination (C6/V01 +
         C7/W02): classification is the SHARED transition function; the
         reconciler inherits the producer's termination proof, so a
@@ -1785,28 +1883,37 @@ class LocalRuntimeCore:
         except Exception:
             self._schedule_lease_reconciler(session, binding, context,
                                             revoke=revoke,
-                                            producer_done=producer_done)
+                                            producer_done=producer_done,
+                                            base_context=base_context)
             return "UNKNOWN"
         outcome = self._classify_lease_row(
             binding, lease, context, revoke=revoke,
-            producer_done=producer_done)
+            producer_done=producer_done,
+            base_context=base_context)
         if outcome == "UNKNOWN":
             self._schedule_lease_reconciler(session, binding, context,
                                             revoke=revoke,
-                                            producer_done=producer_done)
+                                            producer_done=producer_done,
+                                            base_context=base_context)
             return outcome
         self._apply_lease_classification(binding, outcome, context,
                                          revoke=revoke)
         return outcome
 
     def _classify_lease_row(self, binding: "_Session", lease, context, *,
-                            revoke: bool, producer_done: bool) -> str:
-        """ONE transition function (C7/W02) shared by the direct path,
-        the late callback and every reconciler retry: same proofs, same
-        classification, same actions. A producer that has TERMINATED
-        with a proven pre-delivery refusal (or rollback) plus a durable
-        row still showing the pre-attempt state resolves the attempt
-        safely - the hold is never released by time alone."""
+                            revoke: bool, producer_done: bool,
+                            base_context=None) -> str:
+        """ONE transition function (C7/W02 + C8/X01) shared by the
+        direct path, the late callback and every reconciler retry: same
+        proofs, same classification, same actions. The row is compared
+        BOTH to the proposal and to the attempt's BASE context: a valid
+        row matching NEITHER means another authorized writer advanced
+        the durable fence - the local context is SUPERSEDED (known
+        obsolete), never "not delivered". NOT_DELIVERED requires the row
+        to still show the exact BASE state (plus the producer's
+        termination proof) - producer_done alone never proves rollback.
+        The durable row is fence EVIDENCE only: it never installs
+        permissions, deadlines or identity into this runtime."""
         if lease is not None and lease.revoked:
             return "COMMITTED_REVOKE"
         if (not revoke and lease is not None and
@@ -1815,7 +1922,20 @@ class LocalRuntimeCore:
                 and lease.owner_generation == context.session_owner_generation
                 and lease.configuration_revision == context.configuration_revision):
             return "COMMITTED_RENEW"
-        if lease is None or producer_done:
+        if lease is not None and base_context is not None:
+            if (lease.connection_generation == base_context.connection_generation
+                    and lease.owner_generation == base_context.session_owner_generation
+                    and lease.authorization_revision == base_context.authorization_revision
+                    and lease.configuration_revision == base_context.configuration_revision):
+                # The row still shows the exact BASE state: the attempt
+                # changed nothing durably.
+                if producer_done:
+                    return "NOT_DELIVERED"
+                return "UNKNOWN"
+            # A valid row that matches neither proposal nor base: the
+            # fence moved - this runtime's context is obsolete.
+            return "SUPERSEDED"
+        if lease is None and producer_done:
             return "NOT_DELIVERED"
         return "UNKNOWN"
 
@@ -1833,15 +1953,21 @@ class LocalRuntimeCore:
                 binding.context = context
                 binding.lease_expired = False
         if outcome in {"COMMITTED_REVOKE", "COMMITTED_RENEW",
-                       "NOT_DELIVERED"}:
+                       "NOT_DELIVERED", "SUPERSEDED"}:
+            # SUPERSEDED resolves the ATTEMPT (pending/hold belong to
+            # it) but fences the BINDING: the observed-newer durable
+            # row makes the local context known-obsolete (C8/X01).
             binding.lease_cas_pending = False
             binding.lease_hold = False
+            if outcome == "SUPERSEDED":
+                binding.superseded = True
 
     def _schedule_lease_reconciler(self, session: SessionKey,
                                    binding: _Session,
                                    context: ExecutionContext, *,
                                    revoke: bool,
-                                   producer_done: bool) -> None:
+                                   producer_done: bool,
+                                   base_context=None) -> None:
         """ONE coalesced reconciler per binding (C6/V01 + C7/W02): the
         producer's termination proof travels WITH the attempt, so a
         proven pre-delivery failure converges once storage answers -
@@ -1866,7 +1992,8 @@ class LocalRuntimeCore:
                     continue
                 outcome = self._classify_lease_row(
                     binding, lease, context, revoke=revoke,
-                    producer_done=producer_done)
+                    producer_done=producer_done,
+                    base_context=base_context)
                 if outcome != "UNKNOWN":
                     self._apply_lease_classification(
                         binding, outcome, context, revoke=revoke)
@@ -1998,7 +2125,8 @@ class LocalRuntimeCore:
                             # failed Future; a committed revocation applies.
                             await self._finalize_lease_attempt(
                                 session, binding, context, revoke=True,
-                                producer_done=cas.done())
+                                producer_done=cas.done(),
+                                base_context=old)
                             raise
                         async with self._lock:
                             binding.lease_cas_pending = False
@@ -2392,7 +2520,11 @@ class LocalRuntimeCore:
         if (context.configuration_revision != original.configuration_revision and
                 not allow_newer_revision):
             raise CoreError("PROFILE_DRIFT", "admission")
-        if (require_live_lease and not containment_reply and
-                self._clock.monotonic() >= original.lease_deadline_monotonic):
-            raise CoreError("AGENT_REVOKED", "admission")
+        if require_live_lease and not containment_reply:
+            if binding.superseded:
+                # C8/X01: a newer durable fence was OBSERVED - this
+                # local context is known obsolete.
+                raise CoreError("STALE_GENERATION", "admission")
+            if self._clock.monotonic() >= original.lease_deadline_monotonic:
+                raise CoreError("AGENT_REVOKED", "admission")
         return binding

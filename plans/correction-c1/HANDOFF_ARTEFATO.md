@@ -207,3 +207,20 @@ códigos preservados.
    (nunca AttributeError); replay de recibos conhecidos continua
    disponível pós-evicção (W01).
 5. Versão mínima esperada pelos hosts: **0.2.6.dev0**.
+
+
+## Mudanças que os hosts absorvem (C8 — reauditoria X01–X03)
+
+1. **Contexto superseded**: quando o Core observa uma fence durável
+   mais nova (outro writer autorizado avançou a lease), o contexto
+   local fica sabidamente obsoleto — submits/steers/accepts recebem
+   `STALE_GENERATION`/`AGENT_REVOKED`; contenção (deny/interrupt/force)
+   e recibos conhecidos seguem disponíveis; o encerramento/reconcile é
+   do host autorizado (X01).
+2. **Release durável**: uma parada comprovada com release recusado
+   mantém obrigação identificável; o próximo `shutdown()` público
+   re-tenta e converge (idempotente) (X02).
+3. **Coalescência física**: repetidos shutdowns compartilham a unidade
+   de força em voo (uma por recurso); nova unidade só após conclusão;
+   recurso já parado é observado e nunca re-forçado (X03).
+4. Versão mínima esperada pelos hosts: **0.2.7.dev0**.

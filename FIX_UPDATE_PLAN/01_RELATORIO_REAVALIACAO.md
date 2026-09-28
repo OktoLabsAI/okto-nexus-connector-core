@@ -1,115 +1,101 @@
-# Reavaliação do Core após C6 — 12dae55
+# Reavaliação de 0.2.6.dev0 — snapshot 9f0ebab
 
 ## Conclusão
 
-A versão `0.2.5.dev0`, snapshot `12dae55381a9871958c7ffb7513030eaa66886c2`, resolveu as reproduções principais da revisão anterior. Há quatro grupos confirmados nesta rodada: W03 (P1, contenção/recuperação tardia), W02 (P2, convergência de lease), W04 (P2, resposta negativa pela API pública) e W01 (P2, erro tipado de sessão ausente). Não recomendo reescrita nem reabertura de todo o plano original.
+Os nove testes reconstruídos C7 e as nove sementes originais C7 passaram. W01 (sessão inexistente) e W04 (negativa de aprovação após prazo) estão corrigidos nos caminhos exercitados. W02 convergiu no caso comprovadamente sem entrega; W03 passou nos casos de close lento e recuperação após observer retido.
 
-A nova campanha contém nove casos: oito falham e um controle positivo passa. O resultado foi repetido. Não foram procurados requisitos novos para exigir outra rodada: W02–W04 correspondem a garantias explicitadas no C6; W01 é uma regressão localizada introduzida pelas novas condições de hold.
+Ainda há **três falhas confirmadas em duas áreas**, não uma necessidade de reescrever o Core: classificação de uma lease durável mais nova (X01) e finalização/coalescência dos recursos tardios (X02 e X03). Cinco casos independentes foram executados: três falhas e dois controles positivos; a campanha foi repetida com o mesmo resultado. Só essas três falhas fundamentam este plano complementar.
 
-Não ratifico E1 para os caminhos afetados enquanto W03 permitir que a força dependa da conclusão de outra operação ou que a recuperação não alcance o handle disponível. Esta é uma conclusão delimitada; ela não invalida a correção dos casos antigos nem os testes funcionais que passam. Os consumidores podem continuar a integração experimental com versão fixada. E2 não foi executado.
+Não ratifico E1 para os caminhos de geração e recuperação afetados. Isso não invalida as correções que passaram nem impede os consumidores de continuar integração experimental com pin exato. E2/E3 não foram executados nesta auditoria.
 
-## 1. Base, escopo e integridade
+## Escopo e integridade
 
-A fonte de verdade foi o ZIP enviado `okto-nexus-connector-core-main(4).zip`. Seu comentário identifica o commit acima e o pyproject declara a versão. Comparei os arquivos com o snapshot anterior `df3baaf` e li C6 e as evidências do executor.
+- ZIP analisado: `okto-nexus-connector-core-main(5).zip`.
+- Commit identificado no comentário do ZIP: `9f0ebabcfb314f3f2da2221467d16a85134e475e`.
+- Versão de pyproject: `0.2.6.dev0`; 378 arquivos originais.
+- SHA-256 do ZIP: `52c862969e81d181fa9dc39806d8e08276f945cc38f664f3019ae164b72fdad0`.
+- Baseline comparado: `12dae55381a9871958c7ffb7513030eaa66886c2` / 0.2.5.dev0.
+- Diff funcional principal: runtime.py e kernel.py. O inventário completo está em `evidencias/diff_inventory.json`.
+- `runtime.py` do ZIP confere com o blob GitHub `99f7eeaf6cc9c40d20a2f66fa32538405717cd06` no commit auditado.
+- Não houve alteração de fonte original, reset, push ou publicação. Build feito em cópia separada.
 
-Foram preservados os **366 arquivos originais**. O manifesto registra SHA-256 de cada arquivo e do ZIP. Builds ocorreram numa cópia separada. As regressões novas estão fora da árvore do produto. As consultas ao GitHub usaram o mesmo commit, somente para conferir âncoras; não foram usadas mudanças da branch atual para avaliar o ZIP.
-
-Ambiente desta revisão: Python 3.13.5/Linux. PyPI estava indisponível. A dependência rfc8785 0.1.4 foi recuperada do upstream pelo conector GitHub e copiada byte a byte para o ambiente de auditoria; os dois Git blob SHAs foram verificados. Não foi usado stub nem substituição do algoritmo. Jsonschema 4.26.0 e pytest 9.0.2 estavam instalados. O ambiente de importação isolada usa o wheel instalado fora do checkout e um .pth para as dependências da auditoria; detalhes em `evidencias/environment.json`.
-
-## 2. Campanhas executadas
+## Resultados executados
 
 | Campanha | Resultado |
 |---|---|
-| Testes C6 reconstruídos no repositório | 6 PASS |
-| Sementes C6 originais, sem adaptação | 5 PASS, 1 falha de barreira incompatível |
-| Mesmas sementes C6, adaptação mínima documentada | 6 PASS |
-| Sementes C5 originais fornecidas no pacote anterior | 11 PASS |
-| Testes C5 entregues no snapshot | 11 PASS |
-| C2/C3/C4 histórico | 44 PASS, 1 SKIP |
-| Regressões novas finais | 8 FAIL, 1 PASS |
-| Repetição final, incluindo esgotamento completo de recovery | 8 FAIL, 1 PASS |
-| Suíte completa | 690 PASS, 123 FAIL, 20 SKIP, 2 warnings |
-| Wheel/sdist pelo backend setuptools | PASS |
-| Importação instalada com `-I` | PASS após corrigir dependências do ambiente |
-| Bundle instalado com opt-in development-partial | PASS |
-| Exemplos embedded/remote instalados | Ambos OK; são consumidores sintéticos |
+| C7 entregue pelo executor | 9 PASS |
+| C7 original da auditoria anterior | 9 PASS, sem alteração das sementes |
+| C2–C6, campanha separada completa | 61 PASS, 1 SKIP, 1 warning |
+| Cinco novos casos finais | 3 FAIL, 2 PASS |
+| Repetição dos cinco casos | 3 FAIL, 2 PASS |
+| Suíte completa | 699 PASS, 123 FAIL, 20 SKIP, 2 warnings |
+| Wheel e sdist | PASS |
+| Importação instalada e bundle | PASS, aceitação explícita de development-partial |
+| Consumidor embedded e remote | PASS, ambos sintéticos, mesmo wheel |
 
-Subconjuntos e repetições se sobrepõem. Não se devem somar essas linhas para produzir uma contagem de testes únicos. As primeiras execuções das novas regressões também foram preservadas; a versão final deixa as 20 tentativas de recovery terminarem, para não confundir falta de convergência com um limite arbitrário de latência.
+As campanhas se sobrepõem; não somar subconjuntos nem repetições ao total. Na suíte completa, C2–C7 somam 70 PASS e 1 SKIP. Os resultados finais estão em `evidencias/RESULTADOS_RESUMO.json` e nos XMLs correspondentes.
 
-### A única adaptação de fixture C6
+As 123 falhas da suíte completa agrupam-se em 86 ocorrências de capacidade Linux retida por árvores não resolvidas; 24 probes sem confirmação de parada; 9 recusas diretas de proc_children; 2 asserções esperando outro erro, mas recebendo recusa de preflight; 1 teste do guardian sem evidência esperada após morte do owner; 1 teste de plataforma esperando um preflight disponível. Essa classificação está nas assinaturas e módulos dos XMLs. Não são 123 bugs independentes, nem evidência de que uma suíte completa passou neste host. Nenhum gate foi removido. As três novas falhas não dependem desse mecanismo.
 
-O teste antigo de referência forte esperava duas observações. O novo algoritmo observa uma vez, depois da força. A barreira não era atingida, embora a retenção estivesse correta nesse caminho. Alterei apenas `observations >= 2` para `observations >= 1`; as asserções de garbage collection, incerteza e retenção permaneceram iguais. O teste passou. O diff está em `evidencias/fixture_c6.diff`. **Não classifiquei essa incompatibilidade de fixture como bug.**
+Não foram executados providers reais, Windows/WSL2 ou Server–Connector em dois hosts. As campanhas anexadas pelo executor permanecem evidências declaradas por ele. Não se deduz qualificação de provider de peers sintéticos ou de exemplos de consumo do wheel.
 
-### As 123 falhas da suíte completa
+## X01 — Conflito observado com geração durável mais nova libera o contexto antigo
 
-Os agrupamentos por assinatura foram: 86 casos de capacidade de processos esgotada por árvores de parada não comprovada; 24 probes sem comprovação de parada; 11 recusas de preflight; um caso de cleanup do guardian não demonstrado; um caso de expectativa de preflight passivo. O sandbox não dispõe de `proc_children` esperado pelo backend. Não removi o gate nem transformei esses resultados em PASS. A classificação não prova a correção do backend em outro SO: a campanha real precisa ser executada onde o mecanismo existe.
+**P1. Âncoras:** `runtime.py:_classify_lease_row` (1802–1820), `_apply_lease_classification` (1822–1838), `renew_lease` (1488 em diante). Contrato prévio: C7-02.02, C7-02.03 e C7-02.05.
 
-Os quatro achados W foram reproduzidos separadamente dessas falhas. Providers reais, Windows/WSL2 e integração Server–Connector em dois hosts não foram executados por mim. As evidências que o executor apresenta desses ambientes continuam identificadas como suas, não como campanhas reproduzidas nesta revisão.
+A classificação compartilhada é uma melhoria, mas seu fallback `if lease is None or producer_done: return "NOT_DELIVERED"` não compara a linha ao contexto anterior. Assim, uma linha de geração superior que não coincide com a proposta é tratada como ausência de alteração. A aplicação dessa classificação limpa `lease_hold` e deixa a autorização antiga ativa.
 
-## 3. W03 — Contenção tardia ainda sequencial e recovery incompleta
+### Reprodução validada
 
-**Prioridade P1.** Âncoras: `runtime.py:1653–1730`, `shutdown:975–1130`, `_consume_late_open` e `_late_handles`. Requisito anterior: C6-02.03–06.
+1. Abrir sessão com contexto de conexão 3, autorizado e prazo ainda válido.
+2. Por uma segunda conexão SQLite real ao mesmo journal, avançar a lease para geração 5, preservando o escopo e usando CAS válido.
+3. Solicitar renew para geração 4 com expected=3.
+4. Confirmar `STALE_GENERATION` **no estágio lease_cas**, ou seja, a execução chegou à comparação durável, não foi recusada antes por uma fixture inválida.
+5. Consultar a linha real: geração 5.
+6. Solicitar novo submit pelo contexto de geração 3.
 
-### Close que ainda precisa concluir seu cancelamento
+**Observado:** `SUBMITTED`, uma chamada `send_turn` no peer e hold falso. **Exigido:** contexto obsoleto recusado, zero envio produtivo. O teste de controle, sem outro escritor avançando a linha, permite renew e um submit explicitamente autorizado.
 
-A implementação utiliza `await asyncio.wait_for(close(), timeout=cleanup_budget_seconds)` e só então chama `force_stop()`. Uma coroutine que, ao ser cancelada, ainda aguarda um recurso ou uma unidade nativa impede que essa espera termine. O timeout não estabelece por si só capacidade independente para a força.
+Essa concorrência não foi inventada fora do contrato: `tests/test_session_lease_state.py:test_runtime_renew_loses_to_durable_fence_moved_by_peer` já testa o avanço por outro Core/writer. O teste existente encerra na recusa de renew; a regressão nova verifica o trabalho seguinte.
 
-A regressão inicia uma abertura autorizada, cancela apenas o chamador, pede shutdown zero e recebe o handle tardio. Close observa `CancelledError` mas continua esperando sua barreira. Enquanto essa barreira permanece fechada, a força não é chamada. Ao final do teste todas as barreiras são liberadas para cleanup.
+O teste usa duas conexões SQLite reais, kernel e runtime reais, e peer nativo controlado. Não houve outro processo de Nexus nem execução de provider real. Não exige polling permanente do banco: uma divergência **já observada** não pode ser descartada. Não instalar o contexto durável como autoridade plena: a linha não contém todas as permissões ou o prazo local; recuperação exige o host autorizado.
 
-Isso não demonstra um provider real travado; demonstra quebra do contrato com uma implementação controlável do port nativo. A independência exigida pelo C6 precisa sobreviver ao cleanup lento, não depender de a coroutine obedecer imediatamente ao cancelamento.
+## X02 — Parada observada apaga a obrigação de liberar capacidade que falhou
 
-### Observer bloqueado deixa handle fora do recovery
+**P2. Âncora:** `runtime.py:_contain_late_open`, 1735–1747. Contrato prévio: C7-01.05 / C6-02.06.
 
-A segunda regressão devolve um handle cujo close retorna unknown, cuja primeira força falha temporariamente e cujo observer aguarda. O shutdown esgota o orçamento e cancela a tarefa de cleanup. O registro em `_late_handles` ainda não aconteceu: ele aparece somente depois da observação.
+Quando `observe()` retorna STOPPED, o código tenta `release_owned_slot`. Se recebe CoreError, ignora o erro e remove `_uncertain_opens`, `_late_handles` e `_opening` do mesmo jeito. A tarefa de limpeza termina sem uma obrigação identificável para o próximo shutdown.
 
-Depois de liberar o observer e chamar shutdown novamente, o contador de força permanece em **um**. `_opening` ainda contém a tentativa, mas `_late_handles` está vazio e não há cleanup ativo. Portanto, não alego que o objeto foi coletado: o problema demonstrado é **o lifecycle público não recuperar o recurso que continua disponível**.
+### Reprodução
 
-Correção: registrar antes do primeiro await e transferir o handle ao supervisor comum, com força agendada independentemente, tasks possuídas e retry sobre o mesmo owner. O C7 detalha esses estados. Não basta outro timeout, nem colocar o handle em um dicionário somente depois de uma chamada potencialmente bloqueante.
+Abrir com factory retida, cancelar apenas o waiter, deixar retornar um peer tardio, observar sua parada e injetar uma única recusa pré-commit em `release_owned_slot`. Restaurar o método e chamar shutdown público duas vezes. Consultar `owned_slot_page` no SQLite.
 
-Testes: `test_w03_force_does_not_wait_for_close_cancellation_to_finish` e `test_w03b_second_shutdown_can_retry_late_handle_after_observer_stalls`.
+**Observado:** uma reserva ainda ativa; nenhum late record, nenhum uncertain record, relatórios de shutdown vazios e uma única tentativa de release. **Exigido:** a obrigação permaneça identificável e convirja após o storage voltar; a reserva seja liberada com confirmação. O controle com ledger disponível libera a reserva normalmente.
 
-## 4. W02 — Recovery termina com lease presa mesmo após falha segura comprovada
+Não é um processo ainda vivo nem liberação insegura de quota: o bloqueio durável fica conservador, mas sem recuperação automática pelo lifecycle que deveria possuí-lo. Pode reduzir capacidade disponível até intervenção externa. O teste demonstra esquecimento da obrigação, não corrupção do SQLite.
 
-**Prioridade P2.** Âncoras: `runtime.py:1732–1847`, finalizador e reconciliador; C6-01.01–05.
+## X03 — Segundo shutdown sobrepõe uma força física ainda em execução
 
-O finalizador direto recebe `producer_done`. Se a consulta ao journal falha, ele agenda um reconciliador que não conserva essa informação e implementa outra classificação. Ao observar a linha anterior, esse laço espera que o produtor ainda possa comitar, mesmo quando ele já terminou antes de entregar qualquer escrita.
+**P2. Âncoras:** `_LateHandleRecord` 190–197; `_contain_late_open` 1673–1760; `_retry_late_handles` 1761–1768; espera de cleanup em shutdown 1116–1150. Contrato prévio: C7-01.03–C7-01.05.
 
-Executei renew e revoke com um Journal real, substituindo somente o ponto do CAS para devolver `JOURNAL_FULL`, `retry_safe=True`, `possible_effect=False` antes de enfileirar. A primeira leitura de recuperação falha. As leituras seguintes voltam a consultar o SQLite e confirmam a linha anterior não revogada.
+O registro tardio guarda native e attempt, mas não a unidade física de controle. Cada chamada de retry cria uma nova coroutine que cria novas tarefas de close e force. O shutdown pode cancelar o waiter de uma força em thread, sem parar a thread. O novo retry não identifica essa unidade ainda ativa.
 
-**Deixei completar as 20 tentativas reais do reconciliador.** Nos dois casos houve 21 leituras contando a primeira falha; a tarefa terminou, mas `lease_hold=True` e `lease_cas_pending=True`. Uma submissão nova com autorização ainda válida recebe `LEASE_UPDATE_PENDING` e não chega ao peer.
+### Reprodução
 
-Não é nova concessão indevida sob revogação. O hold funciona para segurança; falta a transição comprovada para recuperar disponibilidade. Também não recomendo removê-lo por tempo: o port deve conservar prova de término/resultado da tentativa e todos os caminhos devem usar um único finalizador. ACK perdido após commit continua distinto de erro pré-entrega.
+O peer tardio implementa `force_stop` por uma função bloqueada em thread, como a bridge faz para chamadas nativas. A primeira força começa e permanece retida em Event. Um novo shutdown público esgota seu orçamento de espera e faz a recuperação. Antes de liberar o primeiro Event, medir chamadas e concorrência na função síncrona.
 
-Testes: `test_w02_recovery_finishes_failed_attempt_when_old_row_is_proven[renew]` e `[revoke]`.
+**Observado:** duas chamadas físicas, duas ativas simultaneamente, peak=2, gate original ainda fechado. **Exigido:** um despacho físico ativo por operação/recurso; a segunda chamada reaproveita a tentativa em voo. Nova tentativa só depois de seu término real, quando o resultado permitir retry.
 
-## 5. W04 — O adaptador consegue negar após o prazo, mas a API pública não
+Não foi provado que um provider real morreu incorretamente ou que houve OOM. A falha comprovada é ausência de coalescência na fronteira física e duplicação de controles na recuperação. Contenção em paralelo ao close continua necessária; a correção não pode voltar ao encadeamento sequencial que já falhou.
 
-**Prioridade P2.** Âncoras: `runtime.py:607–729,2288–2294,2332–2362`; `kernel.py:22–39`. Requisito anterior: C6-01.02 e C6-03; a negativa precisa continuar possível no escopo autorizado.
+## Qualidade das provas e limites
 
-A regra de contenção temporal do Core e do kernel só inclui `turn.interrupt` e `runtime.close`. `decide_native_approval` trata decline/cancel como se concedessem trabalho e exige lease produtiva viva também em `_session`.
+A fixture inicial de X01 usava uma geração fixa e poderia recusar antes do journal. Isso foi corrigido; a versão entregue exige estágio lease_cas e deriva as revisões do contexto. O controle correspondente agora passa. As evidências preliminares foram separadas e não fundamentam a conclusão. O mesmo cuidado vale para invocações iniciais do bundle sem o prefixo sha256 correto: eram erros de preparação, não do produto.
 
-A regressão abre uma sessão, observa duravelmente um pedido válido, avança o relógio além da lease e chama a API pública. **Decline e cancel recebem AGENT_REVOKED e nenhuma resposta chega ao peer.** No mesmo cenário, accept também é recusado; esse é o controle positivo que deve permanecer passando.
+A dependência rfc8785 foi obtida pelo conector GitHub porque PyPI não era acessível por DNS. Os fontes originais v0.1.4 têm blobs verificados byte a byte; não houve substituto simplificado. Ver proveniência. Wheel/sdist foram construídos pelo backend setuptools em cópia da árvore, instalados no venv e importados fora da árvore com -I. Os hashes desta campanha são próprios, sem alegação de identidade binária com o build normalizado pelo executor.
 
-O teste não usa token de rede vencido nem outro agente. É o contexto já autorizado do host com a lease local de trabalho expirada, ainda dentro da janela de contenção e com o mesmo pedido/turno. A exceção para negar não pode remover autenticação, capability, geração, identidade ou correlação.
+## Decisão e próxima rodada
 
-Correção: classificação derivada da operação validada e compartilhada por `_authorize`, `_session`, kernel e writer. Isentar toda a ação `approval.decide` seria errado porque também liberaria accept. O C7 exige testar o caminho público, não apenas a bridge que já funciona.
+Concluir X01 antes de ratificar o gerenciamento de gerações em E1. Corrigir X02 e X03 na mesma rodada de recursos tardios. Manter W01/W04 fechados no escopo exercitado e preservar W02/W03 nos cenários já aprovados. Não reabrir MCP, transporte remoto, identidade ou qualificação de attach para resolver esses achados.
 
-Testes: `test_w04_public_approval_distinguishes_containment_from_new_permission[decline/cancel/accept]`.
-
-## 6. W01 — Sessão ausente produz AttributeError
-
-**Prioridade P2.** Âncora: `runtime.py:743–783`.
-
-Em `_send`, `fence_binding=None` é tolerado inicialmente para que a checagem posterior `_session` produza SESSION_UNKNOWN. Contudo, o novo elif acessa `fence_binding.lease_expired` antes de chegar a essa validação. Submit e steer de uma sessão nunca existente lançam `AttributeError("'NoneType' object has no attribute 'lease_expired'")`.
-
-É uma regressão pequena, mas afeta um erro normal de API: ID incorreto, binding removido ou sessão ainda não iniciada. Não houve efeito nativo. A correção é localizada e precisa preservar o lookup de recibos conhecidos antes de exigir sessão viva, pois replay após evicção é funcionalidade válida.
-
-Testes: `test_w01_unknown_session_returns_typed_error[submit/steer]`.
-
-## 7. Entrega e interpretação da liberação
-
-O plano C7 tem seis fases e 25 tarefas. A matriz tem 36 cenários: oito FAIL, onze PASS, dezesseis NOT_RUN e um BLOCKED nesta revisão. Linhas de campanha e cenário se sobrepõem; isso não significa 36 testes implementados. Os nove casos novos executáveis estão no pacote, junto às sementes anteriores necessárias.
-
-Priorize W03, complete W02 e W04, e corrija W01 sem ampliar a arquitetura. Não há motivo para duplicar adapters em Server/Connector ou reintroduzir MCP stdio. Os componentes podem continuar integração experimental com artefato fixado. A correção de W01 isolada não habilita E1; a evidência de contenção e recovery precisa corresponder ao contrato prometido.
-
-Este relatório não é prova de ausência universal de defeitos. Ele diferencia o que foi corrigido, o que falhou de maneira reproduzível e o que não foi executado. **Nenhum código do produto foi modificado.**
+A correção está detalhada em `02_PLANO_CORRECAO_C8.md`. Há testes executáveis, controles positivos, runner e matriz. Testes adicionais na matriz são aceites a implementar, não alegações de falhas já demonstradas. Nenhuma correção foi aplicada ao produto nesta auditoria.

@@ -1,51 +1,44 @@
-# Instruções ao agente executor — correção C7
+# Instruções de execução — C8
 
-Copie **o pacote inteiro**, com `regressoes/`, `evidencias/`, `backlog.json`, `matriz_aceite.json` e `executar_verificacao.py`, para `plans/correction-c7/` ou diretório equivalente. Não reconstrua testes por descrições quando seus fontes estão disponíveis. O snapshot de referência é `12dae55381a9871958c7ffb7513030eaa66886c2`, pacote `0.2.5.dev0`; trabalhe no HEAD atual, preservando alterações posteriores.
+Copie **todo o pacote**, incluindo regressoes, para o repositório ou mantenha-o em pasta acessível ao executor. Os Markdown não contêm os testes executáveis. O objetivo é implementar as três correções no HEAD atual, não gerar novo plano.
 
 ## Prompt pronto
 
 ```text
-Implemente o plano em plans/correction-c7/02_PLANO_CORRECAO_C7.md.
-Leia também 01_RELATORIO_REAVALIACAO.md, 03_MATRIZ_ACEITE.md e os fontes em
-regressoes/. O pacote inteiro deve estar disponível; não produza outro
-plano em substituição à implementação.
+Trabalhe no HEAD atual do okto-nexus-connector-core. Leia 01_RELATORIO_REAVALIACAO.md,
+02_PLANO_CORRECAO_C8.md e 03_MATRIZ_ACEITE.md. A referência auditada é
+9f0ebabcfb314f3f2da2221467d16a85134e475e / 0.2.6.dev0; não faça reset.
 
-Registre HEAD/dirty state e execute o baseline. Corrija W03 com o supervisor
-comum, não com outra cadeia wait_for(close)->force. Corrija W02 mantendo
-prova do resultado e token da tentativa no reconciliador; nunca libere
-unknown somente por tempo. Corrija W04 pelo caminho público inteiro:
-decline/cancel autorizados e correlacionados são diferentes de accept.
-Corrija W01 preservando replay de recibos depois de evicção.
+Implemente C8-00 a C8-04. Priorize X01 (contexto antigo aceito depois de observar
+fence durável mais novo), e feche X02/X03 no MESMO coordenador de recursos tardios:
+obrigação de release durável preservada e força física coalescida.
 
-Preserve os casos C6 que já passam. Não mude asserções para esconder erros,
-não desabilite contenção e não transforme peers sintéticos em qualificação
-de providers. Sem MCP stdio, MCP proxy/server ou nova identidade de usuário.
-Não copie adapters para os consumidores.
+Execute primeiro os testes reais do pacote. Preserve as nove sementes C7, os dois
+controles positivos C8 e a prova stage=lease_cas. Em X03, a primeira thread precisa
+continuar ativa ao observar a segunda chamada. Não substituir por mocks que
+recusam antes da fronteira, não xfail, não remover guards e não reescrever adapters.
 
-Execute as nove regressões novas e as anteriores, gere wheel/sdist,
-valide imports externos e registre evidências por tarefa/cenário. Mantenha
-NOT_RUN/BLOCKED quando falta ambiente. Não publique pacote, faça push ou
-release sem autorização específica. Conclua com o nível de liberação real
-e o escopo testado, não apenas 'testes verdes'.
+Não use producer_done como prova de rollback, não limpe estado após erro de ledger
+e não confunda cancelamento de await com término do produtor físico. Não conserte
+isso nos consumers, com atributos privados ou cópia de código. Preserve MCP HTTP
+direto no Server, identidade do agente, stdio nativo e ausência de proxy MCP.
+
+Atualize tarefas e matriz com commits, test nodes, comandos, XMLs, hashes e limites.
+Reporte qualificação real separada de peers sintéticos. E1 precisa dessas garantias
+no escopo declarado; E2/E3 não são demonstrados por smokes do wheel. Não publique
+release sem autorização. Entregue implementação e evidências, não outro plano.
 ```
 
-## Comandos de reprodução
+## Verificação inicial
 
-Use o ambiente virtual do projeto com as dependências de `pyproject.toml` instaladas. O runner não instala nada nem altera fontes.
+Com Python >=3.11, pytest e as dependências reais do pyproject já instalados:
 
 ```bash
-python plans/correction-c7/executar_verificacao.py --repo . --output ./evidence-c7-baseline
-python plans/correction-c7/executar_verificacao.py --repo . --output ./evidence-c7-final --full
+python executar_verificacao.py --repo /caminho/okto-nexus-connector-core --output /caminho/evidencias-c8-inicial
 ```
 
-Use diretórios novos para não apagar evidências. O código de saída 1 indica falha de teste; 2 indica setup/timeout/coleção. As regressões negativas têm expectativa correta e falham no snapshot auditado: não são xfail.
+O runner não instala dependências, não modifica fonte de produto e não desliga contenção. Ele executa C8 e C7 original; `--historical` acrescenta a campanha histórica e `--full` a suíte completa. Cada saída deve ser uma pasta nova. Repita contra o código corrigido em outra pasta.
 
-A campanha W02 deixa o reconciliador esgotar as 20 tentativas do baseline. Essa espera é intencional para comprovar falta de convergência, não requisito de latência para a implementação corrigida.
+No baseline: C8 = 3 FAIL / 2 PASS; C7 original = 9 PASS. Falha de import/setup é distinta de falha funcional. Os testes usam peers limitados e teardown que libera todos os workers. Uma finalização por timeout do processo de testes não comprova parada de quaisquer recursos nativos; consulte logs.
 
-## Ordem prática
-
-C7-00 primeiro. C7-01 é a prioridade P1. C7-02, C7-03 e C7-04 podem ser implementadas paralelamente com cuidado nas áreas compartilhadas de runtime.py. Integre tudo antes de C7-05. Server e Connector não precisam esperar para trabalhar em suas áreas independentes, mas não devem contornar os problemas do Core.
-
-## Artefatos finais exigidos
-
-Relatório com baseline/HEAD, commits, diff, comandos, XMLs, hashes e matriz atualizada. Por cenário: camada (unit/fault injection/backend/provider/hosts), teste, resultado e limitações. A campanha de dois hosts não faz parte da prova sintética; E2 depende de evidência própria.
+O pacote inclui resultados prévios e rascunhos separados em evidencias/preliminares. Somente validated_new/validated_repeat são as reproduções finais C8. As duas fontes rfc8785 utilizadas pelo auditor foram conferidas pelos hashes Git; não há stub no pacote e o executor usa a dependência normal de pyproject.

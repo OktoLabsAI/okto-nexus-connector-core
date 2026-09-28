@@ -1,4 +1,4 @@
-# Core API (`0.2.6.dev0`)
+# Core API (`0.2.7.dev0`)
 
 This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,

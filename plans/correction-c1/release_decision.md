@@ -164,3 +164,18 @@ cada; WSL2 3.13/3.11/3.12 = 823/19 cada. Artefato normalizado
 `sha256:c869e31e…435c730`), twine/offline verdes, **não publicado**.
 **E1 declarado para 0.2.6.dev0**; E2/E3 seguem bloqueados pelos hosts
 reais, attach, billing e PyPI conjunta.
+
+
+## Adendo C8 (2026-09-30) — reavaliação independente de `9f0ebab`
+
+Sétima reauditoria (`FIX_UPDATE_PLAN/`): 3 achados (X01 P1; X02/X03 P2;
+5 sementes: 3 FAIL + 2 controles), **E1 rejeitado para 0.2.6.dev0**.
+Correção C8 executada (C8-00..C8-04, 25 tarefas DONE em
+`plans/correction-c8/backlog.json`; matriz 29 cenários: 27 PASS, 1
+NOT_RUN declarado, 1 BLOCKED). 3/3 sementes verdes + 2 controles;
+C2–C7 preservadas (29+16+11+6+9); suítes: Windows 3.13/3.11/3.12 =
+773/74 cada; WSL2 3.13/3.11/3.12 = 828/19 cada. Artefato normalizado
+**0.2.7.dev0** byte-idêntico (wheel `sha256:ffe92eb8…ee4b180`, sdist
+`sha256:7ab63138…659aec46`), twine/offline verdes, **não publicado**.
+**E1 declarado para 0.2.7.dev0**; E2/E3 seguem bloqueados pelos hosts
+reais, attach, billing e PyPI conjunta.

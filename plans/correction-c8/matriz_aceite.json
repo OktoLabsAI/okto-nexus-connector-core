@@ -1,0 +1,118 @@
+{
+  "AC8-01-01": [
+    "PASS",
+    "x01 (stage=lease_cas proof; two real SQLite connections)"
+  ],
+  "AC8-01-02": [
+    "PASS",
+    "control_normal_renewal_still_allows_authorized_work"
+  ],
+  "AC8-01-03": [
+    "PASS",
+    "base-row NOT_DELIVERED kept green (w02 C7)"
+  ],
+  "AC8-01-04": [
+    "PASS",
+    "revoked row restricts on every path (v01 C6)"
+  ],
+  "AC8-01-05": [
+    "PASS",
+    "owner/config/auth advance classifies SUPERSEDED (same comparison set)"
+  ],
+  "AC8-01-06": [
+    "PASS",
+    "commit+lost-ACK stays UNKNOWN/hold (v01 C6)"
+  ],
+  "AC8-01-07": [
+    "PASS",
+    "late callback uses the same transition (token-checked)"
+  ],
+  "AC8-01-08": [
+    "PASS",
+    "unavailable read keeps hold; reconciler converges (w02 C7)"
+  ],
+  "AC8-02-01": [
+    "PASS",
+    "x02"
+  ],
+  "AC8-02-02": [
+    "PASS",
+    "control_late_stop_with_available_ledger_releases_slot"
+  ],
+  "AC8-02-03": [
+    "PASS",
+    "obligation retried by public shutdown; idempotent"
+  ],
+  "AC8-02-04": [
+    "PASS",
+    "disposal predicate includes obligations"
+  ],
+  "AC8-02-05": [
+    "PASS",
+    "no native effects after STOPPED (x02 control counts)"
+  ],
+  "AC8-03-01": [
+    "PASS",
+    "x03 (peak=1 while first worker active)"
+  ],
+  "AC8-03-02": [
+    "PASS",
+    "v02b C6 (later-lifecycle retry reaches STOPPED, same handle)"
+  ],
+  "AC8-03-03": [
+    "PASS",
+    "w03 C7 (slow-cancel close never delays force)"
+  ],
+  "AC8-03-04": [
+    "PASS",
+    "one unit per resource; observe-before-force (x03 final)"
+  ],
+  "AC8-03-05": [
+    "PASS",
+    "w03/w03b C7 kept green with the shared coordinator"
+  ],
+  "AC8-04-01": [
+    "PASS",
+    "C8 x2 + C7 9 + historical suites all green"
+  ],
+  "AC8-04-02": [
+    "PASS",
+    "wheel normalized byte-identical; hashes pinned"
+  ],
+  "AC8-04-03": [
+    "PASS",
+    "offline -I consumers embedded/remote"
+  ],
+  "AC8-04-04": [
+    "PASS",
+    "NXL manifest unchanged; no persisted migration"
+  ],
+  "AC8-04-05": [
+    "PASS",
+    "no MCP stdio/proxy/server; agent identity preserved"
+  ],
+  "AC8-04-06": [
+    "PASS",
+    "sandbox failures classified; gates intact"
+  ],
+  "AC8-04-07": [
+    "PASS",
+    "fixture adaptations documented (x02 causal order; x03 stop barrier)"
+  ],
+  "AC8-04-08": [
+    "PASS",
+    "C2-C7 regressions green (29+16+11+6+9)"
+  ],
+  "AC8-04-09": [
+    "NOT_RUN",
+    "SO-backend campaign on a qualified host (recorded evidence stands)"
+  ],
+  "AC8-04-10": [
+    "BLOCKED",
+    "E2 two real hosts: Server+Connector not started"
+  ],
+  "AC8-04-11": [
+    "PASS",
+    "E1 for 0.2.7.dev0 declared with owners for E2/E3"
+  ]
+}

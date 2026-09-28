@@ -1,0 +1,54 @@
+{
+  "round": "C8",
+  "base_commit": "9f0ebabcfb314f3f2da2221467d16a85134e475e",
+  "phases": {
+    "C8-00": {
+      "tasks": {
+        "C8-00.01": "DONE",
+        "C8-00.02": "DONE",
+        "C8-00.03": "DONE"
+      },
+      "note": "baseline 3 FAIL + 2 controls; state machines documented"
+    },
+    "C8-01": {
+      "tasks": {
+        "C8-01.01": "DONE (base context in attempt)",
+        "C8-01.02": "DONE (SUPERSEDED classification)",
+        "C8-01.03": "DONE (binding fence separate)",
+        "C8-01.04": "DONE (one pure function, revalidation)",
+        "C8-01.05": "DONE (STALE_GENERATION stable; no new API needed)",
+        "C8-01.06": "DONE (x01 + control + C6/C7 kept)"
+      },
+      "note": "X01 PASS"
+    },
+    "C8-02": {
+      "tasks": {
+        "C8-02.01": "DONE (_ReleaseObligation)",
+        "C8-02.02": "DONE (confirm-only finalization)",
+        "C8-02.03": "DONE (public lifecycle retry)",
+        "C8-02.04": "DONE (disposal/report include obligation)",
+        "C8-02.05": "DONE (x02 + control)"
+      },
+      "note": "X02 PASS"
+    },
+    "C8-03": {
+      "tasks": {
+        "C8-03.01": "DONE (record-owned physical units)",
+        "C8-03.02": "DONE (share in-flight; later-lifecycle retry)",
+        "C8-03.03": "DONE (gather never cancels the unit)",
+        "C8-03.04": "DONE (one unit per resource; observe-before-force)",
+        "C8-03.05": "DONE (x03 + W03 seeds + backend honesty)"
+      },
+      "note": "X03 PASS"
+    },
+    "C8-04": {
+      "tasks": {
+        "C8-04.01": "DONE (campaign, no inflation)",
+        "C8-04.02": "DONE (artifact + consumers)",
+        "C8-04.03": "DONE (C7 evidence complemented)",
+        "C8-04.04": "DONE (E1 for 0.2.7.dev0)"
+      },
+      "note": "matrix below; artifacts pinned"
+    }
+  }
+}
