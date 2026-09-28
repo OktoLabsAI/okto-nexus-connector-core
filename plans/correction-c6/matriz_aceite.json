@@ -1,0 +1,150 @@
+{
+  "AC6-01-01": [
+    "PASS",
+    "v01[cancel_then_lost_ack]"
+  ],
+  "AC6-01-02": [
+    "PASS",
+    "v01[read_unavailable_after_commit]"
+  ],
+  "AC6-01-03": [
+    "PASS",
+    "finalizer used by success path (lease tests green)"
+  ],
+  "AC6-01-04": [
+    "PASS",
+    "producer_done proof rule; row revoked applies"
+  ],
+  "AC6-01-05": [
+    "PASS",
+    "coalesced reconciler with backoff; hold kept"
+  ],
+  "AC6-01-06": [
+    "PASS",
+    "idempotent receipts during hold (R04 C2 kept green)"
+  ],
+  "AC6-01-07": [
+    "PASS",
+    "deny/interrupt/force exempt from lease_hold (s03/t01 kept green)"
+  ],
+  "AC6-02-01": [
+    "PASS",
+    "v02 (force independent of hung close)"
+  ],
+  "AC6-02-02": [
+    "PASS",
+    "v02b (handle retained for recovery)"
+  ],
+  "AC6-02-03": [
+    "PASS",
+    "v02c (shutdown fences cancelled open)"
+  ],
+  "AC6-02-04": [
+    "PASS",
+    "budgeted close; disposal retains with late handles"
+  ],
+  "AC6-02-05": [
+    "PASS",
+    "OWNED_UNKNOWN retry via _retry_late_handles (v02b recovery)"
+  ],
+  "AC6-02-06": [
+    "PASS",
+    "ledger release only on proven stop (contain_late_open)"
+  ],
+  "AC6-02-07": [
+    "PASS",
+    "second shutdown idempotent (u03 adapted assertion)"
+  ],
+  "AC6-02-08": [
+    "PASS",
+    "no double ownership: binding-or-late-handle, never both"
+  ],
+  "AC6-03-01": [
+    "PASS",
+    "v03 (refused accept can still be declined)"
+  ],
+  "AC6-03-02": [
+    "PASS",
+    "zero-byte restore; write/flush keeps consumption"
+  ],
+  "AC6-03-03": [
+    "PASS",
+    "pending_native_requests aligned (runtime paths green)"
+  ],
+  "AC6-03-04": [
+    "PASS",
+    "deny still allowed past expiry (u01[v03-adjacent] + s03)"
+  ],
+  "AC6-03-05": [
+    "PASS",
+    "approval matrix delimitations recorded"
+  ],
+  "AC6-04-01": [
+    "PASS",
+    "u07 original (<=5 names with cap 4)"
+  ],
+  "AC6-04-02": [
+    "PASS",
+    "layouts within cap accepted (build identity suites)"
+  ],
+  "AC6-04-03": [
+    "PASS",
+    "six regressions run twice (baseline + final)"
+  ],
+  "AC6-04-04": [
+    "PASS",
+    "C2/C3/C4/C5 all green (29+16+11)"
+  ],
+  "AC6-04-05": [
+    "PASS",
+    "full suites 6 environments"
+  ],
+  "AC6-04-06": [
+    "PASS",
+    "XMLs + commands in evidence/"
+  ],
+  "AC6-04-07": [
+    "PASS",
+    "wheel normalized byte-identical; hashes pinned"
+  ],
+  "AC6-04-08": [
+    "PASS",
+    "offline -I consumers embedded/remote"
+  ],
+  "AC6-04-09": [
+    "PASS",
+    "NXL manifest unchanged; no persisted migration"
+  ],
+  "AC6-04-10": [
+    "PASS",
+    "no MCP stdio/proxy/server reintroduced (diff review)"
+  ],
+  "AC6-04-11": [
+    "PASS",
+    "agent-centric identity and single Core preserved"
+  ],
+  "AC6-04-12": [
+    "PASS",
+    "sandbox proc_children failures kept classified, gates intact"
+  ],
+  "AC6-04-13": [
+    "PASS",
+    "fixture adaptations with diffs documented"
+  ],
+  "AC6-04-14": [
+    "PASS",
+    "incremental fixes (hold clearing, attempt pops) covered by suite"
+  ],
+  "AC6-04-15": [
+    "NOT_RUN",
+    "SO-backend campaign on a qualified host (recorded C1 evidence stands; not re-run this round)"
+  ],
+  "AC6-04-16": [
+    "BLOCKED",
+    "E2 two real hosts: Server+Connector not started"
+  ],
+  "AC6-04-17": [
+    "PASS",
+    "E1 for 0.2.5.dev0 declared with owners for E2/E3"
+  ]
+}

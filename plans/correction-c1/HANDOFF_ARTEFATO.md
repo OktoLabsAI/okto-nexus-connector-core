@@ -163,3 +163,26 @@ códigos preservados.
    (stat-only) revalidado em todas as fronteiras; mudança ordinária de
    CLI/dependência pós-prepare = `PROFILE_DRIFT` (U05).
 7. Versão mínima esperada pelos hosts: **0.2.4.dev0**.
+
+
+## Mudanças que os hosts absorvem (C6 — reauditoria V01–V03 + M01)
+
+1. **`LEASE_UPDATE_PENDING`** (novo código estável, retry_safe, sem
+   possible_effect): submits/steers/approvals permissivos recusados
+   enquanto uma atualização de lease (tipicamente revogação) está
+   reservada ou em estado durável incerto; deny/interrupt/force/observe
+   e recibos já conhecidos seguem disponíveis (V01).
+2. **REVOKE_BUSY/RECONNECT_BUSY** documentados: podem significar
+   confirmação pendente, não ausência de efeito durável — reconciliação
+   automática coalescida com backoff; nada para o host fazer além de
+   aguardar/consultar (V01).
+3. **Opens cancelados**: a tentativa sobrevive ao waiter (shutdown
+   continua cercando); handle tardio com parada não comprovada fica
+   fortemente possuído pelo Core (`_late_handles`) e é re-contido em
+   shutdowns subsequentes; close gracioso tem orçamento — close travado
+   nunca bloqueia a força (V02).
+4. **Aprovações**: recusa comprovadamente pré-byte (zero bytes) devolve
+   a reserva — o MESMO pedido pode ser negado depois; após bytes
+   possíveis o pedido permanece consumido (V03).
+5. **Enumeração**: fronteira cap+1 exata (M01).
+6. Versão mínima esperada pelos hosts: **0.2.5.dev0**.

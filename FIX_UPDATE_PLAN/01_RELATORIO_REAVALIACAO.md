@@ -1,164 +1,146 @@
-# Reavaliação do nexus-connector-core — 0.2.3.dev0
+# Reavaliação do Core após o C5
 
-## Decisão
+**Snapshot:** `df3baaf77f941485f697ff4424af17ada10b36fc`.
+**Pacote:** `0.2.4.dev0`.
+**Entrada:** `okto-nexus-connector-core-main(3).zip`.
+**Comparação:** baseline anterior `3d304f9`, plano C5 e suas sementes originais.
 
-A versão corrige os dez cenários T do relatório anterior e preserva os cenários C2/C3 verificados. Há, porém, sete grupos remanescentes U01–U07, reproduzidos em dez casos independentes. Não ratifico E1 para o escopo afetado enquanto essas falhas de autorização, supervisão e contenção persistirem. E0/integração experimental com pin exato pode continuar. Isso não é uma recomendação de reescrita nem uma recusa baseada apenas na ausência dos outros dois aplicativos.
+## 1. Conclusão
 
-## Baseline e método
+A atualização corrigiu a maior parte dos cenários específicos anteriores. A revisão não pressupôs que precisava encontrar outro defeito e não propõe reescrita ou uma nova arquitetura. Restaram **três grupos de correção necessária**, demonstrados por **seis testes independentes**, repetidos com o mesmo resultado. V01 e V02 são P1; V03 é P2. Há também M01, P3: um nome lido a mais na enumeração limitada. M01 sozinho não impede E1.
 
-Snapshot `3d304f9ccb1982f71410acb0a0622b0b8685a06f`, pacote `0.2.3.dev0`, extraído de `okto-nexus-connector-core-main (3).zip`. SHA do ZIP: `162e71f8674793a6a81f5b9bc664ff42ae7b01920047d5ddc3a92f0749d34083`. O commit foi obtido do comentário do arquivo; o ZIP não contém histórico Git completo. Comparação com `8677145c3050b9ba270bc24ae6343d6cb391a168`, revisão C4 e gates C1/R3 fornecidos. Os 347 arquivos originais permaneceram inalterados (hashes anexos). O build foi feito em uma cópia, não na árvore auditada.
+Não ratifico E1 nos caminhos afetados enquanto V01/V02 persistirem: revogação durável pode coexistir com novo trabalho autorizado em memória; e uma abertura cujo chamador foi cancelado pode escapar da guarda de shutdown ou perder o handle necessário à recuperação. Isso não equivale ao resultado desconhecido legítimo que preserva ownership e capacidade de controle.
 
-Foram lidos o código, a matriz e as evidências C4; executados testes do repo, as sementes originais da rodada anterior com adaptação compatível, novas regressões, build e consumidores instalados. As evidências Windows/WSL2 e providers existentes no repo são declarações/campanhas do executor, não execuções reproduzidas por esta auditoria. Aqui usamos Linux/Python 3.13.5. Não executamos provider real nem fluxo Server–Connector em dois hosts.
+O plano C6 é restrito: cinco fases, 27 tarefas, 37 cenários. Não reabre genericamente o C5. Os consumidores podem continuar integração experimental com pin, sem copiar adapters ou contornar os estados do Core.
 
-Os testes novos isolam explicitamente qualificação/build/plataforma quando precisam alcançar uma fronteira interna. Esse isolamento NÃO concede qualificação a um provider ou a um build sintético. Não foi desabilitado o gate da suíte completa.
+## 2. Método e escopo
 
-## Resultados reproduzidos
+Extraí o ZIP em área de trabalho independente, comparei os arquivos com a versão anterior e li as evidências entregues pelo agente. Executei a suíte C5 reconstruída no repositório e também o `test_review5.py` original do pacote anterior. As novas regressões exercitam o Core real nas fronteiras relevantes: SQLite para commit, APIs públicas e lifecycle; Codex real até writer/spawn com recursos de laboratório. Nenhum provider real foi invocado.
 
-| Execução | Passaram | Falharam | Ignorados |
-|---|---:|---:|---:|
-| Testes C4 entregues no repo | 16 | 0 | 0 |
-| Arquivos C2/C3 | 28 | 0 | 1 |
-| Dez sementes originais C4, com wiring adaptado | 10 | 0 | 0 |
-| Regressões novas + controle positivo | 1 | 10 | 0 |
-| Repetição das regressões novas | 1 | 10 | 0 |
-| Suíte completa no ambiente validado | 673 | 123 | 20 |
+Os testes usam Events/barreiras para garantir que a falha seja injetada depois que a execução realmente entrou na espera. O caso de close travado observa a ausência de força durante um intervalo delimitado enquanto a barreira continua retida; não afirma que o backend de um SO real falhou. O teste de retenção remove referências da própria fixture antes de executar coleta de lixo. O teste de spawn usa a implementação real do adapter e interrompe na primitiva de criação antes de produzir qualquer processo.
 
-Subconjuntos sobrepõem a suíte completa; não somar números como se fossem testes diferentes. As dez falhas novas são asserções do comportamento correto, não dez exceções inesperadas de setup. Distribuição: U01=2; U02=2; U03=1; U04=1; U05=2; U06=1; U07=1. O controle positivo prova que send_turn normal está corretamente guardado após o lock; o problema de U01 é outra entrada no mesmo transporte.
+O ambiente é Linux/Python 3.13.5. rfc8785 0.1.4 não estava disponível inicialmente e a instalação pela rede falhou; usei o código oficial da tag v0.1.4, com verificação de SHA de blob de ambos os arquivos e importação em subprocesso isolado. Não foi utilizado stub. A proveniência está em `evidencias/deps_provenance.json`.
 
-A suíte completa teve dois warnings de fixtures (documentados nos logs); a repetição final nova não teve warnings. As 123 falhas agrupam-se em limitações/efeitos do backend Linux deste sandbox: 11 recusas de preflight, 86 erros por slots próprios retidos, 24 observações/probes sem prova de parada e dois casos de diagnóstico/guardian relacionados. O ambiente não possui a interface `/proc/self/task/<pid>/children` esperada. Não são 123 causas independentes, e não fundamentam isoladamente a rejeição de E1. Também não afirmamos que a suíte completa passou aqui.
+## 3. Resultados reproduzidos
 
-A primeira campanha completa tinha mais duas falhas porque subprocessos não importavam rfc8785 do ambiente de auditoria. Isso foi corrigido somente no ambiente e a suíte foi repetida; o resultado final acima não contém essas duas falhas de dependência. Testes originais C4 precisaram apenas conectar o novo DispatchGuards do adapter ao transporte manual da fixture: a mudança e os hashes estão anexos. Uma tentativa inicial do novo controle positivo omitia poll() no processo de laboratório; foi corrigida antes das execuções finais. Esses erros de fixture/setup não são achados de produto.
+| Campanha | Resultado |
+|---|---|
+| C5 entregue: `tests/regression/test_c5_audit.py` | **11 PASS** |
+| C2/C3/C4 entregues | **44 PASS, 1 SKIP**, warning de fixture legada |
+| C5 original do pacote anterior | **10 PASS, 1 FAIL** (somente M01) |
+| Regressões novas C6 | **6 FAIL**, repetidas com **6 FAIL**, sem warnings na execução final |
+| Suíte completa do produto | **684 PASS, 123 FAIL, 20 SKIP**, 2 warnings |
+| Build wheel + sdist | PASS |
+| Importação isolada do wheel | PASS |
+| Verificação do bundle instalado | PASS com `development-partial` explicitamente aceito |
+| Consumidores sintéticos embedded/remote usando o mesmo wheel | PASS |
 
-## O que deve ser preservado
+As campanhas se sobrepõem. Não somar contagens dos subconjuntos às da suíte completa. As seis falhas novas são reproduções de três causas; os 37 cenários da matriz não são 37 testes já executados.
 
-A força já não espera journal.admit antes de despachar; os testes T01 passam. O erro CAS comprovado antes da entrega deixa de envenenar permanentemente a reserva. O envio normal Codex passa a consultar DispatchGuards depois de _write_lock. Shutdown fecha guardas de aberturas que ainda esperam callbacks; disposal considera _opening. O algoritmo de identidade Pi inclui optional/peer efetivamente instaladas e o orçamento de bytes projetado antes da leitura foi corrigido. Preservar igualmente relógio default, DTO público de resume, discovery público e MCP HTTP direto.
+### Limite do sandbox na suíte completa
 
-Essas melhorias são reais. O que falha é estender a conclusão de uma rota testada para as demais rotas ou para resultados de falha com semântica diferente.
+A interface de `/proc/self/task/<pid>/children` esperada pelo backend não está disponível neste ambiente. As 123 falhas se agrupam em 86 erros de capacidade retida por árvores não resolvidas, 24 probes sem confirmação de parada, 12 recusas de proc_children e uma falha de evidência de guardian. A classificação por node e assinatura está anexada. Não removi o gate de contenção e não trato essa contagem como 123 defeitos independentes.
 
-## Achados remanescentes
+As três pendências V foram reproduzidas sem depender desse backend. A campanha Windows/WSL2 registrada pelo executor não foi repetida aqui. Os exemplos installed embedded/remote não são os produtos Nexus Server e Connector em dois hosts. Não se pode inferir E2 deles.
 
-### U01 — Aprovação não instala a guarda no escritor nativo
+## 4. Correções anteriores confirmadas e limites de interpretação
 
-**Prioridade:** P1. **Relação com C4:** C4-02.01/02/03/06.
+As sementes originais referentes a aprovação expirada, mudança de turno, spawn após espera, resultado tardio em caso favorável, antecipação de força, artefatos Pi e reconciliação direta do CAS passaram. O envio normal de turno continua protegido após a trava real do transporte.
 
-**Âncoras no snapshot:** `src/nexus_connector_core/native/runtime_bridge.py:269–331; native/adapters/codex.py:1127–1171,334–373`. Intervalos são auxiliares; buscar símbolos no HEAD.
+A implementação passou a manter uma tarefa produtora da abertura sob `shield`, a compor a guarda de reply na escrita e a ler a lease persistida após erro direto do CAS. Esses avanços são reais. Os gaps abaixo estão nos resultados alternativos desses mesmos caminhos: retorno tardio com close travado; cancelamento seguido de shutdown; erro do callback tardio; recuperação cujo banco permanece indisponível; e restauração de pedido recusado antes de bytes.
 
-**Observação executada:** Duas parametrizações atravessaram bridge, adapter e serializer Codex reais com stdin de laboratório. A guarda começou válida. Depois de o caminho esperar em _write_lock, venceu o deadline ou mudou o turno. Em ambos os casos foi escrito o JSON-RPC id=7 com decision=accept.
+A nova enumeração usa `scandir` incremental. A antiga materialização ilimitada foi removida. Sua diferença de fronteira é menor e não deve ser descrita como novo OOM ou scan ilimitado.
 
-**Causa:** reply_native_approval verifica a autorização/correlação antes de invocar reply, mas não instala DispatchGuards para a chamada síncrona. O escritor possui a checagem pós-lock; nesta entrada ela não recebe a guarda pertinente. Uma guarda só temporal também não revalida o pedido/turno na fronteira.
+## 5. V01 — Revogação incerta não bloqueia novos efeitos em dois caminhos
 
-**Limite da prova:** Não foi iniciada sessão de provider real. O byte stream produzido pelo transporte real é a observação, não somente uma flag de fake.
+**Prioridade:** P1. **Relação:** C5-04.01–06.
+**Âncoras:** `runtime.py:1505–1545` (`_reconcile_cas_error`), `1620–1650` (`_late_cas_applier`), `_send`, `_session`, instalação de `EffectFence`.
 
-**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
+### Evidência A — chamador cancelado e erro de confirmação tardio
 
-### U02 — Abertura espera no adaptador depois da última verificação
+O wrapper do Journal executa o CAS real, comita `revoked=True` e depois lança erro com `possible_effect=True` e `retry_safe=False`. Antes do commit, o chamador de revoke foi cancelado; o produtor continuou. O callback tardio encontra exceção e limpa `lease_cas_pending` sob a premissa de que não houve commit. Ele não reutiliza a reconciliação adicionada ao caminho direto.
 
-**Prioridade:** P1. **Relação com C4:** C4-02.05; C4-03.02.
+Consulta direta ao SQLite comprovou `revoked=True`. Mesmo assim, memória permaneceu `revoked=False`, `pending=False`; um submit com contexto anterior chegou ao peer como `send_turn` e recebeu recibo `SUBMITTED`.
 
-**Âncoras no snapshot:** `src/nexus_connector_core/native/runtime_bridge.py:664–681; native/adapters/codex.py:292–312,684–747`. Intervalos são auxiliares; buscar símbolos no HEAD.
+### Evidência B — commit aconteceu, mas a leitura de recuperação falha
 
-**Observação executada:** Duas parametrizações usaram o start do adaptador Codex real, preso em _start_lock. Após deadline vencer ou shutdown público retornar, a trava foi liberada e spawn_owned_process foi alcançado.
+No caminho direto, o mesmo commit ocorre e sua confirmação é perdida. Desta vez `get_session_lease` do Core lança erro de indisponibilidade. `_reconcile_cas_error` retorna e conserva `pending=True`, mas essa flag só bloqueia outro CAS. A admissão produtiva e a guarda do native não a tratam como hold.
 
-**Causa:** A unidade de thread verifica antes de connector.start, mas start contém esperas adicionais. A guarda de abertura não é propagada até o ponto de criação do processo.
+O banco novamente estava `revoked=True`, enquanto a memória tinha `revoked=False`, `pending=True`; o submit antigo foi enviado.
 
-**Limite da prova:** A primitiva de spawn foi substituída por uma sentinela que registra e lança OSError antes de criar qualquer processo. Isso comprova alcance indevido da fronteira, não execução de Codex real.
+### Alcance e correção
 
-**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
+Não é alegação de rollback defeituoso do SQLite: a transação conclui antes da falha injetada na entrega de seu resultado pelo port público. Não é necessário supor um atacante; cancelamento, confirmação perdida e leitura indisponível são condições de recuperação já previstas pelo C5.
 
-### U03 — Cancelamento perde o resultado nativo tardio de open
+A correção deve unir resultado direto/tardio, separar reserva CAS de bloqueio de concessão e manter a tentativa identificada até prova suficiente. Negativa, observação e força continuam permitidas sob ownership válido. Um novo submit bloqueado não herda `possible_effect` do CAS — são operações distintas. Recibo conhecido continua consultável.
 
-**Prioridade:** P1. **Relação com C4:** C4-03.01/03/04/07.
+**Testes:** `test_v01_uncertain_revocation_never_allows_old_work[cancel_then_lost_ack]` e `[read_unavailable_after_commit]`.
 
-**Âncoras no snapshot:** `src/nexus_connector_core/runtime.py:207–215,open/finally (~490); native/runtime_bridge.py:674–681`. Intervalos são auxiliares; buscar símbolos no HEAD.
+## 6. V02 — Ownership incompleto da abertura cancelada e de seu handle tardio
 
-**Observação executada:** Um start de laboratório foi bloqueado dentro da thread. O chamador de open foi cancelado. close ocorreu antes do nascimento simulado, _opening ficou vazio e _uncertain_opens reteve apenas o scope. Após shutdown e liberação da thread, o adapter retornou um handle ativo que nenhum supervisor recuperou; outro shutdown não solicitou força.
+**Prioridade:** P1. **Relação:** C5-02.01–06.
+**Âncoras:** `runtime.py:440–535` (producer/finally), `shutdown` (guardas de `_opening`), `_consume_late_open`/`_contain_late_open` (1547–1619).
 
-**Causa:** A tentativa mantém Event/guard, mas não o Future produtor e um observador independente do chamador. O resultado de asyncio.to_thread fica perdido após cancelamento; o finally encerra o rastreamento específico e a factory só tenta close cedo.
+### A — close travado impede força
 
-**Limite da prova:** O teste não criou processo de SO. Ele demonstra perda de ownership do resultado pelo lifecycle real do Core. Unknown e slot retido são conservadores, mas não substituem consumir o handle que efetivamente retorna.
+Depois de cancelar o waiter, o produtor devolve um native de laboratório. `_contain_late_open` faz close → observe → force → observe sequencialmente. `close()` foi retido por Event. Enquanto ele permaneceu retido, não houve entrada de força, mesmo com shutdown de orçamento zero. A força existe no peer e funcionaria se fosse chamada.
 
-**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
+O problema não é anunciar STOPPED sem prova — o Core conserva unknown. O problema é não conseguir solicitar a contenção porque o caminho tardio não usa a independência já implementada para sessões normais.
 
-### U04 — Urgência maior não antecipa força já agendada
+### B — parada não comprovada e handle descartado
 
-**Prioridade:** P1. **Relação com C4:** C4T-13; C4-01.02/05.
+Em outra fixture, close retornou unknown, force levantou erro transitório e observe retornou RUNNING. Depois que a tarefa de cleanup terminou, nenhuma sessão registrada nem tarefa rastreada conservava o native. Removi as referências da fixture e executei GC: a weakref morreu, embora `_uncertain_opens` ainda contivesse o ID.
 
-**Âncoras no snapshot:** `src/nexus_connector_core/runtime.py:1062–1088`. Intervalos são auxiliares; buscar símbolos no HEAD.
+Isso comprova perda do objeto de controle disponível, não um provider real órfão. Conservar somente um ID não permite repetir força ou observar esse handle pelo port; a recuperação recebeu menos informação do que já possuía.
 
-**Observação executada:** Um primeiro shutdown com orçamento de 20 segundos iniciou close travado e agendou força. Um segundo shutdown público com orçamento zero retornou sem antecipar o despacho; a sentinela de força permaneceu não chamada.
+### C — cancelamento antes de shutdown remove a guarda do conjunto visitado
 
-**Causa:** _schedule_force retorna quando force_task existe e ainda não terminou, mesmo se apenas dorme aguardando um prazo futuro. O parâmetro immediate não muda esse estado.
+`open` remove a tentativa de `_opening` em seu finally, mesmo quando seu producer continua. `shutdown` só fecha guardas das tentativas que encontra ali. Com callback de ambiente retido, cancelei open, executei shutdown e depois liberei o callback. A factory pública, kernel, journal e adapter Codex reais chegaram a `spawn_owned_process`. A sentinela levantou erro antes de criar qualquer processo.
 
-**Limite da prova:** Foi usado peer sintético para observar dispatch, sem inferir morte física. O teste libera o close no teardown e não espera 20 segundos; a decisão errada é verificável antes do prazo antigo.
+Essa sequência é diferente da semente antiga em que shutdown ocorria enquanto o chamador ainda estava aguardando. A guarda não falhou por prazo; o shutdown perdeu acesso à tentativa depois que seu waiter saiu.
 
-**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
+### Correção
 
-### U05 — Verificação final do Pi ignora CLI e dependências
+Waiter, producer e ownership têm vidas diferentes. Mantenha a tentativa no registro de ownership até resolução ou transferência explícita. Shutdown fecha todas as guardas ainda capazes de criar efeito, inclusive após cancelamento do waiter. Um handle tardio deve ser adotado por um registro supervisionado antes de qualquer limpeza e usar o coordenador comum de contenção. Close/observe não podem bloquear força; parada desconhecida mantém o handle forte, o slot e a possibilidade de retomada.
 
-**Prioridade:** P2. **Relação com C4:** C4-03.05/06.
+**Testes:** `test_v02_late_open_force_is_independent_of_hung_close`, `test_v02b_unconfirmed_late_handle_remains_owned_for_recovery`, `test_v02c_shutdown_fences_cancelled_open_before_late_start`.
 
-**Âncoras no snapshot:** `src/nexus_connector_core/native/runtime_bridge.py:547–572; profiles.py:verify_prepared`. Intervalos são auxiliares; buscar símbolos no HEAD.
+## 7. V03 — Recusa comprovadamente pré-write consome pedido ainda sem resposta
 
-**Observação executada:** Prepare/build verification reais produziram um Pi Node+CLI+dependência. O callback de ambiente modificou a CLI ou um index.js dependente. Node e diretório de trabalho permaneceram iguais; o start sentinela foi alcançado em ambos os casos.
+**Prioridade:** P2. **Relação:** C5-01.02/05/06.
+**Âncora:** `native/adapters/codex.py:1133–1169`, `reply_native_approval`.
 
-**Causa:** _launch_signature só coleta size/mtime de argv[0] e cwd. Para Pi, argv[0] é Node, não a CLI nem o conjunto qualificado. Não é uma corrida same-size/same-mtime: os arquivos omitidos foram alterados normalmente.
+A nova guarda recusa corretamente um accept quando a autorização vence durante o write lock. O teste conta os bytes e comprova zero. Porém, o adapter já alterou `recorded['pending'] = False` antes de chamar `reply_result`.
 
-**Limite da prova:** Qualificação e gate de SO foram isolados para testar a janela de conteúdo; nenhum Pi real foi lançado e o teste não reivindica suporte a essa fixture como build de produção.
+Uma resposta decline para o mesmo pedido, ainda correlacionado ao mesmo turno, recebe `RuntimeCommandNotSent('Native approval request ended or changed')`. Não há resposta no wire. O caminho de negativa está deliberadamente permitido após expiração, mas o registro foi consumido prematuramente.
 
-**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
+A correção deve reservar o pedido por token, não consumi-lo antecipadamente. Recusa com prova de zero bytes permite devolver a própria reserva para PENDING somente se o pedido continua vigente. Depois de bytes/flush possíveis, não restaurar nem repetir cegamente. Alinhar estados do adapter, pending requests do Core e recibos. Rever input/elicitation e rotas equivalentes realmente suportadas.
 
-### U06 — Erro de confirmação após commit deixa revogação só no journal
+**Teste:** `test_v03_prewrite_refused_accept_can_still_be_declined`. Usa bridge, serializer e transporte Codex reais com stdin de laboratório.
 
-**Prioridade:** P1. **Relação com C4:** C4-04.01/02/03/04/05.
+## 8. M01 — Diferença menor no orçamento da enumeração
 
-**Âncoras no snapshot:** `src/nexus_connector_core/runtime.py:1418–1488,1530–1571; ports.py:Journal; journal.py:cas_session_lease`. Intervalos são auxiliares; buscar símbolos no HEAD.
+**Prioridade:** P3, não bloqueia E1 sozinha.
+**Âncora:** `build_identity.py`, `_iter_tree_files`, incremento e comparação de `names_seen`.
 
-**Observação executada:** Um wrapper do SQLiteJournal real executou e confirmou o CAS de revogação, depois lançou CoreError(possible_effect=True,retry_safe=False). A consulta durável provou revoked=True. Em seguida o Core aceitou submit com o contexto anterior e chamou send_turn no peer.
+Com limite quatro, o original `test_u07_directory_scan_enforces_budget_during_enumeration` obteve seis nomes antes da recusa; o limite esperado era cinco, incluindo um sentinela para detectar excesso. O scanner continua incremental e limitado. A causa é comparar o contador com `cap + 1` após já consumir e incrementar, permitindo cap+2.
 
-**Causa:** O tratamento de Exception usa cas.done() como evidência suficiente para limpar a reserva. O resultado não é reconciliado e a memória não fica cercada. Future terminado com exceção não comprova rollback; o port permite implementar a entrega do resultado separada do commit.
+A correção é ajustar essa fronteira e alinhar a evidência ao comportamento, mantendo layouts com até cap válidos. Não se justifica uma mudança arquitetural, um novo scanner ou uma afirmação de exaustão de memória por esse resultado.
 
-**Limite da prova:** É fault injection explícita de confirmação perdida no port público do Journal, não uma alegação de que sqlite3 normalmente comita quando a própria transação falha. O teste usa persistência real e erro que declara efeito possível.
+## 9. Qualidade e proveniência das evidências
 
-**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
+O repositório registra que apenas quatro Markdown foram entregues ao executor anterior; ele reconstruiu as onze sementes. Elas passam. Nesta auditoria, as sementes originais foram recuperadas do ZIP anterior e dez delas também passaram. Não concluo que os testes reconstruídos sejam todos inválidos; a diferença objetiva encontrada foi M01.
 
-### U07 — Enumeração materializa nomes antes de aplicar o limite
+O problema de qualificação está nas afirmações mais amplas: um teste de leitura bem-sucedida depois de perder ACK não comprova o caso de leitura indisponível; consumir handle com close rápido não comprova contenção com close travado; preservar escrita zero não comprova preservar o pedido para resposta negativa posterior. C6 pede evidências específicas, não mais testes apenas por volume.
 
-**Prioridade:** P2. **Relação com C4:** C4-06; C4T-45.
+As primeiras experiências locais incluíram ajustes de fixture e setup. Não estão misturadas ao resultado final: as duas execuções `review_final`/`review_final_repeat` usam o mesmo script entregue e reproduzem seis FAIL. No caso de início tardio, a fixture final utiliza o adapter Codex real até spawn sentinela, eliminando um double que poderia contornar a guarda por construção.
 
-**Âncoras no snapshot:** `src/nexus_connector_core/build_identity.py:91–145`. Intervalos são auxiliares; buscar símbolos no HEAD.
+Os logs têm caminhos do ambiente da auditoria para proveniência. O runner entregue aceita o caminho do repositório e não depende desses caminhos fixos. Seus testes importam fixtures do próprio repositório; mudanças de API legítimas exigem adaptação documentada, não alteração da condição de falha.
 
-**Observação executada:** Com 1.000 arquivos reais e limite reduzido para 4 entradas, o scanner obteve 1.000 nomes por os.listdir antes de recusar a árvore. A expectativa de interrupção incremental era no máximo o quinto nome.
+## 10. Decisão e próxima ação
 
-**Causa:** sorted(os.listdir(current)) aloca a lista completa e a ordena antes do teste de orçamento dentro do laço. Limitar a lista final de arquivos não limita essa alocação intermediária.
+Implementar as 27 tarefas do plano C6, começando por V01/V02. V03 e M01 completam a rodada. A matriz contém 37 cenários: 7 FAIL observados (incluindo M01), 5 PASS delimitados, 24 NOT_RUN e 1 BLOCKED nesta campanha. Não representam 37 testes novos nem qualificação operacional universal.
 
-**Limite da prova:** Não foi simulada falta de memória nem medido um OOM. Foi contado o trabalho efetivamente realizado pelo caminho atual; o requisito de interrupção antecipada não foi atendido.
+Reexecutar a campanha nos ambientes que serão anunciados. E1 exige que os caminhos utilizados atendam às garantias; E2 depende dos produtos Server/Connector reais, com o mesmo wheel. Nenhum resultado sintético transforma E0 em E2. Attach ou suporte universal não são dependências artificiais para corrigir esses três grupos.
 
-**Tratamento:** executar a fase correspondente de `02_PLANO_CORRECAO_C5.md`, não apenas alterar a semente. Os testes negativos e os controles complementares estão em `03_MATRIZ_ACEITE.md`.
-
-## A qualidade da evidência ainda precisa ser corrigida
-
-O arquivo `plans/correction-c4/matrix.json` marca 52 cenários PASS e um BLOCKED. A análise encontrou mapeamentos que não demonstram o cenário alegado. Isso não autoriza apagar os testes que passam; requer delimitar a conclusão.
-
-Exemplo concreto: `test_c4t13_zero_shutdown_shortens_scheduled_force_deadline` só chama um shutdown de 0,05 + 0,05 segundo. Não cria primeiro uma força agendada para prazo distante e depois pede encurtamento. Além disso, `report_unknown()` retorna True, sem ler o resultado. O novo U04 faz as duas solicitações reais e demonstra a ausência de antecipação. O teste anterior pode continuar útil para força após prazo curto, mas precisa de nome/escopo correto.
-
-C4T-25/26 associam cancelamento e retorno tardio a cenário que só segura callback antes do spawn e à existência de `_uncertain_opens`. U03 demonstra a diferença entre registrar incerteza e manter o Future/handle supervisionado. C4T-19 associa aprovação à guarda na bridge; U01 mostra a espera interna posterior. C4T-45 limita arquivos coletados, não a lista intermediária criada por `listdir`. C4T-32/33 tratam erros pré-commit, não entrega perdida após commit (U06).
-
-A evidência do executor afirma que recebeu somente Markdown e reconstruiu as sementes T. Não presumimos o que foi copiado para seu ambiente. Este pacote inclui as sementes originais e a adaptação necessária, mais o novo arquivo completo, para que a próxima rodada não dependa de reconstrução por descrição.
-
-## Empacotamento e conformance
-
-Wheel e sdist foram gerados pela interface `setuptools.build_meta` em cópia do repo, com log e hashes. Esta auditoria não executou toda a campanha normalizada cross-platform do projeto, nem publicação ou twine. Os hashes locais não precisam coincidir com a campanha normalizada apresentada pelo executor; não tratamos essa diferença isolada como defeito.
-
-O wheel foi instalado na venv de auditoria, fora da árvore-fonte. `tools/consumer_smoke.py` rodou via `python -I -c` em diretório vazio nos modos embedded e remote. Ambos passaram usando o mesmo artefato. O bundle instalado passou com `allow_development_partial=True`, revision/status explicitados. Esses exemplos usam peers/projeções sintéticos: NÃO são Nexus Server e Connector executando distribuídos.
-
-Nenhuma implementação de MCP stdio, servidor/proxy MCP foi identificada nas alterações revisadas. Isso não substitui o teste end-to-end do MCP HTTP direto, pertencente à campanha E2.
-
-## Prioridade e ordem recomendada
-
-Primeiro, C5-01/02: guardas finais de approvals/spawn e supervisor das aberturas. Em seguida C5-03/04: urgência de força e incerteza de CAS. Completar C5-05/06: conteúdo real do Pi e limites de enumeração. C5-00 organiza evidências antes das alterações; C5-07 valida artefatos/qualificação depois de integrar.
-
-Server e Connector podem continuar desenvolvimento paralelo em E0 com versão fixada. Não devem contornar o Core copiando adaptadores ou chamando APIs privadas. A definição C1 de E1 permite escopo delimitado; a ausência de attach/multi-host não é, sozinha, o bloqueador desta avaliação. Os P1 reproduzidos são o impedimento.
-
-## Arquivos entregues
-
-`00_ENTREGAR_AO_AGENTE.md` é o prompt e a ordem de execução. `02_PLANO_CORRECAO_C5.md` contém 8 fases e 48 tarefas explícitas. `03_MATRIZ_ACEITE.md` contém 56 cenários, incluindo os executados e os ainda propostos; não é uma alegação de 56 testes implementados. `regressoes/test_review5.py` é executável e suas expectativas não devem ser invertidas. Evidências incluem logs, XMLs, hashes, resultados e diffs de fixture. Código do produto não foi alterado nem corrigido nesta auditoria.
+O plano não altera MCP HTTP direto, a centralidade da identidade no agente ou a separação dos três repositórios. Os 356 arquivos originais foram mantidos, e o pacote registra seus hashes e a verificação posterior. Nenhum código do produto foi corrigido, commitado ou publicado durante esta auditoria.

@@ -1217,7 +1217,12 @@ def test_cancelled_open_releases_shutdown_reservation(tmp_path):
         opening = asyncio.create_task(runtime.open(
             OpenOperation("cancelled", "session", "epoch", prepared), context()))
         await asyncio.wait_for(entered.wait(), timeout=2)
-        shutdown = asyncio.create_task(runtime.shutdown(ShutdownPolicy()))
+        # C6/V02c adaptation: the attempt outlives its cancelled waiter
+        # (the producer can still spawn), so shutdown waits its OWN
+        # budget for it - a short policy keeps the causal invariant
+        # ("cancelled open never wedges shutdown beyond its budget").
+        shutdown = asyncio.create_task(runtime.shutdown(
+            ShutdownPolicy(drain_seconds=0.05, interrupt_seconds=0.05)))
         await asyncio.sleep(0)
         assert not shutdown.done()
         opening.cancel()

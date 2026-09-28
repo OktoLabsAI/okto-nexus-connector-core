@@ -114,9 +114,11 @@ def _iter_tree_files(directory: Path):
         try:
             for entry in iterator:
                 names_seen += 1
-                if names_seen > _MAX_MANIFEST_ENTRIES + 1:
-                    # Cap+1: the budget refused at the FIRST overflowing
-                    # name, never after materializing the directory.
+                if names_seen > _MAX_MANIFEST_ENTRIES:
+                    # C6/M01: refuse AT the first name beyond the budget
+                    # (cap+1 obtained in total, counting the sentinel that
+                    # proves the excess) - never cap+2, never after
+                    # materializing the directory.
                     raise ValueError(
                         "pi package manifest exceeds bounded size")
                 names.append(entry.name)

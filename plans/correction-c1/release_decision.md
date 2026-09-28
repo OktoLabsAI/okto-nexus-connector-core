@@ -132,3 +132,20 @@ Artefato normalizado **0.2.4.dev0** byte-idêntico (wheel
 offline verdes, **não publicado**. **E1 declarado para 0.2.4.dev0**;
 E2/E3 seguem bloqueados (hosts N/C reais, attach, billing, PyPI
 conjunta).
+
+
+## Adendo C6 (2026-09-29) — reavaliação independente de `df3baaf`
+
+Quinta reauditoria (`FIX_UPDATE_PLAN/`): 3 grupos necessários (V01/V02
+P1, V03 P2; 6 sementes) + M01 (P3, fronteira cap+1), **E1 rejeitado para
+0.2.4.dev0**. Correção C6 executada (C6-00..C6-04, 27 tarefas DONE em
+`plans/correction-c6/backlog.json`; matriz de aceite 37 cenários: 35
+PASS, 1 NOT_RUN declarado (campanha de backend SO), 1 BLOCKED (dois
+hosts reais)). 6/6 sementes verdes (baseline 6 FAIL registrado);
+C2/C3/C4/C5 preservadas (29+16+11, com u07 apertada a cap+1 e u03
+adaptada à semântica V02c); suítes: Windows 3.13/3.11/3.12 = 759/74
+cada; WSL2 3.13/3.11/3.12 = 814/19 cada. Artefato normalizado
+**0.2.5.dev0** byte-idêntico (wheel `sha256:82c97d1e…11967bfa`, sdist
+`sha256:76503a22…733c6d3`), twine/offline verdes, **não publicado**.
+**E1 declarado para 0.2.5.dev0**; E2/E3 seguem bloqueados pelos hosts
+reais, attach, billing e PyPI conjunta.

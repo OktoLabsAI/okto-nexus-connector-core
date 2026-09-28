@@ -403,7 +403,12 @@ def test_u03_cancelled_open_still_supervises_late_native_result(tmp_path):
             except BaseException:
                 pass
             await asyncio.sleep(0.05)
-            assert key not in runtime._opening, "attempt unregistered"
+            # C6/V02c adaptation: the WAITER is done but the attempt
+            # STAYS registered while its producer can still produce an
+            # effect (shutdown keeps fencing it); it is removed only
+            # when the late result is consumed below.
+            attempt = runtime._opening.get(key)
+            assert attempt is not None and attempt.waiter_done
             # Conservative unknown retention without a consumed handle:
             assert key in runtime._uncertain_opens
             await runtime.shutdown(ShutdownPolicy())
@@ -420,6 +425,8 @@ def test_u03_cancelled_open_still_supervises_late_native_result(tmp_path):
                 await asyncio.sleep(0.05)
             assert key not in runtime._uncertain_opens, (
                 "uncertainty never resolved after containment")
+            assert key not in runtime._opening, (
+                "attempt never resolved after containment")
             # A second shutdown is idempotent over the resolved attempt.
             await runtime.shutdown(ShutdownPolicy())
         finally:
@@ -728,6 +735,6 @@ def test_u07_directory_scan_enforces_budget_during_enumeration(
             pi_build_identity(node, package)
     finally:
         bi._MAX_MANIFEST_ENTRIES = old_cap
-    assert names_seen["count"] <= 8, (
-        f"enumeration materialized {names_seen['count']} names for a "
-        "4-entry budget")
+    assert names_seen["count"] <= 5, (
+        f"enumeration obtained {names_seen['count']} names for a "
+        "4-entry budget (cap+1 sentinel allowed, never more)")

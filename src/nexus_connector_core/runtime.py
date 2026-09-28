@@ -142,6 +142,17 @@ class _Session:
     # on the journal worker (the caller may stop waiting; the durable
     # commit can still land and is applied by the late-commit callback).
     lease_cas_pending: bool = False
+    # C6/V01: productive-grant barrier held while a lease update (most
+    # critically a revocation) is RESERVED or in an UNKNOWN durable
+    # state. Distinct from lease_cas_pending (which only fences another
+    # CAS): this blocks NEW work grants - submits, steers, permissive
+    # approvals/inputs - while the authorization itself is uncertain.
+    # Containment (deny/interrupt/force/observe) stays available.
+    lease_hold: bool = False
+    # Monotonic token of the CURRENT lease-update attempt; finalizers and
+    # late callbacks may only touch the attempt whose token still matches.
+    lease_attempt_token: int = 0
+    lease_reconcile_task: "asyncio.Task | None" = None
     eviction_scheduled: bool = False
     normal_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
     control_lock: asyncio.Lock = field(default_factory=asyncio.Lock)
@@ -174,6 +185,16 @@ class _SessionTombstones:
 
     def get(self, session: SessionKey) -> "str | None":
         return self._entries.get(session)
+
+
+class _LateHandleRecord:
+    """Strongly-owned late handle awaiting proven stop (C6/V02b)."""
+
+    __slots__ = ("native", "attempt")
+
+    def __init__(self, native, attempt: "_OpeningAttempt"):
+        self.native = native
+        self.attempt = attempt
 
 
 class _ForceAudit:
@@ -217,7 +238,7 @@ class _OpeningAttempt:
     handle; the runtime supervises and contains it."""
 
     __slots__ = ("finished", "guard", "native_task", "operation_id",
-                 "slot_reserved")
+                 "slot_reserved", "waiter_done")
 
     def __init__(self) -> None:
         self.finished = asyncio.Event()
@@ -225,6 +246,7 @@ class _OpeningAttempt:
         self.native_task: "asyncio.Task | None" = None
         self.operation_id: str | None = None
         self.slot_reserved = False
+        self.waiter_done = False
 
 
 class LocalRuntimeCore:
@@ -316,6 +338,9 @@ class LocalRuntimeCore:
         # waits for them within the cleanup budget; none is discarded while
         # ownership could still be uncertain.
         self._cleanup_tasks: set[asyncio.Task] = set()
+        # C6/V02b: late native handles with unproven stop - strongly
+        # referenced so recovery can re-contain the SAME object.
+        self._late_handles: dict[SessionKey, _LateHandleRecord] = {}
         # C3/S08: one-shot public disposal of factory-owned executors.
         self._factory_disposed = False
 
@@ -485,7 +510,9 @@ class LocalRuntimeCore:
                     from .native.runtime_bridge import EffectFence
                     binding.effect_fence = EffectFence(
                         lambda: (binding.closed, binding.closing,
-                                 binding.revoked, binding.lease_expired,
+                                 binding.revoked,
+                                 binding.lease_expired or
+                                 binding.lease_hold,
                                  binding.faulted),
                         clock=self._clock.monotonic,
                         deadline_probe=lambda:
@@ -519,7 +546,18 @@ class LocalRuntimeCore:
             return await self._kernel.execute(semantic, context, effect)
         finally:
             async with self._lock:
-                self._opening.pop(session_key, None)
+                # C6/V02c: the WAITER ended, but the PRODUCER may still be
+                # able to create an effect. The attempt stays registered
+                # while the producer lives (shutdown keeps fencing its
+                # guard; the late consumer finishes it) - ownership does
+                # not vanish with the caller.
+                producer = attempt.native_task
+                if producer is None or producer.done():
+                    self._opening.pop(session_key, None)
+                    attempt.waiter_done = True
+                    attempt.finished.set()
+                else:
+                    attempt.waiter_done = True
                 if effect_started and not binding_registered:
                     self._uncertain_opens.add(session_key)
                 if self._shutting_down and (binding := self._sessions.get(session_key)):
@@ -531,8 +569,6 @@ class LocalRuntimeCore:
                                              asyncio.get_running_loop().time() +
                                              self._shutdown_policy.drain_seconds +
                                              self._shutdown_policy.interrupt_seconds)
-                finished = attempt.finished
-                finished.set()
 
     async def submit(self, operation: TurnOperation,
                      context: ExecutionContext) -> OperationReceipt:
@@ -723,10 +759,28 @@ class LocalRuntimeCore:
                 else:
                     error = "SESSION_CLOSING"
                 raise CoreError(error, "admission", retry_safe=True)
-            elif (semantic.action == "turn.submit" and
-                    fence_binding.lease_expired):
-                raise CoreError("AGENT_REVOKED", "admission", retry_safe=True,
+            if (fence_binding is not None and fence_binding.lease_hold and
+                    semantic.action in {"turn.submit", "turn.steer",
+                                        "approval.decide", "input.provide"}):
+                # A permissive decision grants work: it shares the lease
+                # hold. Denials (containment) are NOT blocked here - the
+                # approval path admits them explicitly.
+                raise CoreError("LEASE_UPDATE_PENDING", "admission",
+                                retry_safe=True,
                                 operation_id=semantic.operation_id)
+            elif (semantic.action in {"turn.submit", "turn.steer"} and
+                    (fence_binding.lease_expired or
+                     fence_binding.lease_hold)):
+                # C6/V01: an uncertain lease update (notably a reserved or
+                # unconfirmed revocation) fences NEW work grants; the
+                # refusal is its own operation's safe outcome - it never
+                # inherits possible_effect from the pending CAS.
+                raise CoreError(
+                    "LEASE_UPDATE_PENDING" if fence_binding.lease_hold
+                    and not fence_binding.lease_expired
+                    else "AGENT_REVOKED",
+                    "admission", retry_safe=True,
+                    operation_id=semantic.operation_id)
         binding = self._session(semantic.session_id, context,
                                 require_live_lease=semantic.action == "turn.submit")
         # A slow normal write must not hold the runtime-wide state lock: an
@@ -1057,6 +1111,18 @@ class LocalRuntimeCore:
                     timeout=self._cleanup_budget_seconds + 1.0)
             except (asyncio.TimeoutError, TimeoutError):
                 pass
+        # C6/V02b: recovery pass over still-owned late handles before
+        # deciding disposal - an unproven stop is re-contained, never
+        # silently dropped.
+        if self._late_handles:
+            self._retry_late_handles(policy)
+            try:
+                await asyncio.wait_for(
+                    asyncio.gather(*tuple(self._cleanup_tasks),
+                                   return_exceptions=True),
+                    timeout=self._cleanup_budget_seconds + 1.0)
+            except (asyncio.TimeoutError, TimeoutError):
+                pass
         # C3/S08: dispose factory-owned executors through the PUBLIC
         # lifecycle - never by the host reaching into privates - once the
         # shutdown is fully resolved. Uncertain ownership (unknown closes,
@@ -1071,7 +1137,8 @@ class LocalRuntimeCore:
             return
         # C4/T04: a pending open can still produce an effect (callbacks,
         # queued spawn units) - its capacity is NOT disposable.
-        if self._opening or self._uncertain_opens or self._cleanup_tasks:
+        if (self._opening or self._uncertain_opens or self._cleanup_tasks
+                or self._late_handles):
             return
         for binding in self._sessions.values():
             if not binding.closed:
@@ -1446,6 +1513,10 @@ class LocalRuntimeCore:
                             if binding.lease_cas_pending:
                                 raise CoreError("RECONNECT_BUSY", "lease_renew",
                                                 retry_safe=True)
+                            # C6/V01: the attempt is identified and the
+                            # productive hold reserved BEFORE storage.
+                            binding.lease_attempt_token += 1
+                            binding.lease_hold = True
                             # C3/S04: reserve in memory under the SHORT lock
                             # (no I/O), then run the durable CAS OUTSIDE
                             # every state lock: the containment coordinator
@@ -1482,11 +1553,13 @@ class LocalRuntimeCore:
                             # delivery refusals resolve here as "no row
                             # change"; a committed revocation closes the
                             # fences immediately.
-                            await self._reconcile_cas_error(
-                                session, binding, context, revoke=False)
+                            await self._finalize_lease_attempt(
+                                session, binding, context, revoke=False,
+                                producer_done=cas.done())
                             raise
                         async with self._lock:
                             binding.lease_cas_pending = False
+                            binding.lease_hold = False
                             if (self._sessions.get(session) is binding and
                                     not binding.closed and
                                     not binding.revoked):
@@ -1557,16 +1630,19 @@ class LocalRuntimeCore:
         received an unknown outcome, and never abandoned either.
         """
         if task.cancelled():
+            self._opening.pop(session, None)
             attempt.finished.set()
             return
         exc = task.exception()
         if exc is not None:
             # No handle was produced; the conservative uncertain-open
             # retention stays (the receipt already recorded unknown).
+            self._opening.pop(session, None)
             attempt.finished.set()
             return
         native = task.result()
         if native is None:
+            self._opening.pop(session, None)
             attempt.finished.set()
             return
         supervisor = asyncio.create_task(
@@ -1577,34 +1653,45 @@ class LocalRuntimeCore:
     async def _contain_late_open(self, session: SessionKey,
                                  attempt: _OpeningAttempt,
                                  native) -> None:
-        """Contain a live handle returned after its open was cancelled."""
+        """Contain a live handle returned after its open was cancelled.
+
+        C6/V02a/b: the graceful close gets a BUDGET - a hung close never
+        blocks the physical force (dispatched independently right after
+        the budget expires, without releasing the close barrier); a force
+        failure or an unproven stop leaves the handle REGISTERED in the
+        runtime's supervised late-handle table (strong reference), so a
+        later shutdown/recovery re-contains the SAME handle instead of
+        leaking it with only an uncertain ID.
+        """
         try:
             if self._sessions.get(session) is not None:
                 # A live binding owns this scope now; never fight it.
+                self._opening.pop(session, None)
                 attempt.finished.set()
                 return
-            contained = False
             close = getattr(native, "close", None)
             if callable(close):
                 try:
-                    await close()
+                    await asyncio.wait_for(
+                        close(), timeout=self._cleanup_budget_seconds)
+                except (asyncio.TimeoutError, TimeoutError,
+                        asyncio.CancelledError):
+                    if asyncio.current_task().cancelled():
+                        raise
+                except BaseException:
+                    pass
+            # Independent containment: never gated on the (possibly hung)
+            # graceful close or a stuck observation.
+            force = getattr(native, "force_stop", None)
+            if callable(force):
+                try:
+                    await force()
                 except BaseException:
                     pass
             try:
                 state, _ = await native.observe()
             except Exception:
                 state = "UNKNOWN"
-            if state != "STOPPED":
-                force = getattr(native, "force_stop", None)
-                if callable(force):
-                    try:
-                        await force()
-                    except BaseException:
-                        pass
-                    try:
-                        state, _ = await native.observe()
-                    except Exception:
-                        state = "UNKNOWN"
             contained = state == "STOPPED"
             if contained:
                 if attempt.slot_reserved and attempt.operation_id:
@@ -1617,11 +1704,147 @@ class LocalRuntimeCore:
                     except CoreError:
                         pass
                 self._uncertain_opens.discard(session)
+                self._late_handles.pop(session, None)
+                self._opening.pop(session, None)
+            else:
+                # C6/V02b: unproven stop keeps the handle STRONGLY owned
+                # by the runtime for recovery; unknown conserves the
+                # handle, not just an ID.
+                self._late_handles[session] = _LateHandleRecord(
+                    native, attempt)
             attempt.finished.set()
         except asyncio.CancelledError:
             raise
         except Exception:
+            self._late_handles.setdefault(
+                session, _LateHandleRecord(native, attempt))
             attempt.finished.set()
+
+    def _retry_late_handles(self, policy: ShutdownPolicy) -> None:
+        """Re-contain every still-owned late handle (C6/V02b)."""
+        for session, record in list(self._late_handles.items()):
+            supervisor = asyncio.create_task(
+                self._contain_late_open(session, record.attempt,
+                                        record.native))
+            self._cleanup_tasks.add(supervisor)
+            supervisor.add_done_callback(self._cleanup_tasks.discard)
+
+    async def _finalize_lease_attempt(self, session: SessionKey,
+                                      binding: _Session,
+                                      context: ExecutionContext, *,
+                                      revoke: bool,
+                                      producer_done: bool) -> str:
+        """ONE finalizer for every lease-update termination (C6/V01).
+
+        Used by the direct success/error paths, the timeout conversion
+        and the late producer callback. A Future that finished with an
+        exception proves nothing about the commit: reconcile against the
+        durable record. Outcomes:
+        - COMMITTED revoke  -> close the in-memory fences, release holds.
+        - COMMITTED renew   -> apply only onto a still-valid binding.
+        - NOT_DELIVERED     -> release holds (proof: unchanged row AND
+                               the producer has finished).
+        - UNKNOWN           -> KEEP the productive hold; schedule the ONE
+                               coalesced reconciler; containment stays
+                               available and force never waits on this.
+        Returns the classification for callers/tests.
+        """
+        if self._sessions.get(session) is not binding:
+            binding.lease_cas_pending = False
+            binding.lease_hold = False
+            return "DETACHED"
+        try:
+            lease = await self._journal.get_session_lease(session)
+        except Exception:
+            self._schedule_lease_reconciler(session, binding, context,
+                                            revoke=revoke)
+            return "UNKNOWN"
+        if lease is not None and lease.revoked:
+            binding.context = replace(
+                binding.context,
+                lease_deadline_monotonic=self._clock.monotonic(),
+                allowed_actions=frozenset())
+            binding.lease_expired = True
+            binding.revoked = True
+            binding.lease_cas_pending = False
+            binding.lease_hold = False
+            return "COMMITTED_REVOKE"
+        if (not revoke and lease is not None and
+                lease.authorization_revision == context.authorization_revision
+                and lease.connection_generation == context.connection_generation
+                and lease.owner_generation == context.session_owner_generation
+                and lease.configuration_revision == context.configuration_revision):
+            if not (binding.closed or binding.closing or binding.revoked):
+                binding.context = context
+                binding.lease_expired = False
+            binding.lease_cas_pending = False
+            binding.lease_hold = False
+            return "COMMITTED_RENEW"
+        if lease is None or producer_done:
+            # No durable row, or the row still shows the pre-attempt
+            # state AND the producer has finished (nothing more can land).
+            binding.lease_cas_pending = False
+            binding.lease_hold = False
+            return "NOT_DELIVERED"
+        self._schedule_lease_reconciler(session, binding, context,
+                                        revoke=revoke)
+        return "UNKNOWN"
+
+    def _schedule_lease_reconciler(self, session: SessionKey,
+                                   binding: _Session,
+                                   context: ExecutionContext, *,
+                                   revoke: bool) -> None:
+        """ONE coalesced reconciler per binding (C6/V01): bounded
+        backoff, never blocks containment, never a task per call."""
+        if (binding.lease_reconcile_task is not None and
+                not binding.lease_reconcile_task.done()):
+            return
+
+        async def _reconcile() -> None:
+            token = binding.lease_attempt_token
+            delay = 0.05
+            for _ in range(20):
+                await asyncio.sleep(delay)
+                delay = min(delay * 2, 1.0)
+                if (self._sessions.get(session) is not binding or
+                        binding.lease_attempt_token != token or
+                        not binding.lease_hold):
+                    return
+                try:
+                    lease = await self._journal.get_session_lease(session)
+                except Exception:
+                    continue
+                if lease is not None and lease.revoked:
+                    binding.context = replace(
+                        binding.context,
+                        lease_deadline_monotonic=self._clock.monotonic(),
+                        allowed_actions=frozenset())
+                    binding.lease_expired = True
+                    binding.revoked = True
+                    binding.lease_hold = False
+                    binding.lease_cas_pending = False
+                    return
+                if lease is None or (
+                        not revoke and
+                        lease.authorization_revision == context.authorization_revision
+                        and lease.connection_generation == context.connection_generation):
+                    if not (binding.closed or binding.closing or
+                            binding.revoked):
+                        if (not revoke and lease is not None):
+                            binding.context = context
+                            binding.lease_expired = False
+                    binding.lease_hold = False
+                    binding.lease_cas_pending = False
+                    return
+                # row still shows the old state: producer may yet commit -
+                # keep the hold until it provably finished.
+                if (binding.lease_attempt_token != token):
+                    return
+
+        binding.lease_reconcile_task = asyncio.create_task(_reconcile())
+        self._cleanup_tasks.add(binding.lease_reconcile_task)
+        binding.lease_reconcile_task.add_done_callback(
+            self._cleanup_tasks.discard)
 
     def _late_cas_applier(self, session: SessionKey, binding: _Session,
                           context: ExecutionContext, *, revoke: bool):
@@ -1637,16 +1860,27 @@ class LocalRuntimeCore:
         (durable storage stays the reconcile authority either way).
         """
         def _on_done(task: asyncio.Task) -> None:
-            try:
-                task.result()
-            except BaseException:
-                # Nothing durable committed (unit failed or was cancelled
-                # before delivery); storage remains the reconcile authority.
-                binding.lease_cas_pending = False
-                return
+            # C6/V01: EVERY termination routes through the ONE finalizer -
+            # a failed Future proves nothing about the commit (the port
+            # allows confirmation loss after the write), and a successful
+            # one is reconciled/applied under the same rules.
             loop = asyncio.get_running_loop()
-            loop.call_soon(self._apply_committed_cas, session, binding,
-                           context, revoke)
+
+            async def _finalize() -> None:
+                token = binding.lease_attempt_token
+                if (self._sessions.get(session) is not binding or
+                        binding.lease_attempt_token != token):
+                    return
+                try:
+                    task.result()
+                except BaseException:
+                    pass
+                await self._finalize_lease_attempt(
+                    session, binding, context, revoke=revoke,
+                    producer_done=True)
+            finalizer = asyncio.create_task(_finalize())
+            self._cleanup_tasks.add(finalizer)
+            finalizer.add_done_callback(self._cleanup_tasks.discard)
         return _on_done
 
     def _apply_committed_cas(self, session: SessionKey, binding: _Session,
@@ -1696,6 +1930,11 @@ class LocalRuntimeCore:
                             if binding.lease_cas_pending:
                                 raise CoreError("REVOKE_BUSY", "lease_revoke",
                                                 retry_safe=True)
+                            # C6/V01: identified attempt + productive
+                            # hold closed BEFORE the durable CAS - a
+                            # revocation in flight already fences grants.
+                            binding.lease_attempt_token += 1
+                            binding.lease_hold = True
                             # C3/S04: reserve in memory, durable revocation
                             # OUTSIDE the state locks (a crash or a stuck
                             # journal between the two leaves a durably
@@ -1725,11 +1964,13 @@ class LocalRuntimeCore:
                             # C5/U06: same durable reconciliation as the
                             # renewal path - never infer rollback from the
                             # failed Future; a committed revocation applies.
-                            await self._reconcile_cas_error(
-                                session, binding, context, revoke=True)
+                            await self._finalize_lease_attempt(
+                                session, binding, context, revoke=True,
+                                producer_done=cas.done())
                             raise
                         async with self._lock:
                             binding.lease_cas_pending = False
+                            binding.lease_hold = False
                             if self._sessions.get(session) is binding:
                                 binding.context = replace(
                                     context,

@@ -1162,10 +1162,26 @@ class CodexAppServerConnector:
                         raise RuntimeCommandNotSent("Operator response does not match the original native input") from None
                 else:
                     wire = response_for(original_request, None, approved=False)
+            # C6/V03: RESERVE, don't consume. The pending flag only
+            # clears AFTER the write; a guard refusal proven BEFORE the
+            # first byte (RuntimeCommandNotSent) restores the reservation
+            # so the SAME request can still be declined - a denial never
+            # grants work and must remain answerable. Write/flush errors
+            # keep the request consumed (bytes may have left).
             recorded["pending"] = False
         # An RPC id is never readmitted on this connection, even after a write
         # failure. A late reply therefore cannot target another native request.
-        self._transport.reply_result(original_request["request_id"], wire)
+        try:
+            self._transport.reply_result(original_request["request_id"], wire)
+        except RuntimeCommandNotSent:
+            with self._sessions_lock:
+                current = self._approval_requests.get(
+                    json.dumps(request.get("request_id")))
+                if (current is recorded and
+                        current.get("pending") is False and
+                        not current.get("answered")):
+                    current["pending"] = True  # zero-byte refusal: recover
+            raise
 
     def _on_notification(self, method: str, params: dict[str, Any]) -> None:
         thread_id = _extract_thread_id(params)

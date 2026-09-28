@@ -1,0 +1,58 @@
+{
+  "round": "C6",
+  "base_commit": "df3baaf77f941485f697ff4424af17ada10b36fc",
+  "phases": {
+    "C6-00": {
+      "tasks": {
+        "C6-00.01": "DONE",
+        "C6-00.02": "DONE",
+        "C6-00.03": "DONE"
+      },
+      "note": "baseline 6 FAIL recorded; fixture adaptations documented"
+    },
+    "C6-01": {
+      "tasks": {
+        "C6-01.01": "DONE (token per attempt)",
+        "C6-01.02": "DONE (lease_hold barrier)",
+        "C6-01.03": "DONE (single finalizer)",
+        "C6-01.04": "DONE (durable-record proof)",
+        "C6-01.05": "DONE (coalesced reconciler)",
+        "C6-01.06": "DONE",
+        "C6-01.07": "DONE"
+      },
+      "note": "V01 both params PASS"
+    },
+    "C6-02": {
+      "tasks": {
+        "C6-02.01": "DONE (waiter_done separation)",
+        "C6-02.02": "DONE (shutdown fences all)",
+        "C6-02.03": "DONE (_late_handles adoption)",
+        "C6-02.04": "DONE (budgeted close; independent force)",
+        "C6-02.05": "DONE (OWNED_UNKNOWN + retry)",
+        "C6-02.06": "DONE (ledger/disposal order)",
+        "C6-02.07": "DONE (lab layer; OS campaign = recorded evidence)"
+      },
+      "note": "V02 all three seeds PASS"
+    },
+    "C6-03": {
+      "tasks": {
+        "C6-03.01": "DONE (two-phase reservation)",
+        "C6-03.02": "DONE (zero-byte restore rule)",
+        "C6-03.03": "DONE",
+        "C6-03.04": "DONE",
+        "C6-03.05": "DONE (matrix delimitations)"
+      },
+      "note": "V03 PASS"
+    },
+    "C6-04": {
+      "tasks": {
+        "C6-04.01": "DONE (M01 cap+1)",
+        "C6-04.02": "DONE (campaign + reclassifications)",
+        "C6-04.03": "DONE (artifact + consumers)",
+        "C6-04.04": "DONE (architecture check)",
+        "C6-04.05": "DONE (E1 for 0.2.5.dev0)"
+      },
+      "note": "matrix below; artifacts pinned"
+    }
+  }
+}
