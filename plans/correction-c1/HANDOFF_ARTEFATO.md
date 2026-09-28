@@ -281,7 +281,35 @@ O contrato de binding está COMPLETO para consumo:
   disponível é colhido antes de qualquer novo agendamento; ACK perdido
   fecha a MESMA obrigação via consulta idempotente; obrigações duráveis
   nunca atrasam contenção de outros recursos.
-- Wheel pinado: `sha256:cc56a693504bb5d3a8be394b626e82ffe1663cc38be415bee578b275ab5bfc7d`
-  (0.2.9.dev0; byte-idêntico Windows↔WSL2; sdist
-  `sha256:4418ab0b6a16890f8881c5102b14f2645813d80f9fdbd17397ca6a698a1bdbb3`);
+- Wheel pinado (C11): `sha256:4cde3b9a4ec7acf14c92bdcb1b0c9add84cfc670364e8f77f96c584e88350da0`
+  (**0.2.10.dev0**; byte-idêntico Windows↔WSL2; sdist
+  `sha256:097d4d53fd24c097dcd9c67220049be451c8984931a4f6695bf9079c8a6414c1`);
   manifesto NXL `a4fd8430…728630` inalterado.
+
+### Adendo C11 — identidade da instalação (A11-01)
+
+O contrato de binding agora distingue **instalações** de **builds**:
+
+- A projeção está no **formato 2**: `candidate_ref` = ref opaca da
+  instalação local (`nexus-install-v1:<sha256>`, sem caminhos);
+  `build_identity`/fingerprint continuam sendo o CONTEÚDO. Duas cópias
+  byte-idênticas em diretórios distintos = duas linhas com refs
+  DISTINTAS e o mesmo build — a seleção é inequívoca. `label`
+  (nome de arquivo + sufixo curto) diferencia cópias para o humano;
+  nunca é chave.
+- **Seleção**: guarde (executor_id, adapter_id, installation_ref,
+  inventory_revision). A resolução volta ao MESMO host:
+  `resolve_installation(inventory, adapter_id, ref)` → exatamente um
+  `InstallationCandidate` (alimenta `create_runtime(candidates=…)`;
+  prepare revalida drift). Zero → `INSTALLATION_REF_NOT_FOUND`
+  (ausente/stale/executor errado); ambiguidade →
+  `INSTALLATION_REF_AMBIGUOUS` (resseleção; nunca primeiro da lista).
+- **Migração v1**: refs antigas (fingerprint) migram só quando o
+  inventário comprovar exatamente um alvo; com cópias idênticas o erro
+  tipado exige resseleção explícita.
+- **Formato desconhecido**: `AvailabilityReport.from_dict` recusa
+  tipado — tratem como incompatível (seleção indisponível), nunca
+  renderizem como READY.
+- `examples/availability_projection.py` executa o fluxo completo com
+  cópias reais e emite a fixture de UI (`--json`) com os critérios de
+  aceite para o repositório Server.

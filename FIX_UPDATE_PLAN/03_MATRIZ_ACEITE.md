@@ -1,164 +1,195 @@
-# Matriz C10 — estados desta auditoria
+# Matriz de aceite C11
 
-20 cenários: 7 PASS, 2 FAIL, 10 NOT_RUN e 1 BLOCKED. NOT_RUN é uma verificação complementar, não outro defeito confirmado. PASS de metadados/smoke não comprova provider real.
+16 cenários; 2 FAIL, 4 PASS e 10 NOT_RUN no snapshot auditado. Dois FAIL demonstram um único achado. Repetições e testes do wheel não são cenários independentes. NOT_RUN descreve requisitos de correção/integração, não defeitos adicionais comprovados.
 
-## A01 — Catálogo público instalado
+## AC11-01 — Codex: duas cópias idênticas
 
-**Estado:** PASS.
+**Estado:** FAIL. **Camada:** unit/public-discovery.
 
-**Resultado exigido:** Consulta no wheel sem spawn, journal ou bind; DTOs sem módulo/classe.
+**Preparação:** Dois diretórios confiáveis com codex byte-idêntico.
 
-**Evidência/referência:** `evidencias/catalog_observation.json`.
+**Ação:** Descobrir e projetar pela API pública.
 
-## A02 — Fonte única para schemas
+**Resultado exigido:** Duas refs diferentes para os dois alvos, build_identity igual.
 
-**Estado:** PASS.
+**Evidência:** test_distinct_identical_installations_have_unambiguous_public_refs[codex_app_server-codex]
 
-**Resultado exigido:** Gerar contratos em cópia e comprovar bytes iguais.
+## AC11-02 — Claude: duas cópias idênticas
 
-**Evidência/referência:** `evidencias/generation.json`.
+**Estado:** FAIL. **Camada:** unit/public-discovery.
 
-## A03 — Discovery padrão e attach
+**Preparação:** Dois diretórios confiáveis com claude byte-idêntico.
 
-**Estado:** PASS.
+**Ação:** Descobrir e projetar pela API pública.
 
-**Resultado exigido:** 7 casos C9 do executor passam; None pergunta catálogo, attach não elegível por existir.
+**Resultado exigido:** Duas refs diferentes para os dois alvos, build_identity igual.
 
-**Evidência/referência:** `evidencias/c9_delivered.xml`.
+**Evidência:** test_distinct_identical_installations_have_unambiguous_public_refs[claude_stream-claude]
 
-## A04 — Recuperação Y01/Y02 original
+## AC11-03 — Builds diferentes continuam distintos
 
-**Estado:** PASS.
+**Estado:** PASS. **Camada:** unit/public-discovery.
 
-**Resultado exigido:** As duas sementes anteriores passam sem alteração.
+**Preparação:** Dois binários de laboratório com bytes distintos.
 
-**Evidência/referência:** `evidencias/c9_original.xml`.
+**Ação:** Descobrir e avaliar.
 
-## A05 — Produtor durável não cancelado
+**Resultado exigido:** Referências diferentes; nenhum spawn.
 
-**Estado:** FAIL.
+**Evidência:** test_control_distinct_builds_already_have_distinct_refs
 
-**Resultado exigido:** Com ledger retido, orçamento do shutdown não cancela obligation.retry_task.
+## AC11-04 — Repetibilidade e projeção sem caminhos
 
-**Evidência/referência:** `test_shutdown_deadline_does_not_cancel_owned_release_producer`.
+**Estado:** PASS. **Camada:** unit/public-api.
 
-## A06 — Prazo não depende da limpeza de cancelamento
+**Preparação:** Mesmo inventário, sem versão qualificada.
 
-**Estado:** FAIL.
+**Ação:** Avaliar duas vezes e serializar.
 
-**Resultado exigido:** Backend demora a cancelar; waiter público retorna sem liberar a barreira.
+**Resultado exigido:** Resultados iguais, nenhum caminho, nenhum READY indevido.
 
-**Evidência/referência:** `test_shutdown_return_does_not_wait_for_release_cancel_cleanup`.
+**Evidência:** test_control_repeat_of_same_inventory_is_stable_and_path_free
 
-## A07 — Controle de força concorrente
+## AC11-05 — Catálogo seguro permanece
 
-**Estado:** PASS.
+**Estado:** PASS. **Camada:** unit/public-api.
 
-**Resultado exigido:** Duas chamadas públicas; pico de uma tentativa ativa no mesmo recurso.
+**Preparação:** Catálogo instalado.
 
-**Evidência/referência:** `test_concurrent_shutdown_retry_coalesces_the_current_force_producer`.
+**Ação:** Enumerar descritores.
 
-## A08 — Disponibilidade por API pública
+**Resultado exigido:** IDs únicos, sem module/class_name públicos.
 
-**Estado:** NOT_RUN.
+**Evidência:** test_control_catalog_has_no_private_loading_coordinates
 
-**Resultado exigido:** Wheel avalia candidato sem importar regra privada; sem login/spawn implícito.
+## AC11-06 — Recuperação C10/C9 preservada
 
-**Evidência/referência:** `Complementar C10-01.1`.
+**Estado:** PASS. **Camada:** fault-injection.
 
-## A09 — Build desconhecido não vira READY
+**Preparação:** Sementes originais e peers de laboratório.
 
-**Estado:** NOT_RUN.
+**Ação:** Rodar runner original completo.
 
-**Resultado exigido:** Instalação presente e confiável, versão ou conteúdo não qualificado: motivo explícito.
+**Resultado exigido:** 12 PASS como nesta revisão, com barreiras antes da assert.
 
-**Evidência/referência:** `Complementar C10-01.2`.
+**Evidência:** evidencias/original_c10/resultados.xml
 
-## A10 — Plataforma e contenção
+## AC11-07 — Reordenação do inventário
 
-**Estado:** NOT_RUN.
+**Estado:** NOT_RUN. **Camada:** unit.
 
-**Resultado exigido:** Host incompatível/sem backend retorna estado restritivo; registrado não significa pronto.
+**Preparação:** Mesmo conjunto de instalações em ordens opostas.
 
-**Evidência/referência:** `Complementar C10-01.2`.
+**Ação:** Projetar e resolver seleção A.
 
-## A11 — Dois candidatos da mesma família
+**Resultado exigido:** A continua A; ID não depende de posição.
 
-**Estado:** NOT_RUN.
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
 
-**Resultado exigido:** IDs e avaliações distintos; sem seleção por display_name nem colapso de versões.
+## AC11-08 — Resolução exata A/B
 
-**Evidência/referência:** `Complementar C10-01.3`.
+**Estado:** NOT_RUN. **Camada:** contract/public-api.
 
-## A12 — Projeção remota segura
+**Preparação:** Duas refs após correção.
 
-**Estado:** NOT_RUN.
+**Ação:** Resolver cada uma pelo helper/contrato público.
 
-**Resultado exigido:** Versão/schema explícitos, sem paths/segredos/classes; Server usa fatos do executor remoto.
+**Resultado exigido:** Candidato físico exato; zero resultado e ambiguidade geram erro tipado.
 
-**Evidência/referência:** `Complementar C10-01.3/01.4`.
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
 
-## A13 — Cancelamento externo e release
+## AC11-09 — Aliases para o mesmo alvo
 
-**Estado:** NOT_RUN.
+**Estado:** NOT_RUN. **Camada:** platform/contract.
 
-**Resultado exigido:** Cliente cancela shutdown; produtor continua possuído e commit tardio converge.
+**Preparação:** Duas entradas PATH/symlinks do mesmo alvo permitido.
 
-**Evidência/referência:** `Complementar C10-02.1/02.2`.
+**Ação:** Descobrir segundo política documentada.
 
-## A14 — Release concluído antes da nova chamada
+**Resultado exigido:** Aliases seguem política consistente; nunca dois alvos distintos sob uma ref silenciosa.
 
-**Estado:** NOT_RUN.
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
 
-**Resultado exigido:** Colher sucesso antes de agendar retry; nenhuma segunda liberação dispensável.
+## AC11-10 — Drift após a seleção
 
-**Evidência/referência:** `Complementar C10-02.3`.
+**Estado:** NOT_RUN. **Camada:** integration/fault.
 
-## A15 — ACK perdido e retry coalescido
+**Preparação:** Selecionar candidato na revisão R e modificar bytes/layout.
 
-**Estado:** NOT_RUN.
+**Ação:** Preparar com evidência antiga.
 
-**Resultado exigido:** Commit seguido de erro; consulta/idempotência fecha mesma obrigação sem inferir rollback.
+**Resultado exigido:** Recusa antes de efeito; sem nova qualificação implícita.
 
-**Evidência/referência:** `Complementar C10-02.3`.
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
 
-## A16 — Ledger retido e outro recurso vivo
+## AC11-11 — Migração da referência v1 ambígua
 
-**Estado:** NOT_RUN.
+**Estado:** NOT_RUN. **Camada:** migration/contract.
 
-**Resultado exigido:** Força independente da obrigação durável; relatório mantém ambas causalidades.
+**Preparação:** Ref legada fingerprint casa com duas instalações.
 
-**Evidência/referência:** `Complementar C10-02.4`.
+**Ação:** Migrar/consumir referência antiga.
 
-## A17 — Histórico C2–C8
+**Resultado exigido:** Resseleção exigida; nenhuma escolha por ordem. Caso único tem migração testada.
 
-**Estado:** PASS.
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
 
-**Resultado exigido:** 75 passaram, 1 skip; não somar subconjunto à suíte completa.
+## AC11-12 — Formato incompatível
 
-**Evidência/referência:** `evidencias/history_c2_c8.xml`.
+**Estado:** NOT_RUN. **Camada:** contract.
 
-## A18 — Artefato e consumers isolados
+**Preparação:** Consumidor suporta formato diferente.
 
-**Estado:** PASS.
+**Ação:** Ler projeção com versão desconhecida.
 
-**Resultado exigido:** Wheel/sdist, bundle development-partial explícito, mesmo wheel em dois smokes sintéticos.
+**Resultado exigido:** Estado incompatível ou recusa explícita; não binding silencioso.
 
-**Evidência/referência:** `evidencias/package_validation.json`.
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
 
-## A19 — Qualificação real de backend/provider
+## AC11-13 — Escopo de dois executores
 
-**Estado:** BLOCKED.
+**Estado:** NOT_RUN. **Camada:** consumer-contract.
 
-**Resultado exigido:** Campanha do SO com contenção efetiva; sem converter o sandbox ou XML recebido em prova local.
+**Preparação:** Duas instalações com caminhos semelhantes em hosts distintos.
 
-**Evidência/referência:** `Ambiente sem proc_children; provider real não executado`.
+**Ação:** Selecionar com executor/revisão incorretos.
 
-## A20 — UI real e integração de hosts
+**Resultado exigido:** Não resolver em outro inventário; catálogo não outorga autoridade.
 
-**Estado:** NOT_RUN.
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
 
-**Resultado exigido:** Server+Core local e Server–Connector real em dois hosts; habilitação deriva de avaliação+política.
+## AC11-14 — UI orientada por dados
 
-**Evidência/referência:** `Pertence aos aplicativos, não substituído por smoke`.
+**Estado:** NOT_RUN. **Camada:** Nexus-Server UI.
 
+**Preparação:** Fixture pública com refs distintas e mesmo label.
+
+**Ação:** Renderizar e selecionar ambas.
+
+**Resultado exigido:** Sem enum próprio e sem colapso por display_name/build. Este teste pertence ao Server.
+
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
+
+## AC11-15 — Estados independentes do ambiente unitário
+
+**Estado:** NOT_RUN. **Camada:** unit.
+
+**Preparação:** Preflight controlado positivo/negativo por teste; build policy controlada.
+
+**Ação:** Verificar precedência de estados; manter teste real separado.
+
+**Resultado exigido:** READY somente no positivo qualificado; não desativar gate de produto.
+
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.
+
+## AC11-16 — Wheel revisado resolve identidade publicamente
+
+**Estado:** NOT_RUN. **Camada:** artifact/consumer.
+
+**Preparação:** Instalar novo wheel fora da fonte.
+
+**Ação:** Enumerar, descobrir, avaliar e resolver A/B sem private imports.
+
+**Resultado exigido:** Mesmo contrato nos consumidores sintéticos; não alegar E2 real.
+
+**Evidência:** A implementar/executar; anexar test node, comando e resultado.

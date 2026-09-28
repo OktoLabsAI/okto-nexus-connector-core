@@ -1,39 +1,44 @@
-# Entregar o pacote completo ao agente
+# Entrega ao executor — ajuste localizado C11
 
-O snapshot revisto é `c5bd9557861f44577ae8dbf5585790acfd045fa5` (`0.2.8.dev0`). Há uma correção residual de lifecycle comprovada por dois testes e uma parte funcional do C9 ainda não entregue. O catálogo público existente foi validado; não refazê-lo.
+Levar o ZIP inteiro, incluindo `regressoes/` e `executar_verificacao.py`. Não basta entregar os Markdown. Há um único achado P2, não uma nova reformulação de arquitetura. Catálogo, avaliação e shutdown corrigidos devem ser preservados.
 
-Copie o ZIP inteiro para uma pasta de trabalho do repositório, preservando `regressoes/`, `evidencias/` e os documentos. Os testes desta revisão não estão contidos apenas na descrição Markdown.
-
-## Prompt
+## Prompt pronto
 
 ```text
-Leia 01_RELATORIO_VALIDACAO.md, 02_PLANO_COMPLEMENTAR_C10.md e
-03_MATRIZ_ACEITE.md. Trabalhe no HEAD atual sem reset e sem perder
-alterações posteriores ao snapshot c5bd955.
+Leia 01_RELATORIO_VALIDACAO.md, 02_PLANO_C11_IDENTIDADE_DA_INSTALACAO.md
+ e 03_MATRIZ_ACEITE.md deste pacote completo.
+A referência auditada é 6909435ff0d913cda03494f26bda670e2d3e75b0,
+versão 0.2.9.dev0. Trabalhe sobre o HEAD atual, sem reset nem perda
+ de alterações posteriores.
 
-Execute executar_verificacao.py antes de editar. Implemente C10:
-1. conclua a avaliação técnica pública por candidato prevista em
-   C9-01.4, reaproveitando catálogo/registry/qualificação/preflight;
-2. preserve o produtor durável da liberação quando o shutdown esgotar
-   sua espera, inclusive se o cancelamento do backend precisar aguardar.
+Implemente C11-00 a C11-03 para A11-01: duas instalações distintas com
+os mesmos bytes precisam ser selecionáveis/resolvíveis sem ambiguidade.
+Preserve a mesma identidade de BUILD para bytes iguais; não altere
+fingerprints de qualificação, identidade/chaves do agente ou hashes
+de operações para mascarar a colisão. A referência da instalação e sua
+revisão/escopo são conceitos separados. Não use índice do array.
 
-Não replique listas/regras nos consumidores, não exponha classes ou
-credenciais, não crie MCP stdio/proxy e não reescreva os adaptadores.
-Mantenha Y01/Y02 e os controles anteriores. Novos nomes de API são
-livres, mas devem ser públicos, tipados e consumíveis no wheel.
+Use API pública, mantenha a fonte única do catálogo e publique um caminho
+ de resolução para os dois consumidores. Versione a projeção/migração
+se a semântica de candidate_ref mudar. Uma ref legada ambígua exige
+resseleção, não escolha do primeiro binário. Não implemente MCP/proxy.
 
-Entregue correções executadas, testes, diff, versões e evidências,
-não outro plano. Não declare qualificação de provider/SO ou E2 a
-partir de peers sintéticos. Separe READY técnico da autorização do
-agente que continua no Server.
+Execute as regressões e controles. O runner atual apresenta 2 FAIL e
+15 PASS neste snapshot; os dois FAIL são parametrizações de um achado.
+Mantenha os históricos de shutdown verdes. Falta de proc_children não é
+motivo para remover contenção nem para declarar provider qualificado.
+Entregue diff, contrato, wheel, hashes, XMLs, limites e decisão por escopo.
+Não produza somente outro plano: implemente e comprove o ajuste.
 ```
 
-## Executar reproduções
-
-Com as dependências de teste já instaladas no ambiente do Core:
+## Execução
 
 ```bash
 python executar_verificacao.py --repo /caminho/do/core --output /caminho/das/evidencias
 ```
 
-O runner não instala dependências, não escreve no produto e não desliga contenção. No snapshot atual são esperadas duas falhas; depois da correção devem passar. A matriz inclui verificações de disponibilidade ainda a implementar: não são testes arbitrários de presença de uma função com nome imposto.
+O runner usa as dependências do ambiente (`pytest`, `rfc8785`, `jsonschema`) e
+não faz instalação, rede, push, rotação de credenciais nem alteração do produto.
+Ele pode retornar não zero antes da correção: as expectativas corretas dos dois
+casos novos falham no snapshot. Os testes usam arquivos de laboratório e peers
+controlados; não chamam providers reais.

@@ -1,0 +1,31 @@
+{
+  "round": "C11",
+  "snapshot_auditado": "6909435ff0d913cda03494f26bda670e2d3e75b0 (0.2.9.dev0)",
+  "versao_entregue": "0.2.10.dev0",
+  "cenario": [
+    {"id": "AC11-01", "nome": "Codex: duas copias identicas", "estado_anterior": "FAIL", "estado": "PASS", "evidencia": "tests/regression/test_c11_audit.py [codex_app_server-codex]; c11.xml", "nota": "Refs distintas, build_identity igual."},
+    {"id": "AC11-02", "nome": "Claude: duas copias identicas", "estado_anterior": "FAIL", "estado": "PASS", "evidencia": "tests/regression/test_c11_audit.py [claude_stream-claude]; c11.xml", "nota": ""},
+    {"id": "AC11-03", "nome": "Builds diferentes continuam distintos", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "test_control_distinct_builds_already_have_distinct_refs", "nota": ""},
+    {"id": "AC11-04", "nome": "Repetibilidade e projecao sem caminhos", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "test_control_repeat_of_same_inventory_is_stable_and_path_free", "nota": ""},
+    {"id": "AC11-05", "nome": "Catalogo seguro permanece", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "test_control_catalog_has_no_private_loading_coordinates", "nota": ""},
+    {"id": "AC11-06", "nome": "Recuperacao C10/C9 preservada", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "c10.xml (20) + c9.xml (7) desta rodada", "nota": "Barreiras antes das asserts mantidas."},
+    {"id": "AC11-07", "nome": "Reordenacao do inventario", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_resolution_ab_is_exact_and_reorder_proof", "nota": "A continua A em ordem oposta; ID nao depende de posicao."},
+    {"id": "AC11-08", "nome": "Resolucao exata A/B", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_resolution_ab_is_exact_and_reorder_proof + test_ambiguity_is_typed_never_order_based", "nota": "Zero -> INSTALLATION_REF_NOT_FOUND; ambiguidade -> INSTALLATION_REF_AMBIGUOUS (nunca candidates[0])."},
+    {"id": "AC11-09", "nome": "Aliases para o mesmo alvo", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_path_aliases_to_same_target_are_one_installation", "nota": "Symlink em PATH para o mesmo alvo = UMA instalacao (policy documentada)."},
+    {"id": "AC11-10", "nome": "Drift apos a selecao", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_drift_after_selection_is_refused_before_effect", "nota": "PROFILE_DRIFT antes de efeito; sem requalificacao implicita."},
+    {"id": "AC11-11", "nome": "Migracao da referencia v1 ambigua", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_legacy_v1_ref_migration_rules", "nota": "Duas copias -> resselecao tipada; alvo unico migra exato."},
+    {"id": "AC11-12", "nome": "Formato incompativel", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_unknown_projection_format_is_refused", "nota": "from_dict recusa tipado versao desconhecida; selecao indisponivel."},
+    {"id": "AC11-13", "nome": "Escopo de dois executores", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_ref_of_another_executor_does_not_resolve", "nota": "Ref estrangeira = NOT_FOUND no inventario local."},
+    {"id": "AC11-14", "nome": "UI orientada por dados", "estado_anterior": "NOT_RUN", "estado": "NOT_RUN", "evidencia": "examples/availability_projection.py --json (fixture) + criterios em docs/api.md", "nota": "Pertence ao repositorio Server."},
+    {"id": "AC11-15", "nome": "Estados independentes do ambiente unitario", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_c10_availability.py (preflight isolado positivo/negativo por teste)", "nota": "READY somente no positivo qualificado; gate do produto fail-closed inalterado."},
+    {"id": "AC11-16", "nome": "Wheel revisado resolve identidade publicamente", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "wheel-consumer python -I offline: 'wheel identity OK fmt 2 | distinct refs: 2'", "nota": "Sem imports privados; nao e E2 real."}
+  ],
+  "suites": {
+    "windows_313": "815 passed / 74 skipped",
+    "windows_311": "815 passed / 74 skipped (1 flake w04 isolado no 1o run; verde na repeticao)",
+    "windows_312": "815 passed / 74 skipped",
+    "wsl2_313": "870 passed / 19 skipped",
+    "wsl2_311": "870 passed / 19 skipped",
+    "wsl2_312": "870 passed / 19 skipped"
+  }
+}

@@ -46,10 +46,14 @@ from .availability import (
     AvailabilityReport, CandidateAvailability,
     evaluate_runtime_availability, AVAILABILITY_FORMAT_VERSION,
 )
+from .installation import (
+    INSTALLATION_REF_SCHEME, REF_AMBIGUOUS, REF_NOT_FOUND,
+    installation_ref, resolve_installation,
+)
 from .runtime import LocalRuntimeCore
 from .slot_ledger import SQLiteOwnedSlotLedger
 
-__version__ = "0.2.9.dev0"
+__version__ = "0.2.10.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
@@ -61,5 +65,6 @@ __all__ = [
     "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",
     "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "CATALOG_FORMAT_VERSION",
     "AvailabilityReport", "CandidateAvailability", "evaluate_runtime_availability", "AVAILABILITY_FORMAT_VERSION",
+    "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
     "SQLiteOwnedSlotLedger",
 ]

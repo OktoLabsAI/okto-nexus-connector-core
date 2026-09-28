@@ -242,3 +242,59 @@ verdes, **não publicado**. **E1 declarado para 0.2.9.dev0**; E2/E3
 seguem bloqueados pelos hosts reais (A19 BLOCKED / A20 NOT_RUN na matriz
 C10 — donos registrados). Ajuste documental C10-03.2 aplicado (narrativa
 C9 realinhada aos timestamps dos XMLs).
+
+## Adendo C11 (2026-10-01) — identidade da instalação no seletor
+
+Reavaliação independente de `6909435` (`0.2.9.dev0`): decisão de
+**avançar o desenvolvimento do Connector/Server**, com UM achado
+funcional **P2 (A11-01)**: `candidate_ref` = fingerprint de conteúdo
+não distingue duas instalações byte-idênticas em locais distintos — a
+projeção entregava duas linhas literalmente iguais e o contrato de
+binding não conseguia expressar qual instalação foi escolhida. Sem
+novo P1; catálogo/avaliação/shutdown C10 preservados e revalidados.
+
+Correção executada (`0.2.10.dev0`):
+
+- **`installation.py`** (público: `installation_ref`,
+  `resolve_installation`, `INSTALLATION_REF_SCHEME`,
+  `INSTALLATION_REF_NOT_FOUND`/`_AMBIGUOUS`): ref opaca
+  `nexus-install-v1:<sha256>` de alvos canônicos (executável +
+  launch_script) com domínio/versão — sem caminhos literais, estável
+  por inventário, distinta por alvo físico. Quatro identidades
+  separadas: mecanismo / conteúdo(build) / **instalação selecionável**
+  / agente (canônica — Server). Política de alias: entradas que
+  resolvem ao mesmo alvo canônico são UMA instalação (discovery
+  deduplica por ref). Rename/move → nova ref (antiga stale); update de
+  conteúdo → ref estável + prepare/open recusando drift (C4). Refs
+  escopadas ao inventário do executor produtor.
+- **`resolve_installation`**: seleção → exatamente um
+  InstallationCandidate local (alimenta composição/prepare
+  existentes); zero → `INSTALLATION_REF_NOT_FOUND`; >1 alvo distinto →
+  `INSTALLATION_REF_AMBIGUOUS` (resseleção tipada — nunca
+  candidates[0]). Migração v1 (fingerprint) documentada e testada:
+  alvo único migra; cópias idênticas são ambíguas por construção.
+- **Projeção v2** (`AVAILABILITY_FORMAT_VERSION = 2`): `candidate_ref`
+  = ref de instalação + `label` de apresentação (nome de arquivo +
+  sufixo curto; nunca caminho completo, nunca chave); linhas
+  NOT_INSTALLED permanecem informativas;
+  `AvailabilityReport.from_dict` aceita 1/2 e recusa tipado versão
+  desconhecida (seleção indisponível, nunca READY silencioso). NXL
+  intocado — manifesto `a4fd8430…` inalterado.
+- **Exemplo real** (`examples/availability_projection.py`): descoberta
+  de duas cópias byte-idênticas em raízes confiáveis distintas →
+  catálogo → avaliação → projeção → seleção → resolução exata →
+  composição existente; `--json` entrega a fixture de UI ao Server
+  (AC11-14 pertence ao repositório Server). Testes unitários de
+  estados com preflight isolado controlado (AC11-15) — o gate do
+  produto permanece fail-closed.
+
+Matriz C11: **15 PASS / 1 NOT_RUN (AC11-14, Server)**. Baseline 2 FAIL
++ 3 PASS reproduzido antes da correção. Suítes: Windows 3.13/3.12 =
+815/74; Windows 3.11 = 815/74 (1 flake conhecido isolado no primeiro
+run, verde na repetição); WSL2 3.13/3.11/3.12 = **870/19**; C2–C10
+verdes. Artefato **0.2.10.dev0** byte-idêntico Windows↔WSL2 (wheel
+`sha256:4cde3b9a…50da0`, sdist `sha256:097d4d53…414c1`), twine +
+offline verdes (incluindo resolução A/B pelo wheel com `python -I`),
+**não publicado**. **E1 declarado para 0.2.10.dev0**; E2/E3 e
+integração real seguem bloqueados externamente (hosts reais /
+providers / UI do Server).

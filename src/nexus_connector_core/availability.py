@@ -35,15 +35,26 @@ from __future__ import annotations
 
 import sys
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Mapping
 
 from .catalog import get_runtime_catalog
+from .installation import effective_installation_ref
 from .models import CoreError, InstallationCandidate, Inventory
 from .native.adapters.compatibility import qualified_build
 from .native.process.preflight import containment_preflight
 
-#: Bumped when the projection's SHAPE changes.
-AVAILABILITY_FORMAT_VERSION = 1
+#: Bumped when the projection's SHAPE or SEMANTICS change.
+#: v1: ``candidate_ref`` = content fingerprint (AMBIGUOUS for
+#:     byte-identical copies in distinct locations - A11-01).
+#: v2: ``candidate_ref`` = opaque INSTALLATION ref
+#:     (``installation.py``; distinct physical targets stay distinct,
+#:     same bytes keep one build identity) + presentation ``label``.
+#:     Legacy v1 refs still resolve through ``resolve_installation``
+#:     when the inventory proves exactly one target.
+AVAILABILITY_FORMAT_VERSION = 2
+#: Projection formats this build can parse (older accepted, newer
+#: refused - an unknown format never renders READY).
+_SUPPORTED_FORMAT_VERSIONS = (1, 2)
 
 #: Technical states (the DISTINCTIONS are contract; the exact spellings
 #: are stable public constants).
@@ -64,14 +75,18 @@ _BLOCKING_ORDER = (UNSUPPORTED_PLATFORM, UNQUALIFIED_BUILD,
 class CandidateAvailability:
     """One concrete installation's technical assessment.
 
-    ``candidate_ref`` is opaque and content-addressed (the producing
-    host's inventory fingerprint). Two installations of the same build
-    share it and stay TWO rows - the binding references
-    executor + adapter + candidate/ref and the executing host resolves
-    the concrete installation; display_name is never an identity.
+    ``candidate_ref`` (v2) is the opaque ref of the SELECTABLE LOCAL
+    INSTALLATION (``installation.py``): byte-identical copies in
+    distinct locations are TWO rows with DISTINCT refs and the SAME
+    ``build_identity``/content fingerprint - the binding references
+    executor + adapter + installation ref and the producing host
+    resolves it back to exactly one candidate via
+    ``resolve_installation``. display_name is never an identity.
     """
 
     adapter_id: str
+    #: v2: the opaque INSTALLATION ref (path-free). NOT_INSTALLED
+    #: rows are informative only and carry an empty ref.
     candidate_ref: str
     display_name: str
     connection_mode: str
@@ -86,6 +101,10 @@ class CandidateAvailability:
     qualification: str
     #: "available" | "unavailable" | "unverified"
     containment: str
+    #: Presentation label for the HUMAN to differentiate copies (file
+    #: name + short ref suffix; never a full path, never a key). The
+    #: host may replace it with its own approved labels.
+    label: str = ""
 
 
 @dataclass(frozen=True, slots=True)
@@ -120,10 +139,59 @@ class AvailabilityReport:
                     "source": item.source,
                     "qualification": item.qualification,
                     "containment": item.containment,
+                    "label": item.label,
                 }
                 for item in self.availability
             ],
         }
+
+    @classmethod
+    def from_dict(cls, data) -> "AvailabilityReport":
+        """Parse a projection this build understands (public).
+
+        Accepts the format versions this Core can interpret (older
+        versions included, for migration). An UNKNOWN/NEWER format
+        version is a typed validation error - the consumer must treat
+        the projection as incompatible (selection unavailable), never
+        render it as READY or silently reinterpret its fields.
+        """
+        if not isinstance(data, Mapping):
+            raise CoreError("VALIDATION_ERROR",
+                            "availability_projection")
+        version = data.get("format_version")
+        if version not in _SUPPORTED_FORMAT_VERSIONS:
+            raise CoreError("VALIDATION_ERROR",
+                            "availability_projection", retry_safe=True,
+                            message=f"unsupported projection "
+                                    f"format_version {version!r}; "
+                                    f"selection is unavailable")
+        try:
+            rows = []
+            for item in data["availability"]:
+                rows.append(CandidateAvailability(
+                    adapter_id=item["adapter_id"],
+                    candidate_ref=item.get("candidate_ref", ""),
+                    display_name=item["display_name"],
+                    connection_mode=item["connection_mode"],
+                    state=item["state"],
+                    reasons=tuple(item.get("reasons", ())),
+                    version=item.get("version"),
+                    architecture=item.get("architecture"),
+                    build_identity=item.get("build_identity"),
+                    trust=item.get("trust", ""),
+                    source=item.get("source", ""),
+                    qualification=item.get("qualification",
+                                            "not_probed"),
+                    containment=item.get("containment", "unverified"),
+                    label=item.get("label", item["display_name"])))
+            return cls(core_version=data["core_version"],
+                       format_version=version,
+                       platform=data["platform"],
+                       availability=tuple(rows))
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise CoreError("VALIDATION_ERROR",
+                            "availability_projection",
+                            retry_safe=True) from exc
 
 
 def _platform_key(platform: str | None) -> str:
@@ -233,9 +301,15 @@ def evaluate_runtime_availability(
                         _STATE_PREFIX[blocking]) for reason in reasons):
                     state = blocking
                     break
+        # C11/A11-01 (v2): the ref identifies the SELECTABLE LOCAL
+        # INSTALLATION - distinct targets stay distinct even with
+        # identical bytes; the build identity below stays content-bound.
+        ref = effective_installation_ref(candidate)
+        label_source = candidate.executable.rsplit(
+            "/", 1)[-1].rsplit("\\", 1)[-1]
         rows.append(CandidateAvailability(
             adapter_id=candidate.adapter_id,
-            candidate_ref=candidate.fingerprint,
+            candidate_ref=ref,
             display_name=descriptor.display_name,
             connection_mode=descriptor.connection_mode,
             state=state,
@@ -247,6 +321,7 @@ def evaluate_runtime_availability(
             source=candidate.source,
             qualification=qualification,
             containment=containment,
+            label=f"{label_source} · {ref[-8:]}",
         ))
 
     # Discoverable catalog adapters with no candidate stay visible as
@@ -267,6 +342,7 @@ def evaluate_runtime_availability(
                 source="",
                 qualification="not_probed",
                 containment=containment,
+                label=descriptor.display_name,
             ))
 
     return AvailabilityReport(

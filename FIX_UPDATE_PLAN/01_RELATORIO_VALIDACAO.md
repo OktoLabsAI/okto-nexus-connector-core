@@ -1,158 +1,88 @@
-# Validação de 0.2.8.dev0 — catálogo público e recuperação C9
+# Revalidação do Core — 0.2.9.dev0
 
-**Entrada:** `okto-nexus-connector-core-main(7).zip`.  
-**Commit no comentário do ZIP:** `c5bd9557861f44577ae8dbf5585790acfd045fa5`.  
-**Versão:** `0.2.8.dev0`, coerente entre pyproject e export do pacote.  
-**Baseline anterior:** `6a43e90a787f3a87af8e26f3f93d4c708cf8a0a8`, `0.2.7.dev0`.  
-**Data da revisão e dos testes locais:** 28/09/2026.
+## Decisão
 
-## 1. Veredito
+**Avançar com o desenvolvimento do Nexus Connector e da integração no Nexus Server.** A avaliação pública por candidato agora existe, reutiliza políticas do Core e fornece uma projeção versionada. Os cenários originais de cancelamento/prazo da liberação durável passaram. Nesta revisão não foi reproduzido um novo bloqueador P1 de execução ou contenção.
 
-O catálogo público está entregue e é utilizável pelos consumidores. Nexus Server e Connector podem desenvolver sua integração sem arrays autoritativos de runtimes e sem copiar adaptadores. O wheel instalado fornece RuntimeCatalog/RuntimeDescriptor/get_runtime_catalog e discovery sem enumerar IDs no chamador.
+Há **um achado funcional P2, A11-01**: a referência pública não diferencia duas instalações distintas de Codex ou Claude com os mesmos bytes. Corrigir antes de dar aceite ao binding que seleciona uma instalação específica entre múltiplas opções do mesmo adaptador. Isso não exige nova arquitetura nem impede integrar catálogo, estados técnicos, daemon, identidade e comunicação.
 
-Restam dois pontos, não uma nova lista extensa de problemas:
+Não confundir essa decisão com liberação operacional universal: a suíte completa não passou neste ambiente, e não houve qualificação de provider real, Windows/WSL2 ou dos aplicativos reais em dois hosts.
 
-1. **Z01 — Disponibilidade técnica por instalação ainda não publicada.** É a parte C9-01.4 do contrato de binding, não um defeito no catálogo de tipos conhecidos. A implementação pública continua devolvendo candidatos locais, sem avaliação de qualificação/plataforma/contenção e razões técnicas prontas para consumo. Precisa ser concluída para a UI habilitar bindings sem duplicar regras internas do Core.
-2. **Z02 — O timeout de shutdown ainda cancela o produtor de liberação durável.** A alteração protege o collector localmente, mas coloca o produtor em outro gather que o cancela. Isso pode prolongar o shutdown quando o cancelamento do backend precisa terminar sua limpeza. Prioridade P2; duas reproduções independentes repetidas.
+## Escopo e fonte
 
-A auditoria não reproduziu novo P1 nos caminhos verificados. Isso não é certificação universal nem aceite operacional de recuperação: Z02 e a avaliação de disponibilidade precisam ser concluídos no escopo pertinente. As combinações de provider/SO e a integração real dos aplicativos continuam requerendo suas próprias campanhas.
+ZIP `okto-nexus-connector-core-main(8).zip`; comentário Git do arquivo: `6909435ff0d913cda03494f26bda670e2d3e75b0`; pacote `0.2.9.dev0`. Comparação com `c5bd955`/`0.2.8.dev0` e plano C10. Foram comparados os arquivos, inspecionadas as mudanças de disponibilidade e release, executadas sementes históricas, a suíte completa e uma reprodução adicional pelo discovery público. Os 422 arquivos originais foram verificados por SHA-256 e permaneceram iguais.
 
-## 2. Método e evidência
+## O que foi validado positivamente
 
-Extraí o ZIP separadamente, comparei os arquivos alterados com o snapshot anterior e preservei hashes dos 403 arquivos originais. Usei Python 3.13 em ambiente de revisão, pytest 9.0.2 e jsonschema 4.26.0. O pip não teve acesso de rede para obter rfc8785; foram obtidos os dois módulos upstream da tag v0.1.4 pelo conector GitHub. Seus bytes foram verificados pelos hashes Git de blob oficiais:
+A superfície pública fornece `get_runtime_catalog`, `RuntimeCatalog`, `RuntimeDescriptor`, `evaluate_runtime_availability`, `AvailabilityReport`, `CandidateAvailability` e `AVAILABILITY_FORMAT_VERSION`. O avaliador consulta o catálogo, a política real de qualificação de build e o preflight do host. Não implementa servidor/proxy MCP nem lógica canônica de autorização do agente. Não tornou attach qualificado.
 
-- `_impl.py`: `3137d3326b98938affadb1be711ee411eb2ab86e`.
-- `__init__.py`: `5a1f9d919643fa3bcaa0999ea66d9c535568c42a`.
+Estados como NOT_PROBED e CONTAINMENT_UNAVAILABLE continuam restritivos; READY_FOR_RUNTIME descreve um resultado técnico, não autorização do agente nem garantia de que uma chamada posterior não detectará drift. A projeção `to_dict()` omite os caminhos de executável/script das entradas padrão do discovery. Constatou-se repetibilidade com o mesmo inventário.
 
-Não utilizei um stub de canonicalização. A proveniência completa está em evidencias/rfc_provenance.json. Erros iniciais de ambiente/assinatura no script de verificação instalada foram corrigidos antes da campanha final e não foram classificados como defeitos do produto.
+A separação do produtor durável de `_cleanup_tasks` foi efetiva nos cenários originais C10: o backend não recebeu cancelamento pelo prazo do shutdown, a espera pública retornou com a barreira ainda fechada e o produtor continuou acompanhado. Os controles entregues de cancelamento externo, conclusão tardia, confirmação perdida e independência entre recursos também passaram.
 
-| Campanha | Resultado local |
+## Resultados executados
+
+| Campanha | Resultado |
 |---|---|
-| C9 do executor, catálogo + recuperação | 7 PASS |
-| Sementes originais C9 | 2 PASS |
-| Histórico C2–C8 do repositório | 75 PASS, 1 SKIP, 1 warning |
-| Novas verificações | 2 FAIL, 1 controle PASS |
-| Repetição das novas verificações | 2 FAIL, 1 controle PASS |
-| Runner distribuído, incluindo os 12 casos | 2 FAIL, 10 PASS |
-| Suíte completa | 711 PASS, 123 FAIL, 20 SKIP, 2 warnings |
-| Wheel/sdist, instalação e consumidores sintéticos | PASS |
-| Consulta instalada do catálogo, sem spawn/journal/porta | PASS |
-| Regeneração dos contratos em cópia da fonte | PASS, bytes idênticos |
+| C10 do executor: disponibilidade + recuperação | 17 PASS, 3 FAIL |
+| Parte de recuperação do C10 do executor | 7 PASS (subconjunto acima) |
+| Sementes originais C10/C9 + testes C9 entregues, runner anterior | 12 PASS |
+| Histórico C2–C9 dentro da suíte completa | 82 PASS, 1 SKIP |
+| Suíte completa | 728 PASS, 126 FAIL, 20 SKIP, 2 warnings |
+| Novas verificações de identidade | 2 FAIL, 3 PASS |
+| Repetição das verificações de identidade | 2 FAIL, 3 PASS |
+| Mesmas verificações com wheel instalado e Python -I | 2 FAIL, 3 PASS |
+| Wheel + sdist, import isolado, bundle, consumers embedded/remote | PASS |
+| Regeneração de 10 JSONs de contrato em cópia separada | Bytes idênticos |
 
-Não somar subconjuntos e repetições à suíte. Os XMLs, logs, comandos e resumo JSON estão em evidencias/.
+**Contagens não aditivas:** os históricos e o C10 entregue já estão dentro da suíte completa. Repetições não acrescentam cobertura distinta. Os dois testes adicionais que falham demonstram um único achado em dois adaptadores.
 
-As 123 falhas da suíte completa foram inspecionadas e agrupadas: 86 recusas de capacidade após árvores não comprovadamente encerradas; 24 probes sem comprovação de parada; 9 recusas diretas relacionadas a proc_children; 2 divergências de mensagem consequentes; 1 teste de morte do proprietário e 1 assert de preflight. O ambiente não possui `/proc/self/task/<pid>/children`. Não são 123 bugs independentes. Nenhum gate foi removido. Os dois testes Z02 não dependem do guardian ou desses erros.
+### Falhas ambientais e precisão da comparação
 
-O warning histórico vem de uma fixture `_ClockLateNative.close` assíncrona utilizada em um caminho que espera função síncrona. Não o tratei como novo erro de provider. Datas e resultados Windows/WSL2 apresentados pelo executor são evidência recebida, não reproduzida pelo revisor.
+Os 126 nomes de teste que falharam foram comparados com os 123 nomes do XML da revisão anterior: os 123 anteriores reaparecem, e os três nomes novos são testes unitários de disponibilidade que assumem contenção disponível. O ambiente informa ausência de `/proc/self/task/<pid>/children`; o avaliador corretamente retorna CONTAINMENT_UNAVAILABLE, em vez de READY ou PREPARATION_REQUIRED. Não se deve remover o gate para fazer esses testes passar. Isolar o preflight nos testes unitários e manter uma campanha real de plataforma é uma melhoria de testabilidade, não outro defeito funcional de disponibilidade.
 
-## 3. Catálogo: parte validada
+Os dois warnings vêm de doubles antigos que definem `close` assíncrono onde a bridge espera fechamento síncrono (`_ClockLateNative`, `_SlowThreadNative`). Foram registrados; não foram promovidos a nova falha do produto.
 
-### 3.1. Contrato público
+As campanhas Windows/WSL2 presentes no ZIP pertencem ao executor e não foram reproduzidas. Seu ambiente/relógio e artefatos não são evidência de uma execução deste revisor. O manifesto permanece development-partial.
 
-`catalog.py:59–134` publica DTOs congelados e uma consulta que projeta `adapter_specs()` do registro. Há versão do formato e versão do Core, nomes de exibição, família, modo, plataformas de implementação e estado de suporte. Módulos/classes de carregamento não são expostos.
+## A11-01 — Referência ambígua entre instalações idênticas
 
-O consumidor instalado enumerou:
+**Prioridade:** P2. **Impacto:** seleção/binding por candidato; não comprova execução indevida, vazamento de credencial ou falha de autorização.
 
-| adapter_id | display_name | modo | suporte declarado |
-|---|---|---|---|
-| codex_app_server | Codex (app-server) | managed | managed_supported |
-| pi_rpc | Pi (Node RPC) | managed | managed_supported |
-| claude_stream | Claude Code (stream) | managed | managed_supported |
-| claude_attach | Claude Code (attach) | attach | registered_unqualified |
+Âncoras do snapshot:
 
-Attach continua não descobrível e não é apresentado como READY. Plataformas de implementação não são qualificação de todos os backends.
+- `src/nexus_connector_core/availability.py:63–89`: DTO e documentação admitem a referência compartilhada por duas instalações.
+- `availability.py:236–249`: `candidate_ref=candidate.fingerprint`.
+- `src/nexus_connector_core/discovery.py:58–63`: fingerprint de executável é SHA-256 dos bytes.
+- `discovery.py:candidate/discover_path`: caminhos diferentes continuam sendo candidatos distintos.
+- `docs/api.md:14,152–179`: referência proposta para binding e contrato dos consumidores.
 
-A verificação isolada interceptou eventos de spawn, conexão SQLite e bind de socket durante a consulta: nenhum ocorreu. Não houve carregamento dos módulos dos adaptadores dos providers. O pacote foi importado de uma instalação do wheel fora da árvore-fonte.
+### Reprodução e causalidade
 
-### 3.2. Fonte de IDs e discovery
+A fixture cria dois diretórios e copia o mesmo executável de laboratório para cada um, com nomes reconhecidos pelo discovery (codex ou claude). Não executa o arquivo nem chama providers. Usa `LocalRuntimeCore.discover(DiscoveryRequest((adapter_id,)))` pela API pública, com raízes confiáveis explícitas e uma factory que proibiria qualquer open. Em seguida chama `evaluate_runtime_availability(inventory)` e `to_dict()`.
 
-`contracts/generate.py:10–20` agora deriva ADAPTER_IDS do registry. Executei a geração em uma cópia do snapshot e comparei os JSONs antes/depois: bytes idênticos. Isso resolve a segunda enumeração manual dos quatro IDs no gerador.
+O discovery retorna dois candidatos, com caminhos locais diferentes e mesmo conteúdo. Na projeção ambos têm o mesmo adapter_id, candidate_ref, versão não observada, confiança e estado. As duas linhas serializadas são literalmente iguais. Para o mesmo executor e revisão, o tuple proposto para binding não consegue expressar qual instalação foi escolhida.
 
-`DiscoveryRequest.adapter_ids=None` passa a significar todos os descobríveis do catálogo, e `()` continua sendo filtro vazio. O caminho explícito de IDs foi preservado. A implementação de discovery permanece dentro do Core.
+A prova foi repetida para codex_app_server e claude_stream. Três controles passaram: builds diferentes já recebem referências diferentes; o mesmo inventário produz projeção estável e sem caminhos; catálogo não expõe módulos/classes de carregamento. O mesmo problema foi observado no wheel instalado fora da fonte.
 
-Código disponível hoje:
+### O que a prova NÃO afirma
 
-```python
-from nexus_connector_core import get_runtime_catalog, DiscoveryRequest
+Não demonstra que um Nexus Server real escolheu o binário errado: os outros aplicativos não foram executados. Mostra que o contrato atual não fornece informação suficiente para distinguir as opções. Não exige que cópias do mesmo build tenham hashes de conteúdo diferentes. Ao contrário, manter a mesma identidade de build é correto; o que falta é a identidade da instalação local.
 
-catalog = get_runtime_catalog()
-for descriptor in catalog.runtimes:
-    print(descriptor.adapter_id, descriptor.display_name,
-          descriptor.support_status)
+### Direção da correção
 
-# Em um host que já compôs seu RuntimeCore:
-# inventory = await runtime.discover(DiscoveryRequest())
-```
+Separar explicitamente **tipo de runtime**, **identidade de build/conteúdo**, **instalação local selecionável** e **agente**. Publicar/resolver uma referência opaca da instalação no host produtor. Não alterar fingerprints usados por qualificações, hashes de intenção ou identidades de agentes para contornar o problema. Não escolher a primeira entrada nem usar posição no array. O plano C11 detalha opções aditivas e migração.
 
-Não criar arrays de runtimes nos aplicativos. Eles podem mapear esses descritores para uma API de apresentação, preservando IDs e versão.
+## Integração dos consumidores
 
-## 4. Z01 — Falta a avaliação pública de disponibilidade
+Os aplicativos podem consumir catálogo e avaliação agora, sem listas de runtimes e sem copiar regras de qualificação. A avaliação é executada no host que contém o runtime; o Server adiciona política do agente, conectividade, TTL e revisão do inventário. A UI apresenta a projeção recebida.
 
-**Natureza:** lacuna funcional do C9-01.4; bloqueia o aceite do seletor completo, não o início de seu desenvolvimento.
+Antes de aceitar binding para uma instalação entre opções equivalentes, completar A11-01. Enquanto isso, um fluxo de integração controlado com uma única instalação inequívoca por adaptador pode avançar; uma lista ambígua não deve escolher silenciosamente por ordem. A fonte dos adaptadores continua no Core; referência local não é nova identidade canônica.
 
-`models.py:202–250` ainda define InstallationCandidate apenas com adapter, caminhos/fingerprint, source/trust, versão, arquitetura, script e build_identity. Inventory contém somente a tupla de candidatos. `RuntimeCore` não publica avaliação de disponibilidade. `inventory_reducer.py` possui uma projeção de candidatos para rede, mas sem as dimensões de prontidão/qualificação.
+## Reprodução
 
-Consequência: um consumidor sabe quais tipos existem e quais arquivos foram encontrados. Ainda não consegue perguntar publicamente quais candidatos estão tecnicamente prontos e por quê, sem interpretar regras que pertencem ao Core. Usar `managed_supported` ou `trust=selected` como READY seria incorreto.
+`python executar_verificacao.py --repo /caminho/do/core --output /caminho/das/evidencias`
 
-O requisito já estava em C9-01.4: projeção tipada por candidato, confiança, qualificação, contenção, preparação e capacidades efetivas; sem login ou spawn implícito. C9-01.6 destina ao Server somente a decisão canônica de binding e a projeção do executor correto.
+O runner inclui as cinco verificações atuais e as sementes C10/C9 originais, além dos testes C9 disponíveis no repositório. Não instala dependências nem altera a fonte. Os testes novos são expectativas corretas, não patches. O código do produto não foi modificado.
 
-A correção deve reaproveitar as políticas atuais do Core, não outra allowlist. Precisa diferenciar estado técnico de autorização do agente, instalação local de executor remoto e tipos conhecidos de candidatos concretos. Dois builds da mesma família não podem ser fundidos pelo nome. Ausência de probe deve permanecer inconclusiva.
-
-**Evidência:** inspeção da superfície/DTO/port e inventário emitido pelo wheel, em evidencias/catalog_observation.json. Não foi criado teste que falha simplesmente porque uma função com nome escolhido pelo revisor não existe.
-
-## 5. Z02 — O produtor ainda é cancelado pelo gather de cleanup
-
-**Prioridade:** P2, continuação de C9-03.1–03.4.
-
-### 5.1. Causa no código
-
-`_schedule_release_retries()` guarda o task em `obligation.retry_task`, mas também o adiciona a `_cleanup_tasks` (`runtime.py:1919–1925`). O shutdown aguarda esse conjunto via `wait_for(gather(...), cleanup_budget+1)` em dois pontos (`runtime.py:1182–1188` e `1200–1206`). O timeout cancela o gather e o produtor incluído nele.
-
-O shield em `_retry_release_obligations()` cobre o collector daquela chamada, não o mesmo produtor aguardado por outro gather. A propriedade do commit ainda não está separada da espera cancelável.
-
-### 5.2. Reprodução: produtor cancelado
-
-O teste cria uma abertura cancelada com retorno tardio, comprova STOPPED e falha uma vez no release antes do commit, para criar a obrigação. A liberação seguinte fica aguardando uma barreira de armazenamento. O shutdown público esgota seu orçamento.
-
-Observado: a obrigação permanece, mas seu `retry_task` está cancelado e o backend recebeu CancelledError. Isso contraria a semântica de conservar o produtor e terminar apenas a espera. A retomada pode exigir outro release em vez de colher o resultado original.
-
-Não demonstrei corrupção ou perda de reserva persistida. O problema confirmado é o cancelamento de uma operação que a biblioteca afirma continuar supervisionando.
-
-**Teste:** `test_shutdown_deadline_does_not_cancel_owned_release_producer`.
-
-### 5.3. Reprodução: retorno preso na limpeza do cancelamento
-
-O mesmo port de ledger aguarda uma operação, recebe cancelamento e precisa aguardar sua finalização para encerrar. Com `ShutdownPolicy(0,0)` e cleanup de 0,03 s, o shutdown permaneceu pendente após 3,5 s enquanto a barreira continuava fechada. A chamada estava aguardando o gather do cleanup, não a execução de um provider.
-
-A barreira é liberada somente no teardown, e a liberação real depois converge. Esse é um backend de laboratório que representa uma limpeza de operação em andamento; o SQLiteJournal e o lifecycle do Core são reais. Não é uma alegação de que a transação SQLite normal sempre demora a cancelar.
-
-**Teste:** `test_shutdown_return_does_not_wait_for_release_cancel_cleanup`.
-
-### 5.4. Controle que passou
-
-O teste de duas chamadas públicas de shutdown após a primeira força falhar manteve pico de uma força ativa e não duplicou a tentativa nesse cenário. Esse controle foi repetido. Não foi classificado como achado adicional.
-
-**Teste:** `test_concurrent_shutdown_retry_coalesces_the_current_force_producer`.
-
-## 6. Integração recomendada
-
-A divisão permanece:
-
-| Camada | Responsabilidade |
-|---|---|
-| Core | Adaptadores, catálogo, discovery, avaliação técnica, lifecycle e contratos |
-| Connector | Consultar o Core do host remoto, gerir identidade/bindings locais e transmitir projeção |
-| Server | Core embutido local; inventário remoto por executor; políticas do agente; API da UI |
-| UI | Renderizar descritores/estados recebidos; nunca lista autoritativa de runtimes |
-
-Desenvolver os aplicativos agora. O catálogo atual já permite retirar listas duplicadas de tipos. Concluir Z01 antes de declarar a seleção de instalações prontas implementada; concluir Z02 antes de aceitar a garantia de shutdown/recuperação sob falha correspondente. Não contornar nada nos consumidores acessando internals.
-
-## 7. Artefatos e limites de aceite
-
-Construí wheel/sdist em cópia da fonte usando o backend setuptools disponível; não alterei o snapshot. A instalação do wheel e os consumers `embedded`/`remote` passaram no mesmo artefato. O bundle foi validado com aceitação explícita de `development-partial`, hash `sha256:a4fd84304de7ba12041721c07f4edce29d3f39d17d8bd24f375de24b0a728630`.
-
-Os hashes desta construção estão em evidencias/package_validation.json. Não devem ser confundidos com os hashes de uma construção normalizada do executor; eu não reproduzi aquela campanha de normalização.
-
-Não executei providers reais, campanhas Windows/WSL2 nem Server e Connector em dois hosts. Os examples isolados são smokes sintéticos de consumo da biblioteca, não E2.
-
-**Nenhuma correção foi aplicada ao produto.** O plano C10 anexo é restrito aos dois pontos pendentes, preservando todo o trabalho que passou.
+As dependências foram isoladas: RFC8785 0.1.4 recuperado da fonte oficial por conector e conferido pelos hashes Git do upstream, sem stub; jsonschema 4.26.0 e pytest 9.0.2. A primeira tentativa de pip não conseguiu acessar DNS. O build final utilizou o backend setuptools instalado, sem isolamento online. `evidencias/` preserva comandos, XMLs, logs e hashes de artefatos. Erros preliminares de montagem de fixture/formato de hash não foram contabilizados como achados.

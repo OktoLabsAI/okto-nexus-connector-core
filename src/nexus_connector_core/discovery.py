@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
 
+from .installation import installation_ref
 from .models import CoreError, InstallationCandidate
 from .native.process import require_containment
 from .native.registry import adapter_specs
@@ -104,7 +105,11 @@ def candidate_pi_node_cli(node_path: str | Path, script_path: str | Path, *,
                    fingerprint=_pi_node_cli_fingerprint(Path(node.executable), script),
                    launch_script=str(script),
                    version=_pi_package_version(package_root),
-                   build_identity=pi_build_identity(node.executable, package_root))
+                   build_identity=pi_build_identity(node.executable, package_root),
+                   # The selectable Pi installation is the (node, cli.js)
+                   # target pair - the ref covers both canonical targets.
+                   installation_ref=installation_ref(
+                       "pi_rpc", node.executable, str(script)))
 
 
 def _pi_package_version(package_root: Path) -> str | None:
@@ -154,7 +159,9 @@ def candidate(adapter_id: str, path: str | Path, *, explicit: bool = False,
     return InstallationCandidate(adapter_id, str(resolved), fingerprint(resolved),
                                  "explicit" if explicit else "trusted_root",
                                  "selected", architecture=binary_architecture(resolved),
-                                 build_identity=executable_build_identity(resolved))
+                                 build_identity=executable_build_identity(resolved),
+                                 installation_ref=installation_ref(
+                                     adapter_id, str(resolved)))
 
 
 async def probe_selected_claude(candidate: InstallationCandidate, *, cwd: str | Path,
@@ -318,5 +325,9 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
                 item = candidate(adapter_id, path, trusted_roots=trusted_roots)
             except (CoreError, OSError):
                 continue
-            found[item.executable] = item
+            # C11/A11-01 + alias policy: key by the installation ref -
+            # PATH duplicates/symlinks to the SAME canonical target are
+            # ONE installation; distinct targets stay distinct rows.
+            found[item.installation_ref
+                  or installation_ref(adapter_id, item.executable)] = item
     return tuple(found.values())

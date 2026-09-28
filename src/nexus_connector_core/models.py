@@ -212,6 +212,11 @@ class InstallationCandidate:
     # PC09: portable, path-free identity of the build content. The
     # path-bound ``fingerprint`` remains the local binding proof.
     build_identity: str | None = None
+    # C11/A11-01: opaque ref of the SELECTABLE LOCAL INSTALLATION
+    # (canonical executable + launch script; ``installation.py``).
+    # Byte-identical copies in distinct locations are distinct
+    # installations: distinct refs, same build identity.
+    installation_ref: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

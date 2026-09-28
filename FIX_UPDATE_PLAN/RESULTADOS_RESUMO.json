@@ -1,67 +1,89 @@
 {
-  "new_repeat": {
-    "tests": 3,
-    "failures": 2,
-    "errors": 0,
-    "skipped": 0,
-    "passed": 1,
-    "seconds": 5.062
+  "snapshot_commit": "6909435ff0d913cda03494f26bda670e2d3e75b0",
+  "package_version": "0.2.9.dev0",
+  "source_zip_sha256": "f07571a54c530abd103f9e2166ae90c3f48f938211ab07c58ed3ea76879e9789",
+  "source_files_verified": 422,
+  "source_files_modified": 0,
+  "python": "3.13.5",
+  "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
+  "campaigns": {
+    "full": {
+      "tests": 874,
+      "passed": 728,
+      "failed": 126,
+      "errors": 0,
+      "skipped": 20
+    },
+    "c10_delivered": {
+      "tests": 20,
+      "passed": 17,
+      "failed": 3,
+      "errors": 0,
+      "skipped": 0
+    },
+    "original_c10_and_c9": {
+      "tests": 12,
+      "passed": 12,
+      "failed": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "identity_source": {
+      "tests": 5,
+      "passed": 3,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0
+    },
+    "identity_repeat": {
+      "tests": 5,
+      "passed": 3,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0
+    },
+    "identity_installed_wheel": {
+      "tests": 5,
+      "passed": 3,
+      "failed": 2,
+      "errors": 0,
+      "skipped": 0
+    },
+    "packet_runner": {
+      "tests": 17,
+      "failed": 2,
+      "passed": 15
+    }
   },
-  "c9_delivered": {
-    "tests": 7,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 0,
-    "passed": 7,
-    "seconds": 2.76
+  "historical_c2_c9_in_full": {
+    "passed": 82,
+    "skipped": 1
   },
-  "new_failures": {
-    "tests": 3,
-    "failures": 2,
-    "errors": 0,
-    "skipped": 0,
-    "passed": 1,
-    "seconds": 5.036
+  "confirmed_findings": [
+    {
+      "id": "A11-01",
+      "priority": "P2",
+      "topic": "ambiguous public reference for distinct identical installations",
+      "test_instances": 2
+    }
+  ],
+  "not_claimed": [
+    "real provider execution",
+    "Windows/WSL2 campaign reproduction",
+    "Nexus Server and Connector two-host integration",
+    "UI validation",
+    "universal absence of defects"
+  ],
+  "build_method": "setuptools.build_meta.build_wheel/build_sdist in separate source copy; pip --no-deps --no-index wheel installation",
+  "contract_manifest_sha256": "a4fd84304de7ba12041721c07f4edce29d3f39d17d8bd24f375de24b0a728630",
+  "contract_status": "development-partial explicitly accepted",
+  "artefacts": {
+    "nexus_connector_core-0.2.9.dev0-py3-none-any.whl": "2d300b829090601637c287d571444c6cbe9da09ec391669052e8eeedb60746f6",
+    "nexus_connector_core-0.2.9.dev0.tar.gz": "851fb069a875f70067a32a2a40eabe0c464797727111ffdc00f36cd99b804d86"
   },
-  "c9_original": {
-    "tests": 2,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 0,
-    "passed": 2,
-    "seconds": 1.342
-  },
-  "full": {
-    "tests": 854,
-    "failures": 123,
-    "errors": 0,
-    "skipped": 20,
-    "passed": 711,
-    "seconds": 133.465
-  },
-  "history_c2_c8": {
-    "tests": 76,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 1,
-    "passed": 75,
-    "seconds": 76.548
-  },
-  "original_zip": {
-    "name": "okto-nexus-connector-core-main(7).zip",
-    "commit": "c5bd9557861f44577ae8dbf5585790acfd045fa5",
-    "version": "0.2.8.dev0",
-    "sha256": "19da9fc291540242da3e66d8d3daf65de42b8d1a71c0ca08a00d212fc717bd7a"
-  },
-  "integrity": {
-    "original_files": 403,
-    "changed_original_files": []
-  },
-  "distributed_runner": {
-    "tests": 12,
-    "failures": 2,
-    "errors": 0,
-    "skipped": 0,
-    "passed": 10
-  }
+  "dependency_note": "rfc8785 0.1.4 retrieved as upstream source through GitHub connector; exact Git blob SHAs checked; no stub. jsonschema 4.26.0, pytest 9.0.2 and setuptools 82.0.1 from environment.",
+  "preliminary_fixture_errors_not_product_findings": [
+    "create_runtime requires non-empty candidates: passive discovery fixture switched to supported public LocalRuntimeCore constructor",
+    "bundle helper first called without sha256 prefix: corrected to documented hash format before validation"
+  ]
 }

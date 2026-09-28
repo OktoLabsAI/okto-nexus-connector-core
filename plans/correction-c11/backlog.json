@@ -1,0 +1,41 @@
+{
+  "round": "C11",
+  "audited_snapshot": "6909435ff0d913cda03494f26bda670e2d3e75b0",
+  "delivered_version": "0.2.10.dev0",
+  "items": [
+    {
+      "id": "C11-00",
+      "title": "Baseline e contrato da identidade",
+      "status": "DONE",
+      "evidence": "plans/correction-c11/evidence/A11-01.md (C11-00)",
+      "notes": "Baseline 2 FAIL + 3 PASS reproduzido (mesmas sementes do revisor); decisoes de identidade documentadas (alias/rename/update/dois hosts); sem corrigir fixture por fingerprints artificiais."
+    },
+    {
+      "id": "C11-01",
+      "title": "Referencia local opaca e resolucao unica",
+      "status": "DONE",
+      "evidence": "src/nexus_connector_core/installation.py; discovery.py (ref + dedup alias); resolve_installation; tests/regression/test_c11_installation.py",
+      "notes": "Ref opaca versionada (nexus-install-v1) de alvos canonicos; dedup por alias; resolucao exata com erros tipados NOT_FOUND/AMBIGUOUS; drift recusado; escopo por executor; labels sem caminhos."
+    },
+    {
+      "id": "C11-02",
+      "title": "Versionamento e contrato dos consumidores",
+      "status": "DONE",
+      "evidence": "AVAILABILITY_FORMAT_VERSION=2 + label + from_dict; examples/availability_projection.py (cenario real); docs/api.md",
+      "notes": "Projecao v2 versionada; migracao v1 documentada e testada (unico migra, ambiguo exige resselecao); NXL intocado (manifesto inalterado); formato desconhecido recusado tipado."
+    },
+    {
+      "id": "C11-03",
+      "title": "Aceite e liberacao delimitada",
+      "status": "DONE",
+      "evidence": "plans/correction-c11/evidence/*.xml; dist/ 0.2.10.dev0 byte-identico Win<->WSL2; wheel-consumer python -I offline",
+      "notes": "AC11-01..13/15/16 PASS; AC11-14 (UI) pertence ao Server com fixture+criticios entregues; twine+offline OK; nao publicado."
+    }
+  ],
+  "matrix_summary": {"PASS": 15, "FAIL": 0, "NOT_RUN": 1, "BLOCKED": 0},
+  "open": [
+    "AC11-14 NOT_RUN: UI real do Server - fixture (examples/availability_projection.py --json) e criterios entregues ao repositorio Server.",
+    "A19/A20 (C10) seguem externos: campanha de SO real e integracao de dois hosts.",
+    "PyPI: publicacao apenas em sessao conjunta com o usuario."
+  ]
+}

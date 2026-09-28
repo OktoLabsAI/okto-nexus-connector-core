@@ -17,13 +17,18 @@ from nexus_connector_core.availability import (
     PREPARATION_REQUIRED, READY_FOR_RUNTIME, UNSUPPORTED_PLATFORM,
     UNQUALIFIED_BUILD, evaluate_runtime_availability,
 )
+from nexus_connector_core.installation import (
+    INSTALLATION_REF_SCHEME, installation_ref,
+)
 from nexus_connector_core.models import CoreError
 
 
 def _candidate(adapter_id="codex_app_server", *, trust="selected",
                version=None, architecture=None, fingerprint="fp-1",
-               build_identity=None, source="explicit"):
-    return InstallationCandidate(adapter_id, f"/bin/{adapter_id}",
+               build_identity=None, source="explicit",
+               executable=None):
+    return InstallationCandidate(adapter_id,
+                                 executable or f"/bin/{adapter_id}",
                                  fingerprint, source, trust,
                                  version=version,
                                  architecture=architecture,
@@ -32,7 +37,12 @@ def _candidate(adapter_id="codex_app_server", *, trust="selected",
 
 def test_qualified_selected_candidate_is_ready_for_runtime(monkeypatch):
     # Same policy seam the product consults (the module's binding of
-    # compatibility.qualified_build): an exact qualified build.
+    # compatibility.qualified_build): an exact qualified build. The
+    # containment preflight is isolated POSITIVE for this UNIT state
+    # test (AC11-15): the product gate stays fail-closed and real host
+    # campaigns stay separate.
+    monkeypatch.setattr(availability, "containment_preflight",
+                        lambda *, platform=None: {"job_objects": "ok"})
     monkeypatch.setattr(
         availability, "qualified_build",
         lambda kind, version, platform, architecture, fingerprint,
@@ -41,9 +51,11 @@ def test_qualified_selected_candidate_is_ready_for_runtime(monkeypatch):
         == ("codex", "0.157.0", "x86_64", "fp-qualified"))
     report = evaluate_runtime_availability([
         _candidate(version="0.157.0", architecture="x86_64",
-                   fingerprint="fp-qualified")])
+                   fingerprint="fp-qualified",
+                   executable="/inst/codex-qualified")])
     (row,) = [r for r in report.availability
-              if r.candidate_ref == "fp-qualified"]
+              if r.candidate_ref == installation_ref(
+                  "codex_app_server", "/inst/codex-qualified")]
     assert row.state == READY_FOR_RUNTIME
     assert row.reasons == ()
     assert row.qualification == "qualified"
@@ -96,8 +108,12 @@ def test_containment_unavailable_blocks_readiness(monkeypatch):
 
 
 def test_unselected_trust_requires_preparation(monkeypatch):
+    # Preflight isolated positive (AC11-15): the UNIT assertion
+    # observes the preparation dimension, not the host's backend.
     monkeypatch.setattr(availability, "qualified_build",
                         lambda *a, **k: True)
+    monkeypatch.setattr(availability, "containment_preflight",
+                        lambda *, platform=None: {"job_objects": "ok"})
     report = evaluate_runtime_availability([
         _candidate(trust="candidate", version="0.157.0",
                    architecture="x86_64")])
@@ -107,21 +123,29 @@ def test_unselected_trust_requires_preparation(monkeypatch):
 
 
 def test_two_candidates_same_family_never_merge(monkeypatch):
+    # Two PHYSICAL installations of one family (distinct targets) -
+    # C11/v2 fixture: distinct refs per installation, same family.
     monkeypatch.setattr(
         availability, "qualified_build",
         lambda kind, version, platform, architecture, fingerprint,
         *, control=False, build_identity=None: fingerprint == "fp-b")
+    monkeypatch.setattr(availability, "containment_preflight",
+                        lambda *, platform=None: {"job_objects": "ok"})
+    ref_a = installation_ref("codex_app_server", "/inst/a/codex")
+    ref_b = installation_ref("codex_app_server", "/inst/b/codex")
     report = evaluate_runtime_availability([
-        _candidate(fingerprint="fp-a", trust="candidate"),
+        _candidate(fingerprint="fp-a", trust="candidate",
+                   executable="/inst/a/codex"),
         _candidate(fingerprint="fp-b", trust="selected",
-                   version="0.157.0", architecture="x86_64"),
+                   version="0.157.0", architecture="x86_64",
+                   executable="/inst/b/codex"),
     ])
     rows = [r for r in report.availability if r.adapter_id
             == "codex_app_server"]
     assert len(rows) == 2
     states = {r.candidate_ref: r.state for r in rows}
-    assert states["fp-a"] == NOT_PROBED  # unprobed AND unselected
-    assert states["fp-b"] == READY_FOR_RUNTIME  # distinct assessment
+    assert states[ref_a] == NOT_PROBED  # unprobed AND unselected
+    assert states[ref_b] == READY_FOR_RUNTIME  # distinct assessment
     # No selection by display_name: identity is the opaque ref.
 
 
@@ -164,9 +188,11 @@ def test_unknown_adapter_is_a_typed_error():
 def test_projection_is_versioned_json_safe_and_path_free():
     report = evaluate_runtime_availability(
         Inventory(candidates=(
-            _candidate(fingerprint="fp-a", trust="candidate"),
+            _candidate(fingerprint="fp-a", trust="candidate",
+                       executable="/inst/a/codex"),
             _candidate(adapter_id="pi_rpc", fingerprint="fp-p",
-                       version="0.87.1", architecture="x86_64"),
+                       version="0.87.1", architecture="x86_64",
+                       executable="/inst/pi/node"),
         )))
     data = report.to_dict()
     encoded = json.dumps(data)  # must round-trip
@@ -177,9 +203,16 @@ def test_projection_is_versioned_json_safe_and_path_free():
     assert "/bin/" not in blob  # no local paths
     assert "executable" not in blob
     assert "class" not in blob and "module" not in blob
-    refs = [r["candidate_ref"] for r in data["availability"]
+    rows = [r for r in data["availability"]
             if r["state"] != NOT_INSTALLED]
-    assert refs == ["fp-a", "fp-p"]
+    refs = [r["candidate_ref"] for r in rows]
+    # v2: installation refs - opaque, versioned, DISTINCT per target.
+    assert all(ref.startswith(INSTALLATION_REF_SCHEME + ":")
+               for ref in refs)
+    assert len(set(refs)) == 2
+    # Presentation labels differentiate copies without paths/keys.
+    assert all(r["label"] for r in rows)
+    assert len({r["label"] for r in rows}) == 2
 
 
 def test_assessment_is_pure_and_repeatable():

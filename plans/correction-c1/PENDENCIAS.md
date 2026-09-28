@@ -75,6 +75,22 @@ repositório sem a ação do dono correspondente.
   twine + offline verdes, **não publicado** (publicação PyPI segue
   exigindo sessão conjunta).
 
+## Atualização C11 (2026-10-01) — 0.2.10.dev0
+
+- **A11-01 corrigido**: identidade de INSTALAÇÃO opaca e versionada
+  (`nexus-install-v1`) separada de conteúdo/build; cópias
+  byte-idênticas em alvos distintos = duas instalações (refs
+  distintas, mesmo build); resolução pública exata com erros tipados
+  (`INSTALLATION_REF_NOT_FOUND`/`_AMBIGUOUS` — nunca escolha por
+  ordem); aliases para o mesmo alvo = uma instalação; migração v1
+  documentada (ambígua exige resseleção); projeção v2 + label de
+  apresentação sem caminhos; formato desconhecido recusado tipado.
+- Matriz C11: 15 PASS / 1 NOT_RUN (AC11-14 = UI do Server, com
+  fixture e critérios entregues em `examples/availability_projection.py`).
+- E1 re-declarado para **0.2.10.dev0**; E2/E3 seguem bloqueados
+  externamente (hosts/providers reais). Artefato byte-idêntico
+  Windows↔WSL2 (wheel `sha256:4cde3b9a…50da0`), **não publicado**.
+
 ## Fontes de verdade
 
 - Matriz RC: `plans/correction-c1/matriz_rc.md` (129 cenários: 120 PASS,
