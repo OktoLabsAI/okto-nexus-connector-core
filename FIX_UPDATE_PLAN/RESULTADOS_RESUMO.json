@@ -1,0 +1,40 @@
+{
+  "campaigns": {
+    "review_exhaustive.xml": {
+      "total": 9,
+      "fail": 8,
+      "error": 0,
+      "skip": 0,
+      "pass": 1
+    },
+    "review_exhaustive_repeat.xml": {
+      "total": 9,
+      "fail": 8,
+      "error": 0,
+      "skip": 0,
+      "pass": 1
+    },
+    "c6_original_adapted.xml": {
+      "total": 6,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "pass": 6
+    },
+    "c6_delivered.xml": {
+      "total": 6,
+      "fail": 0,
+      "error": 0,
+      "skip": 0,
+      "pass": 6
+    },
+    "full.xml": {
+      "total": 833,
+      "fail": 123,
+      "error": 0,
+      "skip": 20,
+      "pass": 690
+    }
+  },
+  "note": "Subconjuntos e repetições não são somados. 833 testes na suíte completa; novos 9 são externos ao produto. Evidências dos providers/SOs externos não reproduzidas."
+}

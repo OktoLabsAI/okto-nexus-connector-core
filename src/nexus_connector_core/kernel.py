@@ -18,8 +18,14 @@ class OperationKernel:
                       else RollbackFencedClock(clock or SystemClock()))
 
     async def execute(self, operation: Operation, context: ExecutionContext,
-                      effect: Callable[[], Awaitable[str | None]]) -> OperationReceipt:
-        containment = operation.action in {"turn.interrupt", "runtime.close"}
+                      effect: Callable[[], Awaitable[str | None]], *,
+                      containment: bool | None = None) -> OperationReceipt:
+        # C7/W04: callers with a derived per-operation classification
+        # (a strictly negative approval reply) pass it explicitly; the
+        # default stays action-based.
+        if containment is None:
+            containment = operation.action in {"turn.interrupt",
+                                               "runtime.close"}
 
         def _expired() -> bool:
             # Lease revalidation (PC03): an effect must never start under

@@ -1,0 +1,61 @@
+{
+  "round": "C7",
+  "base_commit": "12dae55381a9871958c7ffb7513030eaa66886c2",
+  "phases": {
+    "C7-00": {
+      "tasks": {
+        "C7-00.01": "DONE",
+        "C7-00.02": "DONE",
+        "C7-00.03": "DONE"
+      },
+      "note": "baseline 8 FAIL + 1 control recorded"
+    },
+    "C7-01": {
+      "tasks": {
+        "C7-01.01": "DONE (register before first await)",
+        "C7-01.02": "DONE (common containment model)",
+        "C7-01.03": "DONE (force parallel; cancel not awaited)",
+        "C7-01.04": "DONE (budget cancel keeps ownership)",
+        "C7-01.05": "DONE (OWNED_UNKNOWN retry same owner)",
+        "C7-01.06": "DONE (w03/w03b + C6 v02 seeds)"
+      },
+      "note": "W03 both seeds PASS"
+    },
+    "C7-02": {
+      "tasks": {
+        "C7-02.01": "DONE (producer proof in attempt)",
+        "C7-02.02": "DONE (one transition function)",
+        "C7-02.03": "DONE (NOT_DELIVERED with proof)",
+        "C7-02.04": "DONE (genuine UNKNOWN kept; no time release)",
+        "C7-02.05": "DONE (token revalidation)",
+        "C7-02.06": "DONE (w02 exhausts real budget; C6 v01 kept)"
+      },
+      "note": "W02 both params PASS"
+    },
+    "C7-03": {
+      "tasks": {
+        "C7-03.01": "DONE (one classification)",
+        "C7-03.02": "DONE (three frontiers)",
+        "C7-03.03": "DONE (C6 reservation preserved)",
+        "C7-03.04": "DONE (accept control + docs)"
+      },
+      "note": "W04 decline/cancel PASS; accept control PASS"
+    },
+    "C7-04": {
+      "tasks": {
+        "C7-04.01": "DONE (null-guard, dedup first)",
+        "C7-04.02": "DONE (adjacent states via suite)",
+        "C7-04.03": "DONE (wheel -I consumers)"
+      },
+      "note": "W01 both kinds PASS"
+    },
+    "C7-05": {
+      "tasks": {
+        "C7-05.01": "DONE (campaign, no inflation)",
+        "C7-05.02": "DONE (artifact + contracts)",
+        "C7-05.03": "DONE (E1 for 0.2.6.dev0)"
+      },
+      "note": "matrix below; artifacts pinned"
+    }
+  }
+}

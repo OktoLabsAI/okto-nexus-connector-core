@@ -1,0 +1,130 @@
+{
+  "AC7-01-01": [
+    "PASS",
+    "w03"
+  ],
+  "AC7-01-02": [
+    "PASS",
+    "w03b"
+  ],
+  "AC7-01-03": [
+    "PASS",
+    "v02b C6 kept green"
+  ],
+  "AC7-01-04": [
+    "PASS",
+    "close cancelled cooperatively; force parallel (w03)"
+  ],
+  "AC7-01-05": [
+    "PASS",
+    "OWNED_UNKNOWN retry via _late_handles (w03b)"
+  ],
+  "AC7-01-06": [
+    "PASS",
+    "shutdown idempotent; ledger only on proven stop"
+  ],
+  "AC7-02-01": [
+    "PASS",
+    "w02[renew]"
+  ],
+  "AC7-02-02": [
+    "PASS",
+    "w02[revoke]"
+  ],
+  "AC7-02-03": [
+    "PASS",
+    "v01 C6 kept green (commit+lost ACK stays UNKNOWN/hold)"
+  ],
+  "AC7-02-04": [
+    "PASS",
+    "one transition function; producer proof in reconciler"
+  ],
+  "AC7-02-05": [
+    "PASS",
+    "token revalidation after awaits (C6 s04b kept green)"
+  ],
+  "AC7-02-06": [
+    "PASS",
+    "real SQLite + wrapper; no always-revoked mocks"
+  ],
+  "AC7-03-01": [
+    "PASS",
+    "w04[decline] via the PUBLIC API"
+  ],
+  "AC7-03-02": [
+    "PASS",
+    "w04[cancel]"
+  ],
+  "AC7-03-03": [
+    "PASS",
+    "w04[accept] control (AGENT_REVOKED, zero replies)"
+  ],
+  "AC7-03-04": [
+    "PASS",
+    "v03 C6 kept green (reservation restored pre-byte)"
+  ],
+  "AC7-03-05": [
+    "PASS",
+    "closing/faulted session still answerable with a negative reply"
+  ],
+  "AC7-04-01": [
+    "PASS",
+    "w01[submit]"
+  ],
+  "AC7-04-02": [
+    "PASS",
+    "w01[steer] + historical runtime suite (closed/other-agent/draining)"
+  ],
+  "AC7-04-03": [
+    "PASS",
+    "receipt replay after eviction (R04 C2 kept green)"
+  ],
+  "AC7-05-01": [
+    "PASS",
+    "all suites 6 environments; XMLs recorded"
+  ],
+  "AC7-05-02": [
+    "PASS",
+    "wheel normalized byte-identical; hashes pinned"
+  ],
+  "AC7-05-03": [
+    "PASS",
+    "offline -I consumers embedded/remote"
+  ],
+  "AC7-05-04": [
+    "PASS",
+    "NXL manifest unchanged; no persisted migration"
+  ],
+  "AC7-05-05": [
+    "PASS",
+    "no MCP stdio/proxy/server; agent-centric identity preserved"
+  ],
+  "AC7-05-06": [
+    "PASS",
+    "sandbox proc_children failures classified, gates intact"
+  ],
+  "AC7-05-07": [
+    "PASS",
+    "fixture adaptations documented (steer text/context; fresh submit uses current auth)"
+  ],
+  "AC7-05-08": [
+    "PASS",
+    "accept control stayed green throughout"
+  ],
+  "AC7-05-09": [
+    "PASS",
+    "C2-C6 regressions green (29+16+11+6)"
+  ],
+  "AC7-05-10": [
+    "NOT_RUN",
+    "SO-backend campaign on a qualified host (recorded evidence stands; not re-run)"
+  ],
+  "AC7-05-11": [
+    "BLOCKED",
+    "E2 two real hosts: Server+Connector not started"
+  ],
+  "AC7-05-12": [
+    "PASS",
+    "E1 for 0.2.6.dev0 declared with owners for E2/E3"
+  ]
+}

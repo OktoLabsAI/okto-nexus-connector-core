@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-This project is `0.2.5.dev0`, an unpublished development build (correction revision C1). Its API and
+This project is `0.2.6.dev0`, an unpublished development build (correction revision C1). Its API and
 contract bundle can still change. The current exact revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with
@@ -10,7 +10,7 @@ explicitly for local checks. No preceding Core release is declared supported;
 the current/previous-release TK-44 campaign remains unrun. The manifest's
 `core_version` field (currently `0.1.0.dev0`) means "introduced in": the
 Core version whose bundle first published this revision — it is NOT the
-producing package's version (0.2.5.dev0); a stable protocol revision
+producing package's version (0.2.6.dev0); a stable protocol revision
 intentionally keeps the introduced-in value across package releases.
 
 | Surface | Declared or observed | Qualified for production? |

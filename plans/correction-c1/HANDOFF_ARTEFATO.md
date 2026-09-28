@@ -186,3 +186,24 @@ códigos preservados.
    possíveis o pedido permanece consumido (V03).
 5. **Enumeração**: fronteira cap+1 exata (M01).
 6. Versão mínima esperada pelos hosts: **0.2.5.dev0**.
+
+
+## Mudanças que os hosts absorvem (C7 — reauditoria W01–W04)
+
+1. **Aprovações negativas após o prazo produtivo**: `decline`/`cancel`
+   a um pedido ainda observado (mesmo turno/identidade/geração) seguem
+   pela API pública após o vencimento da lease e em sessão
+   closing/faulted — classificadas como contenção (como
+   `turn.interrupt`); `accept`/input com conteúdo continuam recusados
+   com zero efeitos (W04).
+2. **Recovery de lease**: falha comprovadamente pré-entrega converge
+   quando o storage responde (hold liberado com prova, nunca por
+   tempo); ACK perdido pós-commit continua UNKNOWN com hold (W02).
+3. **Handles tardios**: ownership registrada antes de qualquer await;
+   close cancelado cooperativamente nunca precondiciona a força
+   (paralela); parada não comprovada mantém o handle fortemente
+   registrado e o próximo shutdown público o re-contém (W03).
+4. **Sessão ausente**: submit/steer retornam `SESSION_UNKNOWN` tipado
+   (nunca AttributeError); replay de recibos conhecidos continua
+   disponível pós-evicção (W01).
+5. Versão mínima esperada pelos hosts: **0.2.6.dev0**.

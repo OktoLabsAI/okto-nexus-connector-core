@@ -661,7 +661,12 @@ class LocalRuntimeCore:
                      "method": method, "params": params}
         if method == "control_request:can_use_tool":
             projected["local_generation"] = request["local_generation"]
-        self._authorize(context, action)
+        # C7/W04: ONE classification - decline/cancel map to a strictly
+        # negative native reply (never new permission); accept and any
+        # input carrying operator content remain productive.
+        containment_reply = operation.decision in {"decline", "cancel"}
+        self._authorize(context, action,
+                        containment_reply=containment_reply)
         try:
             _preflight_native_json(projected)
             if operation.operator_response is not None:
@@ -685,22 +690,34 @@ class LocalRuntimeCore:
              "response_sha256": (hashlib.sha256(encoded_response).hexdigest()
                                  if encoded_response is not None else None)})
         request_key = json.dumps(request_id)
+        # C7/W04: the kernel treats a strictly negative reply as
+        # containment (deadline-exempt like turn.interrupt).
+        kernel_containment = containment_reply
         # C2/R01+C2/R04: dedup read outside the locks; memory revalidation
         # afterwards.
         old = await self._existing(semantic, context)
         if old is not None:
             return old
         binding = self._session(operation.session_id, context,
-                                require_live_lease=True)
+                                require_live_lease=True,
+                                containment_reply=containment_reply)
         async with binding.control_lock:
             old = await self._existing(semantic, context)
             if old is not None:
                 return old
             binding = self._session(operation.session_id, context,
-                                      require_live_lease=True)
-            if (self._shutting_down or binding.closed or binding.closing or
-                    binding.faulted):
+                                    require_live_lease=True,
+                                    containment_reply=containment_reply)
+            if binding.closed:
+                raise CoreError("SESSION_CLOSED", "approval_decide")
+            if (self._shutting_down or binding.closing or binding.faulted) and                     not containment_reply:
+                # C7/W04: a closing/faulted stream still accepts its
+                # strictly NEGATIVE reply (containment); draining must
+                # never make a pending approval unanswerable.
                 raise CoreError("SESSION_CLOSING", "approval_decide")
+            if binding.lease_hold and not containment_reply:
+                raise CoreError("LEASE_UPDATE_PENDING", "approval_decide",
+                                retry_safe=True)
             if action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "approval_decide")
             if binding.adapter_id not in {"codex_app_server", "claude_stream"}:
@@ -725,7 +742,9 @@ class LocalRuntimeCore:
                     raise
                 binding.pending_native_requests.pop(request_key, None)
 
-            return await self._kernel.execute(semantic, context, effect)
+            return await self._kernel.execute(
+                    semantic, context, effect,
+                    containment=kernel_containment)
 
     async def _send(self, semantic: Operation, context: ExecutionContext,
                     verb: str, payload: Mapping[str, str]) -> OperationReceipt:
@@ -768,7 +787,8 @@ class LocalRuntimeCore:
                 raise CoreError("LEASE_UPDATE_PENDING", "admission",
                                 retry_safe=True,
                                 operation_id=semantic.operation_id)
-            elif (semantic.action in {"turn.submit", "turn.steer"} and
+            elif (fence_binding is not None and
+                  semantic.action in {"turn.submit", "turn.steer"} and
                     (fence_binding.lease_expired or
                      fence_binding.lease_hold)):
                 # C6/V01: an uncertain lease update (notably a reserved or
@@ -1653,47 +1673,66 @@ class LocalRuntimeCore:
     async def _contain_late_open(self, session: SessionKey,
                                  attempt: _OpeningAttempt,
                                  native) -> None:
-        """Contain a live handle returned after its open was cancelled.
-
-        C6/V02a/b: the graceful close gets a BUDGET - a hung close never
-        blocks the physical force (dispatched independently right after
-        the budget expires, without releasing the close barrier); a force
-        failure or an unproven stop leaves the handle REGISTERED in the
-        runtime's supervised late-handle table (strong reference), so a
-        later shutdown/recovery re-contains the SAME handle instead of
-        leaking it with only an uncertain ID.
+        """Contain a late handle with the COMMON containment model
+        (C7/W03): ownership is registered BEFORE any await; the graceful
+        close runs as an OWNED task whose cancellation is never a
+        precondition - the physical force is dispatched in PARALLEL on
+        its own task (a close that observes CancelledError but keeps
+        waiting its backend cannot delay it); an unproven stop keeps the
+        handle strongly registered for the next recovery pass.
         """
+        # C7/W03: register ownership FIRST - before close, observe,
+        # force or any journal I/O. A stalled observer or an exhausted
+        # shutdown budget leaves the handle reachable by the NEXT
+        # public lifecycle call.
+        self._late_handles.setdefault(session, _LateHandleRecord(
+            native, attempt))
         try:
             if self._sessions.get(session) is not None:
                 # A live binding owns this scope now; never fight it.
                 self._opening.pop(session, None)
+                self._late_handles.pop(session, None)
                 attempt.finished.set()
                 return
+            # Graceful close: owned task. At the budget it is CANCELLED
+            # cooperatively - and the cancellation's CONCLUSION is never
+            # awaited as a precondition (a close that observes
+            # CancelledError but keeps waiting its backend cannot delay
+            # the force, C7/W03).
             close = getattr(native, "close", None)
+            close_task = None
             if callable(close):
-                try:
-                    await asyncio.wait_for(
-                        close(), timeout=self._cleanup_budget_seconds)
-                except (asyncio.TimeoutError, TimeoutError,
-                        asyncio.CancelledError):
-                    if asyncio.current_task().cancelled():
-                        raise
-                except BaseException:
-                    pass
-            # Independent containment: never gated on the (possibly hung)
-            # graceful close or a stuck observation.
+                close_task = asyncio.create_task(close())
+                self._cleanup_tasks.add(close_task)
+                close_task.add_done_callback(self._cleanup_tasks.discard)
+
+            # Physical force in PARALLEL from the start: never gated on
+            # the close task, a stuck observer or storage.
             force = getattr(native, "force_stop", None)
+            force_task = None
             if callable(force):
+                force_task = asyncio.create_task(force())
+                self._cleanup_tasks.add(force_task)
+                force_task.add_done_callback(self._cleanup_tasks.discard)
+
+            if close_task is not None:
+                done, _pending = await asyncio.wait(
+                    {close_task}, timeout=self._cleanup_budget_seconds)
+                if close_task not in done:
+                    close_task.cancel()  # cooperative; not awaited
+
+            if force_task is not None:
                 try:
-                    await force()
+                    await asyncio.shield(force_task)
                 except BaseException:
                     pass
             try:
                 state, _ = await native.observe()
+            except asyncio.CancelledError:
+                raise
             except Exception:
                 state = "UNKNOWN"
-            contained = state == "STOPPED"
-            if contained:
+            if state == "STOPPED":
                 if attempt.slot_reserved and attempt.operation_id:
                     try:
                         await self._owned_slots.release_owned_slot(
@@ -1706,14 +1745,13 @@ class LocalRuntimeCore:
                 self._uncertain_opens.discard(session)
                 self._late_handles.pop(session, None)
                 self._opening.pop(session, None)
-            else:
-                # C6/V02b: unproven stop keeps the handle STRONGLY owned
-                # by the runtime for recovery; unknown conserves the
-                # handle, not just an ID.
-                self._late_handles[session] = _LateHandleRecord(
-                    native, attempt)
+            # else: OWNED_UNKNOWN - the record stays registered; the
+            # next public lifecycle call re-contains the SAME handle.
             attempt.finished.set()
         except asyncio.CancelledError:
+            # Shutdown budget exhaustion cancels the WAIT, not the
+            # ownership: the record (and any in-flight close/force
+            # tasks) stay available to the next recovery pass.
             raise
         except Exception:
             self._late_handles.setdefault(
@@ -1734,21 +1772,10 @@ class LocalRuntimeCore:
                                       context: ExecutionContext, *,
                                       revoke: bool,
                                       producer_done: bool) -> str:
-        """ONE finalizer for every lease-update termination (C6/V01).
-
-        Used by the direct success/error paths, the timeout conversion
-        and the late producer callback. A Future that finished with an
-        exception proves nothing about the commit: reconcile against the
-        durable record. Outcomes:
-        - COMMITTED revoke  -> close the in-memory fences, release holds.
-        - COMMITTED renew   -> apply only onto a still-valid binding.
-        - NOT_DELIVERED     -> release holds (proof: unchanged row AND
-                               the producer has finished).
-        - UNKNOWN           -> KEEP the productive hold; schedule the ONE
-                               coalesced reconciler; containment stays
-                               available and force never waits on this.
-        Returns the classification for callers/tests.
-        """
+        """ONE finalizer for every lease-update termination (C6/V01 +
+        C7/W02): classification is the SHARED transition function; the
+        reconciler inherits the producer's termination proof, so a
+        proven pre-delivery failure converges when storage answers."""
         if self._sessions.get(session) is not binding:
             binding.lease_cas_pending = False
             binding.lease_hold = False
@@ -1757,45 +1784,68 @@ class LocalRuntimeCore:
             lease = await self._journal.get_session_lease(session)
         except Exception:
             self._schedule_lease_reconciler(session, binding, context,
-                                            revoke=revoke)
+                                            revoke=revoke,
+                                            producer_done=producer_done)
             return "UNKNOWN"
+        outcome = self._classify_lease_row(
+            binding, lease, context, revoke=revoke,
+            producer_done=producer_done)
+        if outcome == "UNKNOWN":
+            self._schedule_lease_reconciler(session, binding, context,
+                                            revoke=revoke,
+                                            producer_done=producer_done)
+            return outcome
+        self._apply_lease_classification(binding, outcome, context,
+                                         revoke=revoke)
+        return outcome
+
+    def _classify_lease_row(self, binding: "_Session", lease, context, *,
+                            revoke: bool, producer_done: bool) -> str:
+        """ONE transition function (C7/W02) shared by the direct path,
+        the late callback and every reconciler retry: same proofs, same
+        classification, same actions. A producer that has TERMINATED
+        with a proven pre-delivery refusal (or rollback) plus a durable
+        row still showing the pre-attempt state resolves the attempt
+        safely - the hold is never released by time alone."""
         if lease is not None and lease.revoked:
-            binding.context = replace(
-                binding.context,
-                lease_deadline_monotonic=self._clock.monotonic(),
-                allowed_actions=frozenset())
-            binding.lease_expired = True
-            binding.revoked = True
-            binding.lease_cas_pending = False
-            binding.lease_hold = False
             return "COMMITTED_REVOKE"
         if (not revoke and lease is not None and
                 lease.authorization_revision == context.authorization_revision
                 and lease.connection_generation == context.connection_generation
                 and lease.owner_generation == context.session_owner_generation
                 and lease.configuration_revision == context.configuration_revision):
+            return "COMMITTED_RENEW"
+        if lease is None or producer_done:
+            return "NOT_DELIVERED"
+        return "UNKNOWN"
+
+    def _apply_lease_classification(self, binding: "_Session", outcome: str,
+                                    context, *, revoke: bool) -> None:
+        if outcome == "COMMITTED_REVOKE":
+            binding.context = replace(
+                binding.context,
+                lease_deadline_monotonic=self._clock.monotonic(),
+                allowed_actions=frozenset())
+            binding.lease_expired = True
+            binding.revoked = True
+        elif outcome == "COMMITTED_RENEW":
             if not (binding.closed or binding.closing or binding.revoked):
                 binding.context = context
                 binding.lease_expired = False
+        if outcome in {"COMMITTED_REVOKE", "COMMITTED_RENEW",
+                       "NOT_DELIVERED"}:
             binding.lease_cas_pending = False
             binding.lease_hold = False
-            return "COMMITTED_RENEW"
-        if lease is None or producer_done:
-            # No durable row, or the row still shows the pre-attempt
-            # state AND the producer has finished (nothing more can land).
-            binding.lease_cas_pending = False
-            binding.lease_hold = False
-            return "NOT_DELIVERED"
-        self._schedule_lease_reconciler(session, binding, context,
-                                        revoke=revoke)
-        return "UNKNOWN"
 
     def _schedule_lease_reconciler(self, session: SessionKey,
                                    binding: _Session,
                                    context: ExecutionContext, *,
-                                   revoke: bool) -> None:
-        """ONE coalesced reconciler per binding (C6/V01): bounded
-        backoff, never blocks containment, never a task per call."""
+                                   revoke: bool,
+                                   producer_done: bool) -> None:
+        """ONE coalesced reconciler per binding (C6/V01 + C7/W02): the
+        producer's termination proof travels WITH the attempt, so a
+        proven pre-delivery failure converges once storage answers -
+        never by timeout, never by dropping the hold."""
         if (binding.lease_reconcile_task is not None and
                 not binding.lease_reconcile_task.done()):
             return
@@ -1814,32 +1864,14 @@ class LocalRuntimeCore:
                     lease = await self._journal.get_session_lease(session)
                 except Exception:
                     continue
-                if lease is not None and lease.revoked:
-                    binding.context = replace(
-                        binding.context,
-                        lease_deadline_monotonic=self._clock.monotonic(),
-                        allowed_actions=frozenset())
-                    binding.lease_expired = True
-                    binding.revoked = True
-                    binding.lease_hold = False
-                    binding.lease_cas_pending = False
+                outcome = self._classify_lease_row(
+                    binding, lease, context, revoke=revoke,
+                    producer_done=producer_done)
+                if outcome != "UNKNOWN":
+                    self._apply_lease_classification(
+                        binding, outcome, context, revoke=revoke)
                     return
-                if lease is None or (
-                        not revoke and
-                        lease.authorization_revision == context.authorization_revision
-                        and lease.connection_generation == context.connection_generation):
-                    if not (binding.closed or binding.closing or
-                            binding.revoked):
-                        if (not revoke and lease is not None):
-                            binding.context = context
-                            binding.lease_expired = False
-                    binding.lease_hold = False
-                    binding.lease_cas_pending = False
-                    return
-                # row still shows the old state: producer may yet commit -
-                # keep the hold until it provably finished.
-                if (binding.lease_attempt_token != token):
-                    return
+                # UNKNOWN: the producer may still commit - keep the hold.
 
         binding.lease_reconcile_task = asyncio.create_task(_reconcile())
         self._cleanup_tasks.add(binding.lease_reconcile_task)
@@ -2285,10 +2317,17 @@ class LocalRuntimeCore:
             if not binding.sink_pending:
                 return
 
-    def _authorize(self, context: ExecutionContext, action: str) -> None:
+    def _authorize(self, context: ExecutionContext, action: str, *,
+                   containment_reply: bool = False) -> None:
         self._validate_lease_deadline(context)
+        # C7/W04: a strictly NEGATIVE approval reply (decline/cancel to
+        # a still-observed request of the same turn) is containment, not
+        # new permission: identity, allowed_actions, binding, generation
+        # and correlation all remain validated; only the PRODUCTIVE
+        # lease window is exempt - exactly like turn.interrupt.
         if (self._clock.monotonic() >= context.lease_deadline_monotonic and
-                action not in {"turn.interrupt", "runtime.close"}):
+                action not in {"turn.interrupt", "runtime.close"} and
+                not containment_reply):
             raise CoreError("AGENT_REVOKED", "admission", retry_safe=True)
         if action not in context.allowed_actions:
             raise CoreError("BINDING_NOT_AUTHORIZED", "admission", retry_safe=True)
@@ -2331,7 +2370,8 @@ class LocalRuntimeCore:
 
     def _session(self, session_id: str, context: ExecutionContext, *,
                  require_live_lease: bool = False,
-                 allow_newer_revision: bool = False) -> _Session:
+                 allow_newer_revision: bool = False,
+                 containment_reply: bool = False) -> _Session:
         binding = self._sessions.get(SessionKey(context.server_id,
                                                 context.executor_id, session_id))
         if binding is None:
@@ -2352,7 +2392,7 @@ class LocalRuntimeCore:
         if (context.configuration_revision != original.configuration_revision and
                 not allow_newer_revision):
             raise CoreError("PROFILE_DRIFT", "admission")
-        if (require_live_lease and
+        if (require_live_lease and not containment_reply and
                 self._clock.monotonic() >= original.lease_deadline_monotonic):
             raise CoreError("AGENT_REVOKED", "admission")
         return binding
