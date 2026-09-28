@@ -1,0 +1,35 @@
+{
+  "round": "C10",
+  "snapshot_auditado": "c5bd9557861f44577ae8dbf5585790acfd045fa5 (0.2.8.dev0)",
+  "versao_entregue": "0.2.9.dev0",
+  "cenario": [
+    {"id": "A01", "nome": "Catalogo publico instalado", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "c9.xml; teste catalogo preservado", "nota": "Nao refeito - validado pelo revisor."},
+    {"id": "A02", "nome": "Fonte unica para schemas", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "regeneracao em copia: 10 arquivos byte-identicos; manifesto a4fd8430...728630 inalterado", "nota": ""},
+    {"id": "A03", "nome": "Discovery padrao e attach", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "c9.xml (7)", "nota": ""},
+    {"id": "A04", "nome": "Recuperacao Y01/Y02 original", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "c9.xml (2 sementes originais)", "nota": ""},
+    {"id": "A05", "nome": "Produtor duravel nao cancelado", "estado_anterior": "FAIL", "estado": "PASS", "evidencia": "test_shutdown_deadline_does_not_cancel_owned_release_producer (c10.xml)", "nota": "Baseline FAIL registrado; produtores fora do gather cancelavel; rota unica _durable_release."},
+    {"id": "A06", "nome": "Prazo nao depende da limpeza de cancelamento", "estado_anterior": "FAIL", "estado": "PASS", "evidencia": "test_shutdown_return_does_not_wait_for_release_cancel_cleanup (c10.xml)", "nota": "Ja PASS na arvore local (C9); mantido como guarda do prazo publico."},
+    {"id": "A07", "nome": "Controle de forca concorrente", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "test_concurrent_shutdown_retry_coalesces_the_current_force_producer (c10.xml)", "nota": "Pico de 1 forca ativa."},
+    {"id": "A08", "nome": "Disponibilidade por API publica", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "tests/regression/test_c10_availability.py + wheel-consumer offline", "nota": "evaluate_runtime_availability sem imports privados; passiva (sem login/spawn)."},
+    {"id": "A09", "nome": "Build desconhecido nao vira READY", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_present_but_unprobed_is_never_ready; test_unqualified_build_reports_explicit_reason", "nota": "NOT_PROBED/UNQUALIFIED_BUILD com motivo explicito."},
+    {"id": "A10", "nome": "Plataforma e contencao", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_unsupported_execution_platform; test_containment_unavailable_blocks_readiness; test_attach_is_never_ready_and_not_discovered", "nota": "Registrado nao significa pronto; contencao nao verificavel = unverified (nunca READY)."},
+    {"id": "A11", "nome": "Dois candidatos da mesma familia", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_two_candidates_same_family_never_merge", "nota": "Refs e estados distintos; sem selecao por display_name."},
+    {"id": "A12", "nome": "Projecao remota segura", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_projection_is_versioned_json_safe_and_path_free; examples/availability_projection.py --json", "nota": "to_dict versionado; sem paths/classes/segredos; NXL intocado."},
+    {"id": "A13", "nome": "Cancelamento externo e release", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_external_cancellation_of_shutdown_keeps_owned_producer", "nota": "Produtor possuido sobrevive; commit tardio converge."},
+    {"id": "A14", "nome": "Release concluido antes da nova chamada", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_success_harvested_before_scheduling_no_redundant_release", "nota": "Sucesso colhido; nenhuma liberacao redundante (contagem no backend)."},
+    {"id": "A15", "nome": "ACK perdido e retry coalescido", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_ack_lost_after_commit_closes_same_obligation", "nota": "Consulta idempotente fecha a mesma obrigacao; sem inferencia de rollback."},
+    {"id": "A16", "nome": "Ledger retido e outro recurso vivo", "estado_anterior": "NOT_RUN", "estado": "PASS", "evidencia": "test_retained_ledger_does_not_delay_other_resource_force", "nota": "Forca independente da obrigacao duravel; convergencia exata apos restauracao."},
+    {"id": "A17", "nome": "Historico C2-C8", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "c2c3.xml (29), c4.xml (16), c5.xml (11), c6.xml (6), c7.xml (9), c8.xml (5)", "nota": "Mais c9.xml (7)."},
+    {"id": "A18", "nome": "Artefato e consumers isolados", "estado_anterior": "PASS", "estado": "PASS", "evidencia": "wheel cc56a693... / sdist 4418ab0b... byte-identicos Win<->WSL2; twine PASSED; offline -I OK; wheel-consumer da disponibilidade OK", "nota": "Bundle development-partial (manifesto inalterado); nao publicado."},
+    {"id": "A19", "nome": "Qualificacao real de backend/provider", "estado_anterior": "BLOCKED", "estado": "BLOCKED", "evidencia": "PENDENCIAS.md", "nota": "Exige host qualificado (proc_children/contencao efetiva) e providers reais - externo ao Core."},
+    {"id": "A20", "nome": "UI real e integracao de hosts", "estado_anterior": "NOT_RUN", "estado": "NOT_RUN", "evidencia": "examples/availability_projection.py --json (fixture) + criterios em docs/api.md", "nota": "Pertence aos repositorios Server/Connector; Core entrega fatores tecnicos e fixture."}
+  ],
+  "suites": {
+    "windows_313": "800 passed / 74 skipped",
+    "windows_311": "800 passed / 74 skipped",
+    "windows_312": "800 passed / 74 skipped",
+    "wsl2_313": "855 passed / 19 skipped",
+    "wsl2_311": "855 passed / 19 skipped",
+    "wsl2_312": "855 passed / 19 skipped"
+  }
+}

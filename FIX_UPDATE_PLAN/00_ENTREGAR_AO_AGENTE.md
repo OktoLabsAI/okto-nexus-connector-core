@@ -1,50 +1,39 @@
-# Entrega ao agente — C9
+# Entregar o pacote completo ao agente
 
-Copie este diretório inteiro, incluindo `regressoes/`, para uma pasta de planejamento do repositório. Não entregue somente os Markdown. As correções C8 passaram na auditoria; preservar os avanços.
+O snapshot revisto é `c5bd9557861f44577ae8dbf5585790acfd045fa5` (`0.2.8.dev0`). Há uma correção residual de lifecycle comprovada por dois testes e uma parte funcional do C9 ainda não entregue. O catálogo público existente foi validado; não refazê-lo.
+
+Copie o ZIP inteiro para uma pasta de trabalho do repositório, preservando `regressoes/`, `evidencias/` e os documentos. Os testes desta revisão não estão contidos apenas na descrição Markdown.
 
 ## Prompt
 
 ```text
-Leia 01_RELATORIO_VALIDACAO.md, 02_PLANO_C9_CATALOGO_E_RECUPERACAO.md e
-03_MATRIZ_ACEITE.md. Trabalhe sobre o HEAD atual do Core, sem reset para a
-referência 6a43e90 (0.2.7.dev0) nem perda de alterações posteriores.
+Leia 01_RELATORIO_VALIDACAO.md, 02_PLANO_COMPLEMENTAR_C10.md e
+03_MATRIZ_ACEITE.md. Trabalhe no HEAD atual sem reset e sem perder
+alterações posteriores ao snapshot c5bd955.
 
-Implemente as correções Y01/Y02 e publique o catálogo de runtimes C01.
-A fonte única deve ser o registro do Core, com projeção pública sem detalhes
-de carregamento; Server, Connector e UI não mantêm arrays autoritativos.
-Separe conhecido, instalado, qualificado, pronto para runtime e autorizado
-para binding. Não criar MCP stdio, servidor/proxy MCP ou protocolo remoto
-novo no Core.
+Execute executar_verificacao.py antes de editar. Implemente C10:
+1. conclua a avaliação técnica pública por candidato prevista em
+   C9-01.4, reaproveitando catálogo/registry/qualificação/preflight;
+2. preserve o produtor durável da liberação quando o shutdown esgotar
+   sua espera, inclusive se o cancelamento do backend precisar aguardar.
 
-Execute as regressões fornecidas e preserve C8/C7. No retry de força,
-uma observação bloqueada não pode impedir a contenção sobre recurso próprio.
-Não regredir a coalescência de força física. No release persistente, o prazo
-do shutdown encerra só a espera, mantendo obrigação/produtor e recuperação.
+Não replique listas/regras nos consumidores, não exponha classes ou
+credenciais, não crie MCP stdio/proxy e não reescreva os adaptadores.
+Mantenha Y01/Y02 e os controles anteriores. Novos nomes de API são
+livres, mas devem ser públicos, tipados e consumíveis no wheel.
 
-Os agentes de Server e Connector podem desenvolver em paralelo consumindo o
-contrato público. Entregue primeiro a API do catálogo, depois wheel pinado
-com os reparos. Não compense gaps nos hosts copiando adapters/imports privados.
-
-Registre testes/camadas, XMLs, hashes, mudanças de contrato e pendências.
-Testes sintéticos não qualificam provider real nem integração de dois hosts.
-Não marque NOT_RUN/BLOCKED como PASS. Não publique release sem autorização.
+Entregue correções executadas, testes, diff, versões e evidências,
+não outro plano. Não declare qualificação de provider/SO ou E2 a
+partir de peers sintéticos. Separe READY técnico da autorização do
+agente que continua no Server.
 ```
 
-## Executar
+## Executar reproduções
 
-Instale no ambiente de trabalho as dependências reais do projeto e de teste. Depois:
+Com as dependências de teste já instaladas no ambiente do Core:
 
 ```bash
-python executar_verificacao.py --repo /caminho/do/core --output /caminho/evidencias
+python executar_verificacao.py --repo /caminho/do/core --output /caminho/das/evidencias
 ```
 
-O runner não instala dependências, não modifica fontes e não remove gates de contenção. Nesta auditoria, os dois testes C9 falham; C8 original tem cinco PASS e C7 original nove PASS. Contagens de campanhas repetidas/subconjuntos não somam ao total da suíte.
-
-## Conteúdo
-
-`01_RELATORIO_VALIDACAO.md`: resultado e decisão.  
-`02_PLANO_C9_CATALOGO_E_RECUPERACAO.md`: trabalho explícito por fase.  
-`03_MATRIZ_ACEITE.md`: 24 cenários com camadas/estados.  
-`regressoes/`: testes C9 e sementes originais C8/C7.  
-`evidencias/`: logs, XMLs, observação do catálogo, trecho de código e hashes.  
-`artefatos/`: wheel/sdist gerados na auditoria, sem correções; não são a futura versão C9.
+O runner não instala dependências, não escreve no produto e não desliga contenção. No snapshot atual são esperadas duas falhas; depois da correção devem passar. A matriz inclui verificações de disponibilidade ainda a implementar: não são testes arbitrários de presença de uma função com nome imposto.

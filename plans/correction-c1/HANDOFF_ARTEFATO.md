@@ -249,6 +249,39 @@ códigos preservados.
    obrigação + release em voo sobrevivem ao timeout e convergem no
    próximo lifecycle; contenção de recursos vivos roda antes das
    liberações duráveis.
-6. Versão mínima esperada pelos hosts: **0.2.8.dev0** (a validação
-   recomenda iniciar Connector e integração Server AGORA, com este wheel
-   pinado).
+6. Versão mínima esperada pelos hosts: **0.2.9.dev0** (a validação
+   C9 recomendava iniciar com 0.2.8.dev0 pinado; a reavaliação C10
+   concluiu o contrato e recomenda pinar 0.2.9.dev0).
+
+### Adendo C10 — disponibilidade técnica por candidato (Z01) e produtor durável (Z02)
+
+O contrato de binding está COMPLETO para consumo:
+
+- **Catálogo** (`get_runtime_catalog()`): quais TIPOS este Core conhece
+  (validado pela reavaliação; não refeito).
+- **Disponibilidade** (`evaluate_runtime_availability(inventory)` +
+  `AvailabilityReport.to_dict()`): quais INSTALAÇÕES do host estão
+  tecnicamente prontas e por quê — passiva, sem login/spawn, reusando
+  as políticas reais do Core (plataforma do registry, qualificação
+  exata de build, preflight de contenção do host de EXECUÇÃO). Estados:
+  `NOT_INSTALLED`/`UNSUPPORTED_PLATFORM`/`NOT_PROBED`/
+  `UNQUALIFIED_BUILD`/`CONTAINMENT_UNAVAILABLE`/`PREPARATION_REQUIRED`/
+  `READY_FOR_RUNTIME` com `reasons` estáveis; `NOT_PROBED` nunca é
+  READY; attach nunca qualificado por existir; builds da mesma família
+  nunca fundidos (`candidate_ref` opaco = fingerprint do inventário do
+  host produtor — ELE resolve no prepare, que revalida). A projeção
+  `to_dict()` é versionada e JSON-safe (sem paths/classes/segredos);
+  frames NXL intocados — transmitam-na pela API versionada de vocês.
+  `examples/availability_projection.py --json` emite a fixture com os
+  critérios de aceite para os testes de UI do Server.
+  **`READY_FOR_RUNTIME` é apenas técnico**: a decisão canônica de
+  binding e a autorização do agente continuam NO SERVER.
+- **Shutdown/recuperação (Z02)**: produtores de liberação durável são
+  owned e sobrevivem ao orçamento/cancelamento do chamador; sucesso
+  disponível é colhido antes de qualquer novo agendamento; ACK perdido
+  fecha a MESMA obrigação via consulta idempotente; obrigações duráveis
+  nunca atrasam contenção de outros recursos.
+- Wheel pinado: `sha256:cc56a693504bb5d3a8be394b626e82ffe1663cc38be415bee578b275ab5bfc7d`
+  (0.2.9.dev0; byte-idêntico Windows↔WSL2; sdist
+  `sha256:4418ab0b6a16890f8881c5102b14f2645813d80f9fdbd17397ca6a698a1bdbb3`);
+  manifesto NXL `a4fd8430…728630` inalterado.

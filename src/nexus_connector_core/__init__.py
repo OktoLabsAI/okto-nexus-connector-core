@@ -42,10 +42,14 @@ from .catalog import (
     RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog,
     CATALOG_FORMAT_VERSION,
 )
+from .availability import (
+    AvailabilityReport, CandidateAvailability,
+    evaluate_runtime_availability, AVAILABILITY_FORMAT_VERSION,
+)
 from .runtime import LocalRuntimeCore
 from .slot_ledger import SQLiteOwnedSlotLedger
 
-__version__ = "0.2.8.dev0"
+__version__ = "0.2.9.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
@@ -56,5 +60,6 @@ __all__ = [
     "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
     "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",
     "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "CATALOG_FORMAT_VERSION",
+    "AvailabilityReport", "CandidateAvailability", "evaluate_runtime_availability", "AVAILABILITY_FORMAT_VERSION",
     "SQLiteOwnedSlotLedger",
 ]

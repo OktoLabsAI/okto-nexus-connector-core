@@ -1,69 +1,67 @@
 {
-  "c8_both": {
-    "tests": 10,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 0,
-    "passed": 10,
-    "time_seconds": 8.575
-  },
-  "c7_original": {
-    "tests": 9,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 0,
-    "passed": 9,
-    "time_seconds": 2.656
-  },
-  "history": {
-    "tests": 71,
-    "failures": 0,
-    "errors": 0,
-    "skipped": 1,
-    "passed": 70,
-    "time_seconds": 72.668
-  },
-  "new_final": {
-    "tests": 2,
+  "new_repeat": {
+    "tests": 3,
     "failures": 2,
     "errors": 0,
     "skipped": 0,
-    "passed": 0,
-    "time_seconds": 4.842
+    "passed": 1,
+    "seconds": 5.062
   },
-  "new_final_repeat": {
-    "tests": 2,
+  "c9_delivered": {
+    "tests": 7,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 7,
+    "seconds": 2.76
+  },
+  "new_failures": {
+    "tests": 3,
     "failures": 2,
     "errors": 0,
     "skipped": 0,
-    "passed": 0,
-    "time_seconds": 4.892
+    "passed": 1,
+    "seconds": 5.036
+  },
+  "c9_original": {
+    "tests": 2,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 2,
+    "seconds": 1.342
   },
   "full": {
-    "tests": 847,
+    "tests": 854,
     "failures": 123,
     "errors": 0,
     "skipped": 20,
-    "passed": 704,
-    "time_seconds": 178.462
+    "passed": 711,
+    "seconds": 133.465
   },
-  "scope": {
-    "snapshot": "6a43e90a787f3a87af8e26f3f93d4c708cf8a0a8",
-    "version": "0.2.7.dev0",
-    "python": "3.13.5 (main, Jul 15 2026, 20:25:40) [GCC 14.2.0]",
-    "platform": "Linux-6.18.44-x86_64-with-glibc2.41",
-    "native_providers_executed": false,
-    "real_hosts_integration": false,
-    "original_source_files": 390,
-    "modified_original_files": 0
+  "history_c2_c8": {
+    "tests": 76,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 1,
+    "passed": 75,
+    "seconds": 76.548
   },
-  "packaging": {
-    "wheel": "PASS",
-    "sdist": "PASS",
-    "embedded_synthetic": "PASS",
-    "remote_synthetic": "PASS",
-    "bundle": "PASS with explicit development-partial",
-    "catalogue_public_contract": "MISSING",
-    "internal_catalogue": "PRESENT"
+  "original_zip": {
+    "name": "okto-nexus-connector-core-main(7).zip",
+    "commit": "c5bd9557861f44577ae8dbf5585790acfd045fa5",
+    "version": "0.2.8.dev0",
+    "sha256": "19da9fc291540242da3e66d8d3daf65de42b8d1a71c0ca08a00d212fc717bd7a"
+  },
+  "integrity": {
+    "original_files": 403,
+    "changed_original_files": []
+  },
+  "distributed_runner": {
+    "tests": 12,
+    "failures": 2,
+    "errors": 0,
+    "skipped": 0,
+    "passed": 10
   }
 }

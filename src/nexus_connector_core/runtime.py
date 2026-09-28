@@ -205,9 +205,11 @@ class _ReleaseObligation:
     __slots__ = ("key", "session_id", "attempt", "retry_task")
 
     def __init__(self, key: "OperationKey", session_id: str,
-                 attempt: "_OpeningAttempt"):
+                 attempt: "._OpeningAttempt | None"):
         self.key = key
         self.session_id = session_id
+        # C10/Z02: optional - owned sessions (independent containment)
+        # have no opening attempt to signal.
         self.attempt = attempt
         # C9/Y02: the owned durable-release producer (coalesced; the
         # obligation survives a budget-expired wait).
@@ -380,6 +382,9 @@ class LocalRuntimeCore:
         self._late_handles: dict[SessionKey, _LateHandleRecord] = {}
         # C8/X02: durable slot-release obligations after proven stops.
         self._release_obligations: dict[SessionKey, _ReleaseObligation] = {}
+        # C10/Z02: strong refs for owned durable-release producers (NOT
+        # members of the cancellable cleanup gather).
+        self._release_producers: set[asyncio.Task] = set()
         # C3/S08: one-shot public disposal of factory-owned executors.
         self._factory_disposed = False
 
@@ -1192,9 +1197,10 @@ class LocalRuntimeCore:
         # resource's force/recovery.
         if self._late_handles:
             self._retry_late_handles(policy)
-        # C8/X02 + C9/Y02: the durable release retries run as an OWNED
-        # coalesced producer bounded by the cleanup budget; the public
-        # return never waits unboundedly and the obligation survives.
+        # C8/X02 + C9/Y02 + C10/Z02: the durable release retries run as
+        # OWNED producers; the public return waits only its budget (a
+        # NON-destructive asyncio.wait - never a gather that cancels)
+        # and the obligation + in-flight producer survive the timeout.
         if self._release_obligations:
             await self._retry_release_obligations()
         try:
@@ -1831,17 +1837,13 @@ class LocalRuntimeCore:
                     key = OperationKey(session.server_id,
                                        session.executor_id,
                                        attempt.operation_id)
-                    try:
-                        await self._owned_slots.release_owned_slot(
-                            key, session.session_id)
-                    except CoreError:
-                        # C8/X02: the durable release failed - keep the
-                        # obligation identifiable for the next public
-                        # lifecycle call; NEVER silently drop it.
-                        released = False
-                        self._release_obligations[session] = \
-                            _ReleaseObligation(key, session.session_id,
-                                               attempt)
+                    # C10/Z02.3: the INITIAL stopped-handle release and
+                    # every retry share the SAME obligation record - an
+                    # owned producer that survives waiter cancellation
+                    # (a refused release keeps the obligation for the
+                    # next public lifecycle call; never dropped).
+                    released = await self._durable_release(
+                        session, key, attempt)
                 if released:
                     self._uncertain_opens.discard(session)
                     self._late_handles.pop(session, None)
@@ -1902,24 +1904,59 @@ class LocalRuntimeCore:
         return record.last_state if record.last_state is not None \
             else "UNKNOWN"
 
+    def _process_release_results(self) -> None:
+        """Consume FINISHED producers exactly once (C10/Z02.3).
+
+        Runs before any scheduling decision on every route: a success
+        already available is applied (the exact obligation is
+        finalized), a pre-delivery refusal or uncertain outcome clears
+        the finished task and keeps the obligation retryable (C8/X02).
+        A NEW producer may only be scheduled after this step.
+        """
+        for session, obligation in list(
+                self._release_obligations.items()):
+            task = obligation.retry_task
+            if task is None or not task.done():
+                continue  # in flight: shared, never duplicated
+            try:
+                task.result()
+            except BaseException:
+                # Pre-delivery refusal or uncertain outcome: keep the
+                # obligation; clear the FINISHED task so the next
+                # lifecycle call may retry the same reservation.
+                obligation.retry_task = None
+                continue
+            del self._release_obligations[session]
+            self._uncertain_opens.discard(session)
+            self._opening.pop(session, None)
+            if obligation.attempt is not None:
+                obligation.attempt.finished.set()
+
     def _schedule_release_retries(self) -> "asyncio.Task | None":
         """Schedule ONE coalesced release-retry producer (C9/Y02).
 
-        Each obligation's durable release runs as an OWNED task; the
-        scheduler waits only within the cleanup budget. A blocked or
-        slow ledger ends the WAIT - never the producer: the obligation
-        and its in-flight release stay for the next public lifecycle
-        call, and no other resource's containment waits behind it.
+        Results of FINISHED producers are consumed FIRST (C10/Z02.3);
+        then each still-pending obligation without an in-flight task
+        gets exactly one OWNED producer. The collector is a pure
+        bounded waiter: a blocked or slow ledger ends the WAIT - never
+        a producer - and the obligation plus its in-flight release
+        survive for the next public lifecycle call.
         """
+        self._process_release_results()
         pending = [o for o in self._release_obligations.values()
-                   if o.retry_task is None or o.retry_task.done()]
+                   if o.retry_task is None]
         for obligation in pending:
+            # C10/Z02: the durable producer is owned by the OBLIGATION
+            # (strong ref) - NEVER a member of the cancellable cleanup
+            # gather: a response-budget expiry must not cancel a commit
+            # the runtime keeps supervising. Only a NEW lifecycle call
+            # may inspect/consume its result.
             obligation.retry_task = asyncio.ensure_future(
                 self._owned_slots.release_owned_slot(
                     obligation.key, obligation.session_id))
-            self._cleanup_tasks.add(obligation.retry_task)
+            self._release_producers.add(obligation.retry_task)
             obligation.retry_task.add_done_callback(
-                self._cleanup_tasks.discard)
+                self._release_producers.discard)
 
         async def _collect() -> None:
             tasks = [o.retry_task for o in
@@ -1928,28 +1965,50 @@ class LocalRuntimeCore:
             if tasks:
                 await asyncio.wait(set(tasks),
                                    timeout=self._cleanup_budget_seconds)
-            for session, obligation in list(
-                    self._release_obligations.items()):
-                task = obligation.retry_task
-                if task is None or not task.done():
-                    continue  # in flight: obligation stays, retry shared
-                try:
-                    task.result()
-                    del self._release_obligations[session]
-                    self._uncertain_opens.discard(session)
-                    self._opening.pop(session, None)
-                    obligation.attempt.finished.set()
-                except BaseException:
-                    # Pre-delivery refusal or uncertain outcome: the
-                    # obligation stays retryable (C8/X02 semantics);
-                    # the finished task is cleared so a later lifecycle
-                    # call may retry.
-                    obligation.retry_task = None
 
         collector = asyncio.ensure_future(_collect())
-        self._cleanup_tasks.add(collector)
-        collector.add_done_callback(self._cleanup_tasks.discard)
+        # The collector only ENDS waits (asyncio.wait with timeout) -
+        # cancelling it never touches the producers - but it stays out
+        # of the cleanup gather as well so the public return never
+        # waits for its teardown either.
+        self._release_producers.add(collector)
+        collector.add_done_callback(self._release_producers.discard)
         return collector
+
+    async def _durable_release(self, session: SessionKey,
+                               key: "OperationKey",
+                               attempt: "._OpeningAttempt | None") -> bool:
+        """The ONE durable-release route for a proven-stopped slot
+        (C10/Z02.3): initial release of a stopped handle, containment
+        retry and shutdown all consult the OBLIGATION first.
+
+        An in-flight producer is SHARED (never duplicated); a finished
+        one is consumed before anything new is scheduled; the waiter
+        awaits it through a SHIELD - cancelling the waiter (a
+        supervisor in the cleanup gather, the shutdown budget, the
+        caller itself) ends only this wait. The owned producer keeps
+        running and the reservation stays supervised until durable
+        confirmation. Returns True ONLY on confirmed release.
+        """
+        obligation = self._release_obligations.get(session)
+        if obligation is None:
+            obligation = _ReleaseObligation(key, session.session_id,
+                                            attempt)
+            self._release_obligations[session] = obligation
+        self._schedule_release_retries()
+        task = obligation.retry_task
+        if task is None:
+            # Another route consumed a confirmed success just now.
+            return session not in self._release_obligations
+        try:
+            await asyncio.shield(task)
+        except BaseException:
+            # Failed, uncertain, or the WAITER was cancelled: the
+            # obligation keeps supervising the exact reservation -
+            # never re-force, never drop, never re-deliver.
+            return False
+        self._process_release_results()
+        return session not in self._release_obligations
 
     async def _retry_release_obligations(self) -> None:
         """Backwards-compatible bounded await over the coalesced
@@ -2399,14 +2458,16 @@ class LocalRuntimeCore:
             process_state = "UNKNOWN"
         if process_state == "STOPPED":
             if binding.slot_reserved:
-                try:
-                    await self._owned_slots.release_owned_slot(
-                        OperationKey(session.server_id, session.executor_id,
-                                     binding.opening_operation_id),
-                        session.session_id)
-                except CoreError:
-                    pass
-                binding.slot_reserved = False
+                # C10/Z02.3: same unified durable route - a failed or
+                # blocked ledger keeps a TRACKED obligation instead of
+                # being silently swallowed; the reservation converges
+                # on a later public lifecycle call.
+                released = await self._durable_release(
+                    session,
+                    OperationKey(session.server_id, session.executor_id,
+                                 binding.opening_operation_id),
+                    None)
+                binding.slot_reserved = not released
             binding.closed = True
             if (binding.lease_task is not None and
                     binding.lease_task is not asyncio.current_task()):

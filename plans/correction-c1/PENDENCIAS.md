@@ -54,6 +54,27 @@ repositório sem a ação do dono correspondente.
 - O arquivo `=1` (pré-existente, não rastreado) permanece **preservado e
   fora de commits**, conforme instrução permanente.
 
+## Atualização C10 (2026-09-30) — 0.2.9.dev0
+
+- **Z02 corrigido**: o produtor de liberação durável não é mais membro
+  do gather cancelável do shutdown; a rota de liberação de handle
+  parado é ÚNICA (`_durable_release`) — espera sempre via shield;
+  sucesso disponível é colhido antes de agendar; ACK perdido fecha a
+  mesma obrigação; obrigações duráveis nunca atrasam contenção de
+  outros recursos. Sementes do revisor verdes (A05/A06 + controle A07)
+  + A13–A16.
+- **Z01 entregue**: avaliação técnica pública por candidato
+  (`evaluate_runtime_availability`) — o contrato de binding está
+  completo para os hosts; fixture e critérios de UI no exemplo
+  (`examples/availability_projection.py --json`).
+- E1 re-declarado para **0.2.9.dev0** (adendo C10 em
+  `release_decision.md`). E2/E3 seguem bloqueados externamente (hosts
+  reais / providers reais / duas máquinas) — A19 BLOCKED, A20 NOT_RUN
+  na matriz C10 (`plans/correction-c10/matriz_aceite.json`).
+- Artefato byte-idêntico Windows↔WSL2 (wheel `sha256:cc56a693…bfc7d`),
+  twine + offline verdes, **não publicado** (publicação PyPI segue
+  exigindo sessão conjunta).
+
 ## Fontes de verdade
 
 - Matriz RC: `plans/correction-c1/matriz_rc.md` (129 cenários: 120 PASS,

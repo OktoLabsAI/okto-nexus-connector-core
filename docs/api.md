@@ -1,4 +1,4 @@
-# Core API (`0.2.8.dev0`)
+# Core API (`0.2.9.dev0`)
 
 This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,
@@ -11,6 +11,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `RuntimeCore`, `LocalRuntimeCore`, `create_runtime` | Async port, local implementation and the supported composition factory. `create_runtime(journal=…, environment=…, candidates=…, workspace_roots=…, …)` builds the real runtime from typed host inputs (trusted callbacks for Codex client identity/resume/Pi native action, budgets, optional installation ledger, clock and event sink); hosts never import the private adapter bridge. A `native_factory` parameter exists for contract-level smokes with fakes. |
 | `ExecutionContext` | Host-issued server/executor/binding/agent/workspace identity, revisions, generations, monotonic lease deadline and allowed actions. Never derive it from a peer payload. |
 | `RuntimeCatalog`, `RuntimeDescriptor`, `get_runtime_catalog`, `CATALOG_FORMAT_VERSION` | Single-source runtime catalog (C9): enumerate what this Core knows - adapter IDs, family, connection mode, implementation platforms, support status (`claude_attach` = `registered_unqualified`, never READY by existing) - cheap, sync, no native provider modules, no spawn/journal/credentials. `DiscoveryRequest(adapter_ids=None)` asks the catalog which adapters admit discovery; availability/eligibility are separate concepts (local inventory + Server-side binding policy). |
+| `evaluate_runtime_availability`, `AvailabilityReport`, `CandidateAvailability`, `AVAILABILITY_FORMAT_VERSION` | Per-candidate TECHNICAL availability (C10): assess an `Inventory` (from `runtime.discover`) passively - the registry's platform support, `compatibility`'s exact-build qualification and the containment preflight of the EXECUTING host (never the rendering UI's). States: `NOT_INSTALLED`, `UNSUPPORTED_PLATFORM`, `NOT_PROBED`, `UNQUALIFIED_BUILD`, `CONTAINMENT_UNAVAILABLE`, `PREPARATION_REQUIRED`, `READY_FOR_RUNTIME` with stable `reasons` codes; an absent probe stays inconclusive (never READY by omission); two builds of one family never merge (`candidate_ref` = the producing host's inventory fingerprint; the executing host resolves it at prepare time, which revalidates). `AvailabilityReport.to_dict()` is the explicit versioned JSON-safe remote projection (no paths/modules/credentials; NXL frames unchanged - Connector/Server transmit it on their own versioned API). `READY_FOR_RUNTIME` is TECHNICAL ONLY - the agent's authorization stays in the Nexus Server. |
 | `DiscoveryRequest`, `Inventory`, `InstallationCandidate` | Discover or pass explicitly selected local native candidates; discovery is not qualification. |
 | `LaunchIntent`, `PreparedLaunch`, `OpenOperation` | Prepare a selected managed launch and open a session. `open` revalidates binary/profile/root before native effect. |
 | `TurnOperation`, `ControlOperation`, `CloseOperation` | Submit text, interrupt/steer a targeted turn, or close an owned session. Steer targeting is adapter-specific (see below). Use a new operation ID for each new intent. |
@@ -147,3 +148,33 @@ The `RuntimeCore` protocol and the top-level exported dataclasses are the
 intended stable surface. Implementation-specific journal/configuration/native
 helpers currently used by synthetic consumers are provisional and must not be
 treated as a qualified cross-application integration contract.
+
+## Availability consumption (C10) - the two integration paths
+
+The catalog (`get_runtime_catalog()`) plus
+`evaluate_runtime_availability()` complete the selector contract:
+
+* **Local (Nexus Server, embedded Core):** the Server composes its
+  `RuntimeCore`, runs `await runtime.discover(DiscoveryRequest())` and
+  evaluates the returned inventory on ITS OWN host, then applies agent
+  policy/permissions on top of the TECHNICAL states before publishing
+  options to the UI. `READY_FOR_RUNTIME` is never the authorization.
+* **Remote (Nexus Connector):** the Connector's Core produces the
+  facts of ITS host - `evaluate_runtime_availability(inventory)` and
+  `report.to_dict()` - and transmits the versioned projection to the
+  Server through the Connector/Server API. The Server renders that
+  executor's options from the received facts; it never re-derives
+  build/platform/containment rules and never substitutes its own
+  platform for the executing host's.
+
+The UI renders received descriptors/states verbatim (state + `reasons`
+per candidate); it keeps no authoritative runtime array. `OFFLINE`,
+`STALE`, TTL, connection and authorization states belong to the
+hosts' application layer, not to the catalog/availability projection.
+`examples/availability_projection.py` runs the reference scenario
+(two builds of one family, attach registered-but-unqualified,
+missing installation) and emits the JSON fixture
+(`--json`) with the acceptance criteria for Server UI tests:
+every row renders state+reasons, same-family rows never collapse,
+attach never renders enabled, `NOT_PROBED` never renders ready, and
+`display_name` is never an identity.

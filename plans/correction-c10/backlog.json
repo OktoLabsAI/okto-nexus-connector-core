@@ -1,0 +1,41 @@
+{
+  "round": "C10",
+  "audited_snapshot": "c5bd9557861f44577ae8dbf5585790acfd045fa5",
+  "delivered_version": "0.2.9.dev0",
+  "items": [
+    {
+      "id": "C10-00",
+      "title": "Baseline e preservação",
+      "status": "DONE",
+      "evidence": "plans/correction-c10/evidence/Z01-Z02.md (C10-00)",
+      "notes": "Sementes reconstruídas dos nomes exatos; baseline FAIL registrado (A05); sem xfail/skip residual; pacote do revisor preservado; desvio de ambiente (site-packages) isolado e documentado."
+    },
+    {
+      "id": "C10-01",
+      "title": "Disponibilidade técnica pública para binding (Z01)",
+      "status": "DONE",
+      "evidence": "src/nexus_connector_core/availability.py; tests/regression/test_c10_availability.py (13); examples/availability_projection.py; docs/api.md",
+      "notes": "evaluate_runtime_availability passiva com políticas reais; 7 estados técnicos + reasons estáveis; candidate_ref opaco; projeção to_dict versionada JSON-safe; NXL intocado (regeneração byte-idêntica); READY_FOR_RUNTIME nunca é autorização."
+    },
+    {
+      "id": "C10-02",
+      "title": "Produtor durável separado da espera cancelável (Z02)",
+      "status": "DONE",
+      "evidence": "src/nexus_connector_core/runtime.py (_process_release_results/_schedule_release_retries/_durable_release/_release_producers); tests/regression/test_c10_audit.py (3) + tests/regression/test_c10_recovery_controls.py (4)",
+      "notes": "Produtores owned fora do gather cancelável; resultados consumidos antes de agendar; rota única _durable_release para handle parado (contain_late_open + independent_containment sem engolir falha durável); espera sempre shield; A05-A07 e A13-A16 verdes."
+    },
+    {
+      "id": "C10-03",
+      "title": "Integração e encerramento",
+      "status": "DONE",
+      "evidence": "dist/ 0.2.9.dev0 byte-idêntico Win<->WSL2; plans/correction-c10/evidence/*.xml; docs/compatibility.md; release_decision.md (Adendo C10)",
+      "notes": "Wheel cc56a693... sdist 4418ab0b...; twine + offline OK; nao publicado; ajuste documental C9->XMLs aplicado; E2/E3 e qualificacoes reais seguem bloqueados externamente."
+    }
+  ],
+  "matrix_summary": {"PASS": 18, "FAIL": 0, "NOT_RUN": 1, "BLOCKED": 1},
+  "open": [
+    "A19 BLOCKED: campanha de SO com contencao efetiva exige host qualificado (proc_children etc.) - externo.",
+    "A20 NOT_RUN: UI real e integracao Server<->Connector em dois hosts - pertence aos aplicativos.",
+    "PyPI: publicacao apenas em sessao conjunta com o usuario."
+  ]
+}

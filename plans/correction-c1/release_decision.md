@@ -181,7 +181,7 @@ C2–C7 preservadas (29+16+11+6+9); suítes: Windows 3.13/3.11/3.12 =
 reais, attach, billing e PyPI conjunta.
 
 
-## Adendo C9 (2026-09-30) — validação independente de `6a43e90`
+## Adendo C9 (2026-09-30; campanhas de suíte registradas nos XMLs como 2026-09-28 — ajuste documental do C10-03.2) — validação independente de `6a43e90`
 
 Oitava rodada (`FIX_UPDATE_PLAN/`): validação com 2 achados de
 recuperação (Y01 P1: retry de força gated por observer travado; Y02 P2:
@@ -200,3 +200,45 @@ Artefato **0.2.8.dev0** byte-idêntico (wheel
 `sha256:6f4823f3…de0e23a`, sdist `sha256:9bed1b62…62daec5`), twine/
 offline verdes, **não publicado**. **E1 declarado para 0.2.8.dev0**;
 E2/E3 seguem bloqueados pelos hosts reais.
+
+## Adendo C10 (2026-09-30) — conclusão da disponibilidade pública e do produtor durável
+
+Reavaliação independente de `c5bd955` (`0.2.8.dev0`): dois pontos — **Z01**
+(a parte C9-01.4 do contrato de binding: avaliação técnica pública por
+candidato) e **Z02** (P2: o gather de cleanup do shutdown ainda cancelava
+o produtor de liberação durável; duas reproduções independentes). Sem
+novo P1 nos caminhos verificados; catálogo público VALIDADO (não refeito).
+
+Correção executada (0.2.9.dev0):
+
+- **Z02**: `_process_release_results` consome produtores terminados ANTES
+  de agendar (colheita de sucesso disponível; recusa pré-entrega mantém
+  pendência retryable); produtores owned fora do gather cancelável
+  (`_release_producers`); `_durable_release` = rota ÚNICA de liberação de
+  slot com parada comprovada (liberação inicial, re-contenção e shutdown
+  consultam a obrigação; espera sempre via `shield` — cancelamento do
+  waiter nunca alcança o produtor nem o backend); `_independent_containment`
+  deixou de engolir falha durável (`except CoreError: pass` removido).
+  Sementes A05/A06 + controle A07 verdes; A13–A16 (cancelamento externo,
+  colheita antes de agendar, ACK perdido, independência entre recursos)
+  verdes com contagem no backend.
+- **Z01**: `availability.py` — `evaluate_runtime_availability` passiva
+  (políticas reais: registry/qualificação/preflight do host de EXECUÇÃO;
+  sem login/spawn/journal/segunda allowlist); 7 estados técnicos +
+  `reasons` estáveis; `NOT_PROBED` nunca vira READY; attach nunca
+  qualificado por existir; dois builds da mesma família nunca fundidos;
+  `candidate_ref` opaco (fingerprint do inventário do host produtor);
+  `to_dict()` = projeção remota versionada JSON-safe (NXL intocado —
+  regeneração byte-idêntica, manifesto `a4fd8430…` inalterado); exemplo
+  executável + fixture JSON para os testes de UI do Server; contrato
+  local/remoto documentado em `docs/api.md`. `READY_FOR_RUNTIME` é
+  APENAS técnico — autorização do agente permanece no Server.
+
+Suítes: Windows 3.13/3.11/3.12 = **800/74**; WSL2 3.13/3.11/3.12 =
+**855/19**; C2–C9 verdes (evidence XMLs). Artefato **0.2.9.dev0**
+byte-idêntico Windows↔WSL2 (wheel
+`sha256:cc56a693…bfc7d`, sdist `sha256:4418ab0b…dbb3`), twine + offline
+verdes, **não publicado**. **E1 declarado para 0.2.9.dev0**; E2/E3
+seguem bloqueados pelos hosts reais (A19 BLOCKED / A20 NOT_RUN na matriz
+C10 — donos registrados). Ajuste documental C10-03.2 aplicado (narrativa
+C9 realinhada aos timestamps dos XMLs).
