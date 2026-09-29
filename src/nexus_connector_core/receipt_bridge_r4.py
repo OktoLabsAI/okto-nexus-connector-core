@@ -29,10 +29,18 @@ def project_r4_turn_receipt(
     if (not isinstance(core_receipt, OperationReceipt) or
             not isinstance(context, ExecutionContext) or
             type(receipt_revision) is not int or receipt_revision < 1):
-        raise CoreError("VALIDATION_ERROR", "r4_receipt_projection")
-    frame = decode_r4_frame(canonical_json(dict(submit_frame)))
+        raise CoreError("VALIDATION_ERROR", "r4_receipt_projection",
+                        possible_effect=True)
+    try:
+        frame = decode_r4_frame(canonical_json(dict(submit_frame)))
+    except (CoreError, ValueError, TypeError, AttributeError, RecursionError) as exc:
+        raise CoreError("VALIDATION_ERROR", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id) from exc
     if frame["type"] != "operation.submit" or frame["action"] != "turn.submit":
-        raise CoreError("CAPABILITY_UNSUPPORTED", "r4_receipt_projection")
+        raise CoreError("CAPABILITY_UNSUPPORTED", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id)
     expected_scope = {
         "server_id": context.server_id,
         "executor_id": context.executor_id,
@@ -47,13 +55,17 @@ def project_r4_turn_receipt(
     if (any(frame[name] != value for name, value in expected_scope.items()) or
             core_receipt.operation_id != frame["operation_id"] or
             core_receipt.session_id != frame["session_id"]):
-        raise CoreError("SCOPE_MISMATCH", "r4_receipt_projection")
+        raise CoreError("SCOPE_MISMATCH", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id)
     semantic = Operation(
         frame["operation_id"], frame["session_id"], "turn.submit",
         {"text": frame["payload"]["text"]}, frame.get("expected_turn_id"),
     )
     if core_receipt.intent_hash != intent_hash(semantic, context):
-        raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection")
+        raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id)
     projected = {
         "protocol_major": frame["protocol_major"],
         "contract_revision": frame["contract_revision"],
@@ -76,4 +88,9 @@ def project_r4_turn_receipt(
         projected["native_id"] = core_receipt.native_id
     if core_receipt.error_code is not None:
         projected["error_code"] = core_receipt.error_code
-    return decode_r4_frame(encode_r4_frame(projected))
+    try:
+        return decode_r4_frame(encode_r4_frame(projected))
+    except (CoreError, ValueError, TypeError) as exc:
+        raise CoreError("VALIDATION_ERROR", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id) from exc

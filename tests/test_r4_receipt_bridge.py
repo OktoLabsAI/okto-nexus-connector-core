@@ -57,6 +57,8 @@ def test_r4_turn_receipt_projects_distinct_hashes_after_core_proof():
         project_r4_turn_receipt(changed, receipt, context,
                                 receipt_revision=1)
     assert altered.value.code == "OPERATION_CONFLICT"
+    assert altered.value.possible_effect is True
+    assert altered.value.retry_safe is False
     with pytest.raises(CoreError) as stale:
         project_r4_turn_receipt(frame, receipt,
                                 replace(context, configuration_revision=2),

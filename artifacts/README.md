@@ -41,3 +41,8 @@ Current: `nexus_connector_core-0.2.18.dev0-py3-none-any.whl`, SHA-256
 Adds a pure verified projection from a Core turn receipt to an R4 transport
 receipt. The journal and wire hashes stay separate. The bundle remains
 `development-partial` and `R4_BUNDLE_EXECUTABLE=False`.
+
+Current: `nexus_connector_core-0.2.19.dev0-py3-none-any.whl`, SHA-256
+`3b1b334f61f8ad5a2a59c63dcd127ced26a9d426dde7bff68085e4081d01c072`.
+Projection failures after a Core receipt now preserve possible effect and
+refuse safe retry. Remote R4 execution remains disabled.

@@ -82,7 +82,7 @@ from .executor_inventory import (
 )
 from .discovery import discover_installations
 
-__version__ = "0.2.18.dev0"
+__version__ = "0.2.19.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
