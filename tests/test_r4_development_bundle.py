@@ -47,6 +47,79 @@ def test_partial_bundle_is_integral_but_not_executable():
     assert info["executable"] is R4_BUNDLE_EXECUTABLE is False
     assert CONTRACT_REVISION.endswith("-r3")
     assert "operation.submit" in info["supported_frames"]
+    assert "binding.attach" in info["supported_frames"]
+    assert "reconcile.report" in info["supported_frames"]
+    assert "event.batch" in info["supported_frames"]
+    assert "approval.request" in info["supported_frames"]
+
+
+def test_r4_handshake_and_reconcile_pages_are_closed():
+    base = {"protocol_major": 1, "contract_revision": R4_PREVIEW_REVISION}
+    hello = {**base, "type": "hello", "link_attempt_id": "attempt",
+             "server_id": "srv", "executor_id": "exe",
+             "core_version": "0.2.17.dev0",
+             "management_revision": "nexus-connections-2026-09-29-r4",
+             "supported_nxl": [R4_PREVIEW_REVISION],
+             "snapshot_formats": [1], "control_capabilities": []}
+    attach = {**base, "type": "binding.attach",
+              "attach_request_id": "attach", "server_id": "srv",
+              "executor_id": "exe", "binding_id": "bind",
+              "agent_id": "agent", "connection_id": "connection",
+              "expected_connection_generation": 1,
+              "credential_epoch": 1, "authorization_revision": 1,
+              "configuration_revision": 1, "ticket": "nxt4_" + "x" * 48}
+    report = {**base, "type": "reconcile.report",
+              "reconcile_id": "reconcile", "connection_id": "connection",
+              "connection_generation": 1, "server_id": "srv",
+              "executor_id": "exe", "cursor": None, "next_cursor": None,
+              "complete": True,
+              "receipts": [{"operation_id": "op",
+                            "intent_hash": "sha256:" + "a" * 64,
+                            "receipt_revision": 1,
+                            "stage": "RECEIVED_DURABLE"}],
+              "claims": [], "stream_watermarks": [],
+              "ownership_facts": []}
+    for value in (hello, attach, report):
+        assert decode_r4_frame(encode_r4_frame(value)) == value
+    for value in (
+        {**hello, "management_revision": "legacy"},
+        {**attach, "api_key": "secret"},
+        {**report, "root_path": "/private/workspace"},
+        {**report, "receipts": [{**report["receipts"][0], "output": "secret"}]},
+    ):
+        with pytest.raises(CoreError):
+            encode_r4_frame(value)
+
+
+def test_r4_event_identity_and_approval_notification_are_closed():
+    base = {"protocol_major": 1, "contract_revision": R4_PREVIEW_REVISION}
+    connection = {"connection_id": "control", "connection_generation": 1}
+    event = {"server_id": "srv", "executor_id": "exe",
+             "session_id": "session", "stream_epoch": "epoch",
+             "sequence": 1, "category": "lifecycle", "payload": {}}
+    batch = {**base, "type": "event.batch", "server_id": "srv",
+             "executor_id": "exe", "binding_id": "binding",
+             "agent_id": "agent", "session_id": "session",
+             "stream_epoch": "epoch", **connection, "events": [event]}
+    scope = {key: value for key, value in open_frame().items() if key in {
+        "server_id", "executor_id", "binding_id", "agent_id",
+        "workspace_id", "workspace_binding_id", "session_id",
+        "session_owner_generation", "authorization_revision",
+        "configuration_revision", "binding_revision", "credential_epoch",
+    }}
+    approval = {**base, "type": "approval.decision", **scope,
+                **connection, "canonical_request_id": "request",
+                "decision_id": "decision", "decision_revision": 1,
+                "decision": "decline",
+                "request_hash": "sha256:" + "c" * 64}
+    assert decode_r4_frame(encode_r4_frame(batch)) == batch
+    assert decode_r4_frame(encode_r4_frame(approval)) == approval
+    for value in (
+        {**batch, "events": [{**event, "connection_generation": 2}]},
+        {**approval, "apply_native": True},
+    ):
+        with pytest.raises(CoreError):
+            encode_r4_frame(value)
 
 
 def test_open_roundtrip_and_r3_cross_revision_rejection():

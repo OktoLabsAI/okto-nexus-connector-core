@@ -29,3 +29,9 @@ Current: `nexus_connector_core-0.2.16.dev0-py3-none-any.whl`, SHA-256
 Adds pure R4 attach and reconcile acknowledgment correlation. Control and lane
 readiness still do not imply a productive Core session. The bundle remains
 `development-partial` and `R4_BUNDLE_EXECUTABLE=False`.
+
+Current: `nexus_connector_core-0.2.17.dev0-py3-none-any.whl`, SHA-256
+`c35526cb347df56388ffae3fb3c3daf34745b8d48f01ff82c8116112409b7f`.
+The closed R4 schema now covers 21 frame kinds. Pure event and approval
+notification reducers preserve replay and scope facts. The hosts do not yet
+execute R4 work, so the bundle remains `development-partial`.

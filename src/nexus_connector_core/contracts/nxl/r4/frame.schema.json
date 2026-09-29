@@ -5,6 +5,308 @@
     {
       "additionalProperties": false,
       "properties": {
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "control_capabilities": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "core_version": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "link_attempt_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "management_revision": {
+          "const": "nexus-connections-2026-09-29-r4"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "snapshot_formats": {
+          "items": {
+            "const": 1
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "supported_nxl": {
+          "items": {
+            "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+          },
+          "maxItems": 1,
+          "minItems": 1,
+          "type": "array"
+        },
+        "type": {
+          "const": "hello"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "link_attempt_id",
+        "server_id",
+        "executor_id",
+        "core_version",
+        "management_revision",
+        "supported_nxl",
+        "snapshot_formats",
+        "control_capabilities"
+      ],
+      "title": "hello",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "accepted_nxl": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "control_capabilities": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "link_attempt_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "management_revision": {
+          "const": "nexus-connections-2026-09-29-r4"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "snapshot_format": {
+          "const": 1
+        },
+        "type": {
+          "const": "welcome"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "link_attempt_id",
+        "server_id",
+        "executor_id",
+        "connection_id",
+        "connection_generation",
+        "management_revision",
+        "accepted_nxl",
+        "snapshot_format",
+        "control_capabilities"
+      ],
+      "title": "welcome",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "attach_request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "authorization_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "configuration_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "credential_epoch": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "expected_connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "ticket": {
+          "maxLength": 4096,
+          "minLength": 32,
+          "type": "string"
+        },
+        "type": {
+          "const": "binding.attach"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "attach_request_id",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "connection_id",
+        "expected_connection_generation",
+        "credential_epoch",
+        "authorization_revision",
+        "configuration_revision",
+        "ticket"
+      ],
+      "title": "binding.attach",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "reason": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "binding.detach"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "connection_id",
+        "connection_generation",
+        "reason"
+      ],
+      "title": "binding.detach",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
         "agent_id": {
           "maxLength": 160,
           "minLength": 1,
@@ -87,6 +389,335 @@
         "expires_in"
       ],
       "title": "binding.attached",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "cursor": {
+          "maxLength": 160,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "operation_ids": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "reconcile_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_ids": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "stream_watermarks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "sequence": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "session_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "stream_epoch": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "session_id",
+              "stream_epoch",
+              "sequence"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "type": {
+          "const": "reconcile.request"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "reconcile_id",
+        "connection_id",
+        "connection_generation",
+        "server_id",
+        "executor_id",
+        "cursor",
+        "operation_ids",
+        "session_ids",
+        "stream_watermarks"
+      ],
+      "title": "reconcile.request",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "claims": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "owner_generation": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "session_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "OWNED",
+                  "RELEASED",
+                  "UNKNOWN"
+                ]
+              }
+            },
+            "required": [
+              "session_id",
+              "state",
+              "owner_generation"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "complete": {
+          "type": "boolean"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "cursor": {
+          "maxLength": 160,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "next_cursor": {
+          "maxLength": 160,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "ownership_facts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "owner_generation": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "process_state": {
+                "enum": [
+                  "ALIVE",
+                  "EXITED",
+                  "UNKNOWN"
+                ]
+              },
+              "proof_digest": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "session_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "session_id",
+              "owner_generation",
+              "process_state"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "receipts": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "intent_hash": {
+                "pattern": "^sha256:[0-9a-f]{64}$",
+                "type": "string"
+              },
+              "operation_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "receipt_revision": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "stage": {
+                "enum": [
+                  "RECEIVED_DURABLE",
+                  "PREPARED",
+                  "SUBMISSION_STARTED",
+                  "SUBMITTED",
+                  "ACCEPTED",
+                  "RUNNING",
+                  "WAITING_INPUT",
+                  "SUCCEEDED",
+                  "FAILED",
+                  "CANCELLED",
+                  "OUTCOME_UNKNOWN"
+                ]
+              }
+            },
+            "required": [
+              "operation_id",
+              "intent_hash",
+              "receipt_revision",
+              "stage"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "reconcile_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "stream_watermarks": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "sequence": {
+                "maximum": 9007199254740991,
+                "minimum": 0,
+                "type": "integer"
+              },
+              "session_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "stream_epoch": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "session_id",
+              "stream_epoch",
+              "sequence"
+            ],
+            "type": "object"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "type": {
+          "const": "reconcile.report"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "reconcile_id",
+        "connection_id",
+        "connection_generation",
+        "server_id",
+        "executor_id",
+        "cursor",
+        "next_cursor",
+        "complete",
+        "receipts",
+        "claims",
+        "stream_watermarks",
+        "ownership_facts"
+      ],
+      "title": "reconcile.report",
       "type": "object"
     },
     {
@@ -1314,6 +1945,688 @@
         "intent_hash"
       ],
       "title": "operation.query",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "events": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "category": {
+                "enum": [
+                  "lifecycle",
+                  "turn_state",
+                  "text_delta",
+                  "text_snapshot",
+                  "tool_activity",
+                  "approval_request",
+                  "input_request",
+                  "usage",
+                  "system_warning",
+                  "rate_limit",
+                  "error",
+                  "native_unknown"
+                ]
+              },
+              "executor_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "native_type": {
+                "maxLength": 160,
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "operation_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "payload": {
+                "maxProperties": 32,
+                "type": "object"
+              },
+              "sequence": {
+                "minimum": 1,
+                "type": "integer"
+              },
+              "server_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "session_id": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              },
+              "stream_epoch": {
+                "maxLength": 160,
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "server_id",
+              "executor_id",
+              "session_id",
+              "stream_epoch",
+              "sequence",
+              "category",
+              "payload"
+            ],
+            "type": "object"
+          },
+          "maxItems": 128,
+          "minItems": 1,
+          "type": "array"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "stream_epoch": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "event.batch"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "session_id",
+        "stream_epoch",
+        "connection_id",
+        "connection_generation",
+        "events"
+      ],
+      "title": "event.batch",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "sequence": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "stream_epoch": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "event.ack"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "session_id",
+        "stream_epoch",
+        "connection_id",
+        "connection_generation",
+        "sequence"
+      ],
+      "title": "event.ack",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "authorization_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "binding_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "canonical_request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "configuration_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "credential_epoch": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "expires_in": {
+          "maximum": 86400,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "kind": {
+          "enum": [
+            "native_approval",
+            "native_input",
+            "administrative"
+          ]
+        },
+        "operational_request": {
+          "additionalProperties": true,
+          "maxProperties": 32,
+          "minProperties": 1,
+          "properties": {
+            "request_hash": {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            }
+          },
+          "required": [
+            "request_hash"
+          ],
+          "type": "object"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "request_revision": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_owner_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "approval.request"
+        },
+        "workspace_binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspace_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "workspace_id",
+        "workspace_binding_id",
+        "session_id",
+        "session_owner_generation",
+        "authorization_revision",
+        "configuration_revision",
+        "binding_revision",
+        "credential_epoch",
+        "connection_id",
+        "connection_generation",
+        "canonical_request_id",
+        "request_hash",
+        "request_revision",
+        "kind",
+        "expires_in",
+        "operational_request"
+      ],
+      "title": "approval.request",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "authorization_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "binding_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "canonical_request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "configuration_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "credential_epoch": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "decision": {
+          "enum": [
+            "accept",
+            "decline",
+            "cancel"
+          ]
+        },
+        "decision_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "decision_revision": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_owner_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "approval.decision"
+        },
+        "workspace_binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspace_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "workspace_id",
+        "workspace_binding_id",
+        "session_id",
+        "session_owner_generation",
+        "authorization_revision",
+        "configuration_revision",
+        "binding_revision",
+        "credential_epoch",
+        "connection_id",
+        "connection_generation",
+        "canonical_request_id",
+        "decision_id",
+        "decision_revision",
+        "decision",
+        "request_hash"
+      ],
+      "title": "approval.decision",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "heartbeat"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "connection_id",
+        "connection_generation"
+      ],
+      "title": "heartbeat",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "corrective_action": {
+          "maxLength": 512,
+          "type": "string"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "operation_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "possible_effect": {
+          "type": "boolean"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "retry_safe": {
+          "type": "boolean"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "stage": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "error"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "connection_id",
+        "connection_generation",
+        "code",
+        "stage",
+        "possible_effect",
+        "retry_safe"
+      ],
+      "title": "error",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "reason": {
+          "maxLength": 256,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "goaway"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "connection_id",
+        "connection_generation",
+        "code",
+        "reason"
+      ],
+      "title": "goaway",
       "type": "object"
     }
   ]

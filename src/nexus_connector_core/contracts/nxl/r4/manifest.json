@@ -1,20 +1,33 @@
 {
   "files": {
-    "frame.schema.json": "sha256:0d836cc3bd9fada94879f36bfce5e728bd7354b74612613458fd588da952c7aa"
+    "frame.schema.json": "sha256:c3c61c30f5d9156c397f71dbeff2447d40086e64d05083c7a6343531c0f65172"
   },
   "management_revision": "nexus-connections-2026-09-29-r4",
   "protocol_major": 1,
   "revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
   "status": "development-partial",
   "supported_frames": [
+    "hello",
+    "welcome",
+    "binding.attach",
+    "binding.detach",
     "binding.attached",
+    "reconcile.request",
+    "reconcile.report",
     "reconcile.accepted",
     "lease.renew",
     "lease.granted",
     "lease.applied",
     "operation.submit",
     "operation.receipt",
-    "operation.query"
+    "operation.query",
+    "event.batch",
+    "event.ack",
+    "approval.request",
+    "approval.decision",
+    "heartbeat",
+    "error",
+    "goaway"
   ],
   "unsupported_actions": []
 }

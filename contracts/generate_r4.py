@@ -118,6 +118,11 @@ PAYLOADS = {
 STAGES = ["RECEIVED_DURABLE", "PREPARED", "SUBMISSION_STARTED", "SUBMITTED",
           "ACCEPTED", "RUNNING", "WAITING_INPUT", "SUCCEEDED", "FAILED",
           "CANCELLED", "OUTCOME_UNKNOWN"]
+EVENT_CATEGORIES = [
+    "lifecycle", "turn_state", "text_delta", "text_snapshot",
+    "tool_activity", "approval_request", "input_request", "usage",
+    "system_warning", "rate_limit", "error", "native_unknown",
+]
 
 
 def build_schema() -> dict:
@@ -134,7 +139,73 @@ def build_schema() -> dict:
         for action, payload in PAYLOADS.items()
     ]
     scope_obj = obj(SCOPE, SCOPE_REQUIRED)
+    id_list = {"type": "array", "items": ID, "uniqueItems": True,
+               "maxItems": 256}
+    watermarks = {"type": "array", "maxItems": 256,
+                  "items": obj({"session_id": ID, "stream_epoch": ID,
+                                "sequence": REV},
+                               ("session_id", "stream_epoch", "sequence"))}
+    receipt_checkpoint = obj({
+        "operation_id": ID, "intent_hash": HASH,
+        "receipt_revision": {"type": "integer", "minimum": 1},
+        "stage": {"enum": STAGES},
+    }, ("operation_id", "intent_hash", "receipt_revision", "stage"))
+    claim = obj({"session_id": ID,
+                 "state": {"enum": ["OWNED", "RELEASED", "UNKNOWN"]},
+                 "owner_generation": REV},
+                ("session_id", "state", "owner_generation"))
+    ownership_fact = obj({
+        "session_id": ID, "owner_generation": REV,
+        "process_state": {"enum": ["ALIVE", "EXITED", "UNKNOWN"]},
+        "proof_digest": HASH,
+    }, ("session_id", "owner_generation", "process_state"))
+    event = obj({
+        "server_id": ID, "executor_id": ID, "session_id": ID,
+        "stream_epoch": ID, "sequence": {"type": "integer", "minimum": 1},
+        "category": {"enum": EVENT_CATEGORIES},
+        "payload": {"type": "object", "maxProperties": 32},
+        "native_type": {"type": ["string", "null"], "maxLength": 160},
+        "operation_id": ID,
+    }, ("server_id", "executor_id", "session_id", "stream_epoch",
+        "sequence", "category", "payload"))
     frames = [
+        frame("hello", {
+            "link_attempt_id": ID, "server_id": ID, "executor_id": ID,
+            "core_version": ID, "management_revision": {"const": MANAGEMENT},
+            "supported_nxl": {"type": "array", "items": {"const": REVISION},
+                              "minItems": 1, "maxItems": 1},
+            "snapshot_formats": {"type": "array", "items": {"const": 1},
+                                 "minItems": 1, "maxItems": 1},
+            "control_capabilities": id_list,
+        }, ("link_attempt_id", "server_id", "executor_id", "core_version",
+            "management_revision", "supported_nxl", "snapshot_formats",
+            "control_capabilities")),
+        frame("welcome", {
+            "link_attempt_id": ID, "server_id": ID, "executor_id": ID,
+            **CONNECTION, "management_revision": {"const": MANAGEMENT},
+            "accepted_nxl": {"const": REVISION},
+            "snapshot_format": {"const": 1},
+            "control_capabilities": id_list,
+        }, ("link_attempt_id", "server_id", "executor_id", *CONNECTION,
+            "management_revision", "accepted_nxl", "snapshot_format",
+            "control_capabilities")),
+        frame("binding.attach", {
+            "attach_request_id": ID, "server_id": ID, "executor_id": ID,
+            "binding_id": ID, "agent_id": ID, "connection_id": ID,
+            "expected_connection_generation": REV,
+            "credential_epoch": REV, "authorization_revision": REV,
+            "configuration_revision": REV,
+            "ticket": {"type": "string", "minLength": 32, "maxLength": 4096},
+        }, ("attach_request_id", "server_id", "executor_id", "binding_id",
+            "agent_id", "connection_id", "expected_connection_generation",
+            "credential_epoch", "authorization_revision",
+            "configuration_revision", "ticket")),
+        frame("binding.detach", {
+            "server_id": ID, "executor_id": ID, "binding_id": ID,
+            "agent_id": ID, **CONNECTION,
+            "reason": {"type": "string", "minLength": 1, "maxLength": 256},
+        }, ("server_id", "executor_id", "binding_id", "agent_id",
+            *CONNECTION, "reason")),
         frame("binding.attached", {
             "attach_request_id": ID, **CONNECTION,
             "server_id": ID, "executor_id": ID, "binding_id": ID,
@@ -144,6 +215,29 @@ def build_schema() -> dict:
         }, ("attach_request_id", *CONNECTION, "server_id", "executor_id",
             "binding_id", "agent_id", "credential_epoch",
             "authorization_revision", "configuration_revision", "expires_in")),
+        frame("reconcile.request", {
+            "reconcile_id": ID, **CONNECTION, "server_id": ID,
+            "executor_id": ID, "cursor": {"type": ["string", "null"],
+                                           "maxLength": 160},
+            "operation_ids": id_list, "session_ids": id_list,
+            "stream_watermarks": watermarks,
+        }, ("reconcile_id", *CONNECTION, "server_id", "executor_id",
+            "cursor", "operation_ids", "session_ids", "stream_watermarks")),
+        frame("reconcile.report", {
+            "reconcile_id": ID, **CONNECTION, "server_id": ID,
+            "executor_id": ID, "cursor": {"type": ["string", "null"],
+                                           "maxLength": 160},
+            "next_cursor": {"type": ["string", "null"], "maxLength": 160},
+            "complete": {"type": "boolean"},
+            "receipts": {"type": "array", "items": receipt_checkpoint,
+                         "maxItems": 256},
+            "claims": {"type": "array", "items": claim, "maxItems": 256},
+            "stream_watermarks": watermarks,
+            "ownership_facts": {"type": "array", "items": ownership_fact,
+                                "maxItems": 256},
+        }, ("reconcile_id", *CONNECTION, "server_id", "executor_id",
+            "cursor", "next_cursor", "complete", "receipts", "claims",
+            "stream_watermarks", "ownership_facts")),
         frame("reconcile.accepted", {
             "reconcile_id": ID, **CONNECTION, "server_id": ID,
             "executor_id": ID, "recovery_remaining": {"type": "boolean"},
@@ -191,6 +285,60 @@ def build_schema() -> dict:
             "operation_id": ID, "intent_hash": HASH,
         }, ("server_id", "executor_id", "binding_id", "agent_id", "session_id",
             *CONNECTION, "operation_id", "intent_hash")),
+        frame("event.batch", {
+            "server_id": ID, "executor_id": ID, "binding_id": ID,
+            "agent_id": ID, "session_id": ID, "stream_epoch": ID,
+            **CONNECTION,
+            "events": {"type": "array", "items": event,
+                       "minItems": 1, "maxItems": 128},
+        }, ("server_id", "executor_id", "binding_id", "agent_id",
+            "session_id", "stream_epoch", *CONNECTION, "events")),
+        frame("event.ack", {
+            "server_id": ID, "executor_id": ID, "binding_id": ID,
+            "agent_id": ID, "session_id": ID, "stream_epoch": ID,
+            **CONNECTION,
+            "sequence": {"type": "integer", "minimum": 1},
+        }, ("server_id", "executor_id", "binding_id", "agent_id",
+            "session_id", "stream_epoch", *CONNECTION, "sequence")),
+        frame("approval.request", {
+            **SCOPE, **CONNECTION,
+            "canonical_request_id": ID,
+            "request_hash": HASH,
+            "request_revision": {"type": "integer", "minimum": 1},
+            "kind": {"enum": ["native_approval", "native_input",
+                               "administrative"]},
+            "expires_in": {"type": "integer", "minimum": 1,
+                           "maximum": 86400},
+            "operational_request": NATIVE_REQUEST,
+        }, (*SCOPE_REQUIRED, *CONNECTION, "canonical_request_id",
+            "request_hash", "request_revision", "kind", "expires_in",
+            "operational_request")),
+        frame("approval.decision", {
+            **SCOPE, **CONNECTION,
+            "canonical_request_id": ID, "decision_id": ID,
+            "decision_revision": {"type": "integer", "minimum": 1},
+            "decision": {"enum": ["accept", "decline", "cancel"]},
+            "request_hash": HASH,
+        }, (*SCOPE_REQUIRED, *CONNECTION, "canonical_request_id",
+            "decision_id", "decision_revision", "decision",
+            "request_hash")),
+        frame("heartbeat", {
+            "server_id": ID, "executor_id": ID, **CONNECTION,
+        }, ("server_id", "executor_id", *CONNECTION)),
+        frame("error", {
+            "server_id": ID, "executor_id": ID, **CONNECTION,
+            "code": ID, "stage": ID,
+            "possible_effect": {"type": "boolean"},
+            "retry_safe": {"type": "boolean"},
+            "operation_id": ID,
+            "corrective_action": {"type": "string", "maxLength": 512},
+        }, ("server_id", "executor_id", *CONNECTION, "code", "stage",
+            "possible_effect", "retry_safe")),
+        frame("goaway", {
+            "server_id": ID, "executor_id": ID, **CONNECTION,
+            "code": ID, "reason": {"type": "string", "minLength": 1,
+                                   "maxLength": 256},
+        }, ("server_id", "executor_id", *CONNECTION, "code", "reason")),
     ]
     return {"$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": "https://nexus.oktolabs.ai/contracts/nxl/r4/frame.schema.json",
