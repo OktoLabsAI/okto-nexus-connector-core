@@ -70,6 +70,7 @@ def test_open_roundtrip_and_r3_cross_revision_rejection():
     lambda f: f.pop("session_owner_generation"),
     lambda f: f.pop("grant_id"),
     lambda f: f["payload"].update(mode="attach"),
+    lambda f: f["payload"].update(adapter_id="invented_adapter"),
 ])
 def test_open_rejects_raw_launch_and_missing_authority(mutation):
     frame = open_frame()
@@ -91,7 +92,7 @@ def test_hash_domain_and_transport_attempt_are_separate():
     assert r4_submit_intent_hash(changed) != frame["intent_hash"]
 
 
-def test_ambiguous_json_and_unsupported_decision_are_rejected():
+def test_ambiguous_json_and_wrong_decision_payload_are_rejected():
     frame = open_frame()
     raw = canonical_json(frame)
     ambiguous = raw[:-1] + b',"operation_id":"different"}'
@@ -102,6 +103,45 @@ def test_ambiguous_json_and_unsupported_decision_are_rejected():
     with pytest.raises(CoreError) as error:
         decode_r4_frame(json.dumps(frame).encode())
     assert error.value.code == "VALIDATION_ERROR"
+
+
+def test_correlated_native_decision_payloads_are_closed():
+    base = open_frame()
+    request = {"request_hash": "sha256:" + "c" * 64,
+               "native_request_id": "provider-request"}
+    decision = {
+        "canonical_request_id": "canonical-request", "decision_id": "decision",
+        "decision_revision": 1, "decision": "accept", "request": request,
+        "response_digest": None,
+    }
+    base["action"] = "approval.decide"
+    base["payload"] = decision
+    base["intent_hash"] = r4_submit_intent_hash(base)
+    assert decode_r4_frame(encode_r4_frame(base)) == base
+
+    input_frame = copy.deepcopy(base)
+    input_frame["action"] = "input.provide"
+    input_frame["payload"]["response"] = {"answer": "example"}
+    input_frame["intent_hash"] = r4_submit_intent_hash(input_frame)
+    assert decode_r4_frame(encode_r4_frame(input_frame)) == input_frame
+
+    for mutation in (
+        lambda f: f["payload"].update(authority="operator"),
+        lambda f: f["payload"].update(response_ref="alternate"),
+        lambda f: f["payload"].update(decision_revision=0),
+        lambda f: f["payload"]["request"].pop("request_hash"),
+    ):
+        invalid = copy.deepcopy(input_frame)
+        mutation(invalid)
+        invalid["intent_hash"] = r4_submit_intent_hash(invalid)
+        with pytest.raises(CoreError) as error:
+            encode_r4_frame(invalid)
+        assert error.value.code == "VALIDATION_ERROR"
+
+    declined = copy.deepcopy(input_frame)
+    declined["payload"].update(decision="decline", response=None)
+    declined["intent_hash"] = r4_submit_intent_hash(declined)
+    assert decode_r4_frame(encode_r4_frame(declined)) == declined
 
 
 def test_lease_reply_has_bounded_duration_and_closed_scope():
@@ -121,3 +161,25 @@ def test_lease_reply_has_bounded_duration_and_closed_scope():
     frame["valid_for_ms"] = 120001
     with pytest.raises(CoreError):
         encode_r4_frame(frame)
+
+
+def test_receipt_and_query_require_connection_and_scoped_identity():
+    submit = open_frame()
+    common = {key: submit[key] for key in (
+        "protocol_major", "contract_revision", "server_id", "executor_id",
+        "binding_id", "agent_id", "session_id", "connection_id",
+        "connection_generation", "operation_id", "intent_hash",
+    )}
+    receipt = {**common, "type": "operation.receipt", "receipt_revision": 1,
+               "stage": "RECEIVED_DURABLE", "possible_effect": False,
+               "retry_safe": True}
+    query = {**common, "type": "operation.query"}
+    assert decode_r4_frame(encode_r4_frame(receipt)) == receipt
+    assert decode_r4_frame(encode_r4_frame(query)) == query
+    for bad in ({**receipt, "receipt_revision": 0},
+                {key: value for key, value in receipt.items()
+                 if key != "connection_id"},
+                {**query, "agent_id": ""},
+                {**query, "operator": True}):
+        with pytest.raises(CoreError):
+            encode_r4_frame(bad)

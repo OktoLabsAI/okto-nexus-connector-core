@@ -9,12 +9,19 @@ from __future__ import annotations
 
 import hashlib
 import json
+import sys
 from pathlib import Path
 
 
 REVISION = "nxl-1-agent-centric-http-only-2026-09-29-r4"
 MANAGEMENT = "nexus-connections-2026-09-29-r4"
 OUT = Path(__file__).resolve().parents[1] / "src/nexus_connector_core/contracts/nxl/r4"
+SRC = Path(__file__).resolve().parents[1] / "src"
+if str(SRC) not in sys.path:
+    sys.path.insert(0, str(SRC))
+from nexus_connector_core.native.registry import adapter_specs  # noqa: E402
+
+ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()]
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REV = {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
 HASH = {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
@@ -48,7 +55,7 @@ SCOPE_REQUIRED = tuple(SCOPE)
 CONNECTION = {"connection_id": ID, "connection_generation": REV}
 
 OPEN = obj({
-    "adapter_id": ID,
+    "adapter_id": {"enum": ADAPTER_IDS},
     "candidate_ref": {"type": "string", "pattern": "^nexus-install-v1:[0-9a-f]{64}$"},
     "inventory_revision": HASH,
     "realization_ref": ID,
@@ -66,10 +73,51 @@ INTERRUPT = obj({"reason": {"type": "string", "minLength": 1, "maxLength": 256}}
                 ("reason",))
 CLOSE = obj({"reason": {"type": "string", "minLength": 1, "maxLength": 256}},
             ("reason",))
+NATIVE_REQUEST = {
+    "type": "object", "minProperties": 1, "maxProperties": 32,
+    "required": ["request_hash"],
+    "properties": {"request_hash": HASH},
+    # The original adapter request is opaque here; its native schema is
+    # checked by Core at application time, never reconstructed by a host.
+    "additionalProperties": True,
+}
+DECISION_FIELDS = {
+    "canonical_request_id": ID, "decision_id": ID,
+    "decision_revision": {"type": "integer", "minimum": 1},
+    "decision": {"enum": ["accept", "decline", "cancel"]},
+    "request": NATIVE_REQUEST,
+    "response_digest": {"oneOf": [HASH, {"type": "null"}]},
+}
+DECISION_REQUIRED = tuple(DECISION_FIELDS)
+APPROVAL = obj(DECISION_FIELDS, DECISION_REQUIRED)
+INPUT = obj({
+    **DECISION_FIELDS,
+    "response": {"type": ["object", "null"], "maxProperties": 32},
+    "response_ref": {"oneOf": [ID, {"type": "null"}]},
+}, DECISION_REQUIRED)
+INPUT["allOf"] = [{
+    "if": {"properties": {"decision": {"const": "accept"}},
+           "required": ["decision"]},
+    "then": {"oneOf": [
+        {"required": ["response"],
+         "properties": {"response": {"type": "object"},
+                        "response_ref": {"type": "null"}}},
+        {"required": ["response_ref"],
+         "properties": {"response_ref": ID, "response": {"type": "null"}}},
+    ]},
+    "else": {"not": {"anyOf": [
+        {"required": ["response"], "properties": {"response": {"type": "object"}}},
+        {"required": ["response_ref"], "properties": {"response_ref": ID}},
+    ]}},
+}]
 PAYLOADS = {
     "runtime.open": OPEN, "turn.submit": SUBMIT, "turn.steer": STEER,
     "turn.interrupt": INTERRUPT, "runtime.close": CLOSE,
+    "approval.decide": APPROVAL, "input.provide": INPUT,
 }
+STAGES = ["RECEIVED_DURABLE", "PREPARED", "SUBMISSION_STARTED", "SUBMITTED",
+          "ACCEPTED", "RUNNING", "WAITING_INPUT", "SUCCEEDED", "FAILED",
+          "CANCELLED", "OUTCOME_UNKNOWN"]
 
 
 def build_schema() -> dict:
@@ -126,6 +174,23 @@ def build_schema() -> dict:
         }, ("request_id", "lease_id", "lease_serial", "grant_id", "scope",
             *CONNECTION, "application_stage")),
         operation,
+        frame("operation.receipt", {
+            "server_id": ID, "executor_id": ID, "binding_id": ID,
+            "agent_id": ID, "session_id": ID, **CONNECTION,
+            "operation_id": ID, "intent_hash": HASH,
+            "receipt_revision": {"type": "integer", "minimum": 1},
+            "stage": {"enum": STAGES}, "possible_effect": {"type": "boolean"},
+            "retry_safe": {"type": "boolean"},
+            "native_id": ID, "error_code": ID,
+        }, ("server_id", "executor_id", "binding_id", "agent_id", "session_id",
+            *CONNECTION, "operation_id", "intent_hash", "receipt_revision",
+            "stage", "possible_effect", "retry_safe")),
+        frame("operation.query", {
+            "server_id": ID, "executor_id": ID, "binding_id": ID,
+            "agent_id": ID, "session_id": ID, **CONNECTION,
+            "operation_id": ID, "intent_hash": HASH,
+        }, ("server_id", "executor_id", "binding_id", "agent_id", "session_id",
+            *CONNECTION, "operation_id", "intent_hash")),
     ]
     return {"$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": "https://nexus.oktolabs.ai/contracts/nxl/r4/frame.schema.json",
@@ -144,7 +209,7 @@ def main() -> None:
         "management_revision": MANAGEMENT,
         "status": "development-partial",
         "supported_frames": [item["title"] for item in build_schema()["oneOf"]],
-        "unsupported_actions": ["approval.decide", "input.provide"],
+        "unsupported_actions": [],
         "files": {"frame.schema.json":
                   "sha256:" + hashlib.sha256(schema_bytes).hexdigest()},
     }

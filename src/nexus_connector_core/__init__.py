@@ -63,7 +63,7 @@ from .executor_inventory import (
 )
 from .discovery import discover_installations
 
-__version__ = "0.2.13.dev0"
+__version__ = "0.2.14.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",

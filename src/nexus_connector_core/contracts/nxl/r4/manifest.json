@@ -1,6 +1,6 @@
 {
   "files": {
-    "frame.schema.json": "sha256:7be307a5f61eab2438c571eafeb143452a74ae351a041a4ef5f2ad75437dc765"
+    "frame.schema.json": "sha256:0d836cc3bd9fada94879f36bfce5e728bd7354b74612613458fd588da952c7aa"
   },
   "management_revision": "nexus-connections-2026-09-29-r4",
   "protocol_major": 1,
@@ -12,10 +12,9 @@
     "lease.renew",
     "lease.granted",
     "lease.applied",
-    "operation.submit"
+    "operation.submit",
+    "operation.receipt",
+    "operation.query"
   ],
-  "unsupported_actions": [
-    "approval.decide",
-    "input.provide"
-  ]
+  "unsupported_actions": []
 }
