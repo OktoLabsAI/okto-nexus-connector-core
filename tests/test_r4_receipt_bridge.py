@@ -7,7 +7,8 @@ import pytest
 from nexus_connector_core import (
     CoreError, ExecutionContext, Operation, OperationReceipt,
     R4_PREVIEW_REVISION, project_r4_turn_receipt,
-    project_r4_steer_receipt,
+    project_r4_steer_receipt, project_r4_interrupt_receipt,
+    project_r4_close_receipt,
     r4_submit_intent_hash,
 )
 from nexus_connector_core.protocol import intent_hash
@@ -103,3 +104,38 @@ def test_r4_steer_receipt_requires_matching_core_semantic_and_turn_target():
         project_r4_turn_receipt(frame, receipt, context,
                                 receipt_revision=1)
     assert wrong_action.value.code == "CAPABILITY_UNSUPPORTED"
+
+
+@pytest.mark.parametrize("action,project", [
+    ("turn.interrupt", project_r4_interrupt_receipt),
+    ("runtime.close", project_r4_close_receipt),
+])
+def test_r4_reason_receipt_requires_matching_core_reason(action, project):
+    frame = _frame()
+    frame["action"] = action
+    frame["payload"] = {"reason": "Requested by the agent"}
+    if action == "turn.interrupt":
+        frame["expected_turn_id"] = "turn-1"
+    frame["intent_hash"] = r4_submit_intent_hash(frame)
+    context = ExecutionContext(
+        "server", "executor", "binding", "agent", "workspace",
+        1, 1, 1, 100.0, frozenset({action}),
+    )
+    semantic = Operation(
+        "operation", "session", action,
+        {"reason": "Requested by the agent"},
+        frame.get("expected_turn_id"),
+    )
+    receipt = OperationReceipt(
+        "operation", intent_hash(semantic, context), "SUBMITTED",
+        True, False, "session",
+    )
+    projected = project(frame, receipt, context, receipt_revision=1)
+    assert projected["intent_hash"] == frame["intent_hash"]
+    changed = {**frame, "payload": {"reason": "A different request"}}
+    changed["intent_hash"] = r4_submit_intent_hash(changed)
+    with pytest.raises(CoreError) as mismatch:
+        project(changed, receipt, context, receipt_revision=1)
+    assert mismatch.value.code == "OPERATION_CONFLICT"
+    assert mismatch.value.possible_effect is True
+    assert mismatch.value.retry_safe is False

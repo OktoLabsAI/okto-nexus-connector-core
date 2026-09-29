@@ -624,15 +624,22 @@ class LocalRuntimeCore:
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "control")
         if operation.verb == "interrupt" and operation.text is None:
+            if operation.reason is not None and (
+                    not isinstance(operation.reason, str) or
+                    not 1 <= len(operation.reason) <= 256):
+                raise CoreError("VALIDATION_ERROR", "control")
             semantic = Operation(operation.operation_id, operation.session_id,
-                                 "turn.interrupt", {}, operation.expected_turn_id)
+                                 "turn.interrupt",
+                                 ({"reason": operation.reason}
+                                  if operation.reason is not None else {}),
+                                 operation.expected_turn_id)
             return await self._send(semantic, context, "interrupt", {})
         # Steer targeting is adapter-specific: Codex correlates an explicit
         # native turn ID, while Pi has no native turn ID on the wire and is
         # steered ID-less against its observed active agent run. The
         # per-adapter gate in _send refuses the shapes an adapter cannot
         # target before operation admission.
-        if operation.verb != "steer" or not operation.text:
+        if operation.verb != "steer" or not operation.text or operation.reason is not None:
             raise CoreError("CAPABILITY_UNSUPPORTED", "control")
         if len(operation.text.encode("utf-8")) > 1024 * 1024:
             raise CoreError("VALIDATION_ERROR", "control")
@@ -895,11 +902,17 @@ class LocalRuntimeCore:
             return await self._kernel.execute(semantic, context, effect)
 
     async def close(self, operation: CloseOperation,
-                    context: ExecutionContext) -> OperationReceipt:
+                     context: ExecutionContext) -> OperationReceipt:
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "close")
+        if operation.reason is not None and (
+                not isinstance(operation.reason, str) or
+                not 1 <= len(operation.reason) <= 256):
+            raise CoreError("VALIDATION_ERROR", "close")
         semantic = Operation(operation.operation_id, operation.session_id,
-                             "runtime.close")
+                             "runtime.close",
+                             ({"reason": operation.reason}
+                              if operation.reason is not None else {}))
         self._authorize(context, semantic.action)
         # C2/R01+C2/R04: the dedup read answers an idempotent retry from
         # its durable receipt even after EOF/closing/eviction; it never

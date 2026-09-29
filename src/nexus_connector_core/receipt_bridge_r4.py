@@ -1,4 +1,4 @@
-"""Verified projection of a Core turn receipt into an R4 transport fact.
+"""Verified projection of a Core operation receipt into an R4 transport fact.
 
 The runtime journal and R4 wire protocol intentionally hash different
 semantic domains. The host may publish this projection only after receiving
@@ -26,7 +26,7 @@ def project_r4_turn_receipt(
     The host remains responsible for admission, lease, source connection and
     monotonic receipt revision. This function grants no effect authority.
     """
-    return _project_r4_text_receipt(
+    return _project_r4_receipt(
         submit_frame, core_receipt, context, receipt_revision=receipt_revision,
         action="turn.submit",
     )
@@ -37,13 +37,35 @@ def project_r4_steer_receipt(
     context: ExecutionContext, *, receipt_revision: int,
 ) -> dict[str, Any]:
     """Verify a Core steer receipt before publishing its R4 wire fact."""
-    return _project_r4_text_receipt(
+    return _project_r4_receipt(
         submit_frame, core_receipt, context, receipt_revision=receipt_revision,
         action="turn.steer",
     )
 
 
-def _project_r4_text_receipt(
+def project_r4_interrupt_receipt(
+    submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, *, receipt_revision: int,
+) -> dict[str, Any]:
+    """Verify the reason and turn target of a Core interrupt receipt."""
+    return _project_r4_receipt(
+        submit_frame, core_receipt, context, receipt_revision=receipt_revision,
+        action="turn.interrupt",
+    )
+
+
+def project_r4_close_receipt(
+    submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, *, receipt_revision: int,
+) -> dict[str, Any]:
+    """Verify the reason of a Core close receipt."""
+    return _project_r4_receipt(
+        submit_frame, core_receipt, context, receipt_revision=receipt_revision,
+        action="runtime.close",
+    )
+
+
+def _project_r4_receipt(
     submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
     context: ExecutionContext, *, receipt_revision: int, action: str,
 ) -> dict[str, Any]:
@@ -79,9 +101,12 @@ def _project_r4_text_receipt(
         raise CoreError("SCOPE_MISMATCH", "r4_receipt_projection",
                         possible_effect=True,
                         operation_id=core_receipt.operation_id)
+    payload_key = ("text" if action in {"turn.submit", "turn.steer"}
+                   else "reason")
     semantic = Operation(
         frame["operation_id"], frame["session_id"], action,
-        {"text": frame["payload"]["text"]}, frame.get("expected_turn_id"),
+        {payload_key: frame["payload"][payload_key]},
+        frame.get("expected_turn_id"),
     )
     if core_receipt.intent_hash != intent_hash(semantic, context):
         raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",

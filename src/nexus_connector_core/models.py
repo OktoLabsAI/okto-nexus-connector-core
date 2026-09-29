@@ -305,6 +305,7 @@ class ControlOperation:
     verb: str
     text: str | None = None
     expected_turn_id: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,6 +355,7 @@ class AttachPolicy:
 class CloseOperation:
     operation_id: str
     session_id: str
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
