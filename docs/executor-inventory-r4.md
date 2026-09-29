@@ -26,3 +26,11 @@ Development wheel built locally on 2026-09-29:
 `nexus_connector_core-0.2.11.dev0-py3-none-any.whl`, SHA-256
 `41193bc203bb6425163b8992effb6dfa701d3ef309ed08832a58d84cc0c3158d`.
 The wheel is a handoff artifact, not a PyPI publication or provider test.
+
+Core `0.2.12.dev0` adds the public `discover_installations` facade. It
+enumerates the managed adapters from the Core catalog and retains full local
+candidate objects without composing a runtime, opening a journal, or starting
+a provider. `LocalRuntimeCore.discover` now uses that same path. The wheel
+`nexus_connector_core-0.2.12.dev0-py3-none-any.whl` has SHA-256
+`bd5326357608906bdd80ccefc3db4890137d9e8dc00935a88c5f6dd955bf9d8e`.
+The NXL wire revision remains r3; this facade does not enable remote effects.

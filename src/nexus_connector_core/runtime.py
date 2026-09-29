@@ -15,7 +15,7 @@ from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
 
-from .discovery import discover_path, discover_pi_releases
+from .discovery import discover_installations
 from .clock import RollbackFencedClock, SystemClock
 from .journal import (SQLiteJournal, validate_claim_namespace,
                       validate_claim_page, validate_compaction_rows)
@@ -389,35 +389,14 @@ class LocalRuntimeCore:
         self._factory_disposed = False
 
     async def discover(self, request: DiscoveryRequest) -> Inventory:
-        # C9/C01: a request without explicit IDs asks the single-source
-        # catalog which adapters admit discovery - no host-side adapter
-        # array. Attach (no executable/discoverable=False) is skipped;
-        # an explicit tuple keeps its filter semantics (unknown IDs are
-        # refused by discover_path as before).
-        if request.adapter_ids is None:
-            from .catalog import get_runtime_catalog
-            adapter_ids = tuple(
-                descriptor.adapter_id
-                for descriptor in get_runtime_catalog().runtimes
-                if descriptor.discoverable)
-        else:
-            adapter_ids = request.adapter_ids
-        candidates = []
-        for adapter_id in adapter_ids:
-            found = await asyncio.to_thread(
-                discover_path, adapter_id,
-                trusted_roots=self._trusted_discovery_roots)
-            if (adapter_id == "pi_rpc" and self._pi_install_root is not
-                    None and self._pi_node is not None):
-                # C2/R08: the public path composes the same supported
-                # resolver the helpers expose - one inventory from the
-                # approved roots, no helper imports, no wrapper execution.
-                found = list(found) + list(await asyncio.to_thread(
-                    discover_pi_releases, self._pi_install_root,
-                    self._pi_node,
-                    trusted_roots=self._trusted_discovery_roots))
-            candidates.extend(found)
-        return Inventory(tuple(candidates))
+        # The passive public facade and the runtime share one discovery path.
+        return await asyncio.to_thread(
+            discover_installations,
+            adapter_ids=request.adapter_ids,
+            trusted_roots=self._trusted_discovery_roots,
+            pi_install_root=(self._pi_install_root if self._pi_node is not None else None),
+            pi_node=(self._pi_node if self._pi_install_root is not None else None),
+        )
 
     async def prepare(self, intent: LaunchIntent,
                       context: ExecutionContext) -> PreparedLaunch:

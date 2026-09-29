@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Mapping
 
 from .installation import installation_ref
-from .models import CoreError, InstallationCandidate
+from .models import CoreError, InstallationCandidate, Inventory
 from .native.process import require_containment
 from .native.registry import adapter_specs
 from .build_identity import (executable_build_identity,
@@ -331,3 +331,36 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
             found[item.installation_ref
                   or installation_ref(adapter_id, item.executable)] = item
     return tuple(found.values())
+
+
+def discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
+                           trusted_roots: tuple[Path, ...] = (),
+                           path_env: str | None = None,
+                           pi_install_root: str | Path | None = None,
+                           pi_node: str | Path | None = None) -> Inventory:
+    """Passively discover full candidates without constructing a runtime.
+
+    The default adapter set comes from the public catalog. Hosts retain the
+    full returned candidates locally; wire inventory is a separate redacted
+    projection. No provider process, journal or credential is opened here.
+    """
+    from .catalog import get_runtime_catalog
+    if adapter_ids is None:
+        selected = tuple(item.adapter_id for item in get_runtime_catalog().runtimes
+                         if item.discoverable)
+    elif isinstance(adapter_ids, tuple) and all(isinstance(item, str) for item in adapter_ids):
+        selected = adapter_ids
+    else:
+        raise TypeError("adapter_ids must be a tuple of strings or None")
+    if not isinstance(trusted_roots, tuple):
+        raise TypeError("trusted_roots must be a tuple")
+    if (pi_install_root is None) != (pi_node is None):
+        raise ValueError("pi_install_root and pi_node must be supplied together")
+    candidates: list[InstallationCandidate] = []
+    for adapter_id in selected:
+        candidates.extend(discover_path(adapter_id, path_env=path_env,
+                                        trusted_roots=trusted_roots))
+        if adapter_id == "pi_rpc" and pi_install_root is not None:
+            candidates.extend(discover_pi_releases(
+                pi_install_root, pi_node, trusted_roots=trusted_roots))
+    return Inventory(tuple(candidates))

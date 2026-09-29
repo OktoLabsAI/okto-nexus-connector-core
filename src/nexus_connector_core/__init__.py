@@ -57,8 +57,9 @@ from .executor_inventory import (
     calculate_inventory_revision,
     verify_executor_inventory_snapshot,
 )
+from .discovery import discover_installations
 
-__version__ = "0.2.11.dev0"
+__version__ = "0.2.12.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
@@ -71,6 +72,7 @@ __all__ = [
     "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "CATALOG_FORMAT_VERSION",
     "AvailabilityReport", "CandidateAvailability", "evaluate_runtime_availability", "AVAILABILITY_FORMAT_VERSION",
     "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
+    "discover_installations",
     "SQLiteOwnedSlotLedger",
     "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot",
     "calculate_inventory_revision",
