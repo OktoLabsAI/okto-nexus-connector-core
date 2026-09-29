@@ -23,3 +23,9 @@ Current: `nexus_connector_core-0.2.15.dev0-py3-none-any.whl`, SHA-256
 Adds pure R4 lease correlation and receipt reducers. The grant alone does not
 authorize a native effect; Core application is a separate host step. The R4
 bundle remains development-partial and R4_BUNDLE_EXECUTABLE=False.
+
+Current: `nexus_connector_core-0.2.16.dev0-py3-none-any.whl`, SHA-256
+`19b28e7f8f20c02032c32cd6b47f7d9e5b7f3b5b503c3e17620cc8ba6ee17946`.
+Adds pure R4 attach and reconcile acknowledgment correlation. Control and lane
+readiness still do not imply a productive Core session. The bundle remains
+`development-partial` and `R4_BUNDLE_EXECUTABLE=False`.
