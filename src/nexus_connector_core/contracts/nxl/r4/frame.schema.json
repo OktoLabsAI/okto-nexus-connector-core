@@ -1,0 +1,897 @@
+{
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/r4/frame.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "oneOf": [
+    {
+      "additionalProperties": false,
+      "properties": {
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "attach_request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "authorization_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "configuration_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "credential_epoch": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "expires_in": {
+          "maximum": 600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "binding.attached"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "attach_request_id",
+        "connection_id",
+        "connection_generation",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "credential_epoch",
+        "authorization_revision",
+        "configuration_revision",
+        "expires_in"
+      ],
+      "title": "binding.attached",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "ready_lane_ids": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 1024,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "reconcile_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "recovery_remaining": {
+          "type": "boolean"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_lease_requirements": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 1024,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "type": {
+          "const": "reconcile.accepted"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "reconcile_id",
+        "connection_id",
+        "connection_generation",
+        "server_id",
+        "executor_id",
+        "recovery_remaining",
+        "ready_lane_ids",
+        "session_lease_requirements"
+      ],
+      "title": "reconcile.accepted",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "expected_lease_serial": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "grant_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "purpose": {
+          "enum": [
+            "initial",
+            "renew",
+            "reconnect"
+          ]
+        },
+        "request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "authorization_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "binding_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "configuration_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "credential_epoch": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "executor_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "server_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_owner_generation": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "workspace_binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "workspace_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "server_id",
+            "executor_id",
+            "binding_id",
+            "agent_id",
+            "workspace_id",
+            "workspace_binding_id",
+            "session_id",
+            "session_owner_generation",
+            "authorization_revision",
+            "configuration_revision",
+            "binding_revision",
+            "credential_epoch"
+          ],
+          "type": "object"
+        },
+        "type": {
+          "const": "lease.renew"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "request_id",
+        "grant_id",
+        "expected_lease_serial",
+        "scope",
+        "connection_id",
+        "connection_generation",
+        "purpose"
+      ],
+      "title": "lease.renew",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "allowed_actions": {
+          "items": {
+            "enum": [
+              "runtime.open",
+              "turn.submit",
+              "turn.steer",
+              "turn.interrupt",
+              "runtime.close"
+            ]
+          },
+          "maxItems": 5,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "grant_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "lease_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "lease_serial": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "authorization_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "binding_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "configuration_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "credential_epoch": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "executor_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "server_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_owner_generation": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "workspace_binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "workspace_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "server_id",
+            "executor_id",
+            "binding_id",
+            "agent_id",
+            "workspace_id",
+            "workspace_binding_id",
+            "session_id",
+            "session_owner_generation",
+            "authorization_revision",
+            "configuration_revision",
+            "binding_revision",
+            "credential_epoch"
+          ],
+          "type": "object"
+        },
+        "type": {
+          "const": "lease.granted"
+        },
+        "valid_for_ms": {
+          "maximum": 120000,
+          "minimum": 1,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "request_id",
+        "lease_id",
+        "lease_serial",
+        "grant_id",
+        "scope",
+        "allowed_actions",
+        "valid_for_ms"
+      ],
+      "title": "lease.granted",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "application_stage": {
+          "enum": [
+            "INSTALLED",
+            "RENEWED",
+            "REVOKED"
+          ]
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "grant_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "lease_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "lease_serial": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "authorization_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "binding_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "configuration_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "credential_epoch": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "executor_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "server_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_owner_generation": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "workspace_binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "workspace_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "server_id",
+            "executor_id",
+            "binding_id",
+            "agent_id",
+            "workspace_id",
+            "workspace_binding_id",
+            "session_id",
+            "session_owner_generation",
+            "authorization_revision",
+            "configuration_revision",
+            "binding_revision",
+            "credential_epoch"
+          ],
+          "type": "object"
+        },
+        "type": {
+          "const": "lease.applied"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "request_id",
+        "lease_id",
+        "lease_serial",
+        "grant_id",
+        "scope",
+        "connection_id",
+        "connection_generation",
+        "application_stage"
+      ],
+      "title": "lease.applied",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "action": {
+              "const": "runtime.open"
+            },
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "adapter_id": {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "candidate_ref": {
+                  "pattern": "^nexus-install-v1:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "inventory_revision": {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "mode": {
+                  "const": "managed"
+                },
+                "model": {
+                  "maxLength": 160,
+                  "type": [
+                    "string",
+                    "null"
+                  ]
+                },
+                "profile_revision": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "realization_ref": {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "realization_revision": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                }
+              },
+              "required": [
+                "adapter_id",
+                "candidate_ref",
+                "inventory_revision",
+                "realization_ref",
+                "realization_revision",
+                "profile_revision",
+                "mode"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "turn.submit"
+            },
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "delivery_id": {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "text": {
+                  "maxLength": 65536,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "turn.steer"
+            },
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "text": {
+                  "maxLength": 65536,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "text"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "turn.interrupt"
+            },
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "reason"
+              ],
+              "type": "object"
+            }
+          }
+        },
+        {
+          "properties": {
+            "action": {
+              "const": "runtime.close"
+            },
+            "payload": {
+              "additionalProperties": false,
+              "properties": {
+                "reason": {
+                  "maxLength": 256,
+                  "minLength": 1,
+                  "type": "string"
+                }
+              },
+              "required": [
+                "reason"
+              ],
+              "type": "object"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "action": {
+          "enum": [
+            "runtime.open",
+            "turn.submit",
+            "turn.steer",
+            "turn.interrupt",
+            "runtime.close"
+          ]
+        },
+        "agent_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "authorization_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "binding_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "configuration_revision": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "credential_epoch": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "expected_turn_id": {
+          "maxLength": 160,
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "grant_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "intent_hash": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "operation_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "payload": {
+          "type": "object"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "session_owner_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "type": {
+          "const": "operation.submit"
+        },
+        "workspace_binding_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "workspace_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "binding_id",
+        "agent_id",
+        "workspace_id",
+        "workspace_binding_id",
+        "session_id",
+        "session_owner_generation",
+        "authorization_revision",
+        "configuration_revision",
+        "binding_revision",
+        "credential_epoch",
+        "connection_id",
+        "connection_generation",
+        "grant_id",
+        "operation_id",
+        "intent_hash",
+        "action",
+        "payload"
+      ],
+      "title": "operation.submit",
+      "type": "object"
+    }
+  ]
+}

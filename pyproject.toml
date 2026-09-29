@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "nexus-connector-core"
-version = "0.2.12.dev0"
+version = "0.2.13.dev0"
 description = "Shared native harness runtime contracts for Okto Nexus"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,7 +23,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-nexus_connector_core = ["py.typed", "contracts/nxl/v1/*.json", "native/*.schemas.json", "pi_extension/*.js", "pi_extension/*.json"]
+nexus_connector_core = ["py.typed", "contracts/nxl/v1/*.json", "contracts/nxl/r4/*.json", "native/*.schemas.json", "pi_extension/*.js", "pi_extension/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
