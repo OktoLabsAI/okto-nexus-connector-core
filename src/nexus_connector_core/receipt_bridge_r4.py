@@ -11,8 +11,47 @@ from __future__ import annotations
 from typing import Any, Mapping
 
 from .frame_codec_r4 import decode_r4_frame, encode_r4_frame
-from .models import CoreError, ExecutionContext, Operation, OperationReceipt
+from .installation import effective_installation_ref
+from .models import (
+    CoreError, ExecutionContext, Operation, OperationReceipt, PreparedLaunch,
+)
 from .protocol import canonical_json, intent_hash
+
+
+def project_r4_open_receipt(
+    submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, prepared: PreparedLaunch, *,
+    stream_epoch: str, receipt_revision: int,
+) -> dict[str, Any]:
+    """Verify the selected local launch and Core open journal receipt."""
+    frame = _checked_submit(
+        submit_frame, core_receipt, context,
+        receipt_revision=receipt_revision, action="runtime.open")
+    if (not isinstance(prepared, PreparedLaunch) or
+            not isinstance(stream_epoch, str) or not stream_epoch or
+            prepared.intent.agent_id != context.agent_id or
+            prepared.intent.workspace_id != context.workspace_id or
+            prepared.intent.adapter_id != frame["payload"]["adapter_id"] or
+            prepared.intent.mode != frame["payload"]["mode"] or
+            prepared.intent.model != frame["payload"].get("model") or
+            effective_installation_ref(prepared.candidate) !=
+            frame["payload"]["candidate_ref"]):
+        raise CoreError("PROFILE_DRIFT", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id)
+    semantic = Operation(
+        frame["operation_id"], frame["session_id"], "runtime.open",
+        {"adapter_id": prepared.intent.adapter_id,
+         "profile_fingerprint": prepared.profile_fingerprint,
+         "root_fingerprint": prepared.root_fingerprint,
+         "stream_epoch": stream_epoch},
+    )
+    if core_receipt.intent_hash != intent_hash(semantic, context):
+        raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id)
+    return _wire_receipt(frame, core_receipt, context,
+                         receipt_revision=receipt_revision)
 
 
 def project_r4_turn_receipt(
@@ -69,6 +108,28 @@ def _project_r4_receipt(
     submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
     context: ExecutionContext, *, receipt_revision: int, action: str,
 ) -> dict[str, Any]:
+    frame = _checked_submit(
+        submit_frame, core_receipt, context,
+        receipt_revision=receipt_revision, action=action)
+    payload_key = ("text" if action in {"turn.submit", "turn.steer"}
+                   else "reason")
+    semantic = Operation(
+        frame["operation_id"], frame["session_id"], action,
+        {payload_key: frame["payload"][payload_key]},
+        frame.get("expected_turn_id"),
+    )
+    if core_receipt.intent_hash != intent_hash(semantic, context):
+        raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
+                        possible_effect=True,
+                        operation_id=core_receipt.operation_id)
+    return _wire_receipt(frame, core_receipt, context,
+                         receipt_revision=receipt_revision)
+
+
+def _checked_submit(
+    submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, *, receipt_revision: int, action: str,
+) -> dict[str, Any]:
     if (not isinstance(core_receipt, OperationReceipt) or
             not isinstance(context, ExecutionContext) or
             type(receipt_revision) is not int or receipt_revision < 1):
@@ -101,17 +162,13 @@ def _project_r4_receipt(
         raise CoreError("SCOPE_MISMATCH", "r4_receipt_projection",
                         possible_effect=True,
                         operation_id=core_receipt.operation_id)
-    payload_key = ("text" if action in {"turn.submit", "turn.steer"}
-                   else "reason")
-    semantic = Operation(
-        frame["operation_id"], frame["session_id"], action,
-        {payload_key: frame["payload"][payload_key]},
-        frame.get("expected_turn_id"),
-    )
-    if core_receipt.intent_hash != intent_hash(semantic, context):
-        raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
-                        possible_effect=True,
-                        operation_id=core_receipt.operation_id)
+    return frame
+
+
+def _wire_receipt(
+    frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, *, receipt_revision: int,
+) -> dict[str, Any]:
     projected = {
         "protocol_major": frame["protocol_major"],
         "contract_revision": frame["contract_revision"],

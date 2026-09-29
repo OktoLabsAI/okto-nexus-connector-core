@@ -5,8 +5,9 @@ from dataclasses import replace
 import pytest
 
 from nexus_connector_core import (
-    CoreError, ExecutionContext, Operation, OperationReceipt,
-    R4_PREVIEW_REVISION, project_r4_turn_receipt,
+    CoreError, ExecutionContext, InstallationCandidate, LaunchIntent,
+    Operation, OperationReceipt, PreparedLaunch, installation_ref,
+    R4_PREVIEW_REVISION, project_r4_open_receipt, project_r4_turn_receipt,
     project_r4_steer_receipt, project_r4_interrupt_receipt,
     project_r4_close_receipt,
     r4_submit_intent_hash,
@@ -31,6 +32,67 @@ def _frame():
     }
     frame["intent_hash"] = r4_submit_intent_hash(frame)
     return frame
+
+
+def test_r4_open_receipt_proves_core_launch_and_selected_installation():
+    frame = _frame()
+    candidate = InstallationCandidate(
+        "codex_app_server", "C:/synthetic-codex.exe", "fingerprint",
+        "explicit", "selected")
+    frame["action"] = "runtime.open"
+    frame["payload"] = {
+        "adapter_id": "codex_app_server",
+        "candidate_ref": installation_ref(
+            candidate.adapter_id, candidate.executable),
+        "inventory_revision": "sha256:" + "b" * 64,
+        "realization_ref": "realization", "realization_revision": 1,
+        "profile_revision": 3, "mode": "managed",
+    }
+    frame["intent_hash"] = r4_submit_intent_hash(frame)
+    context = ExecutionContext(
+        "server", "executor", "binding", "agent", "workspace",
+        1, 1, 1, 100.0, frozenset({"runtime.open"}),
+    )
+    prepared = PreparedLaunch(
+        LaunchIntent("agent", "workspace", "codex_app_server"),
+        candidate, (candidate.executable,), "C:/workspace", "C:/workspace",
+        "root-fingerprint", "profile-fingerprint", (),
+    )
+    semantic = Operation(
+        "operation", "session", "runtime.open",
+        {"adapter_id": "codex_app_server",
+         "profile_fingerprint": "profile-fingerprint",
+         "root_fingerprint": "root-fingerprint",
+         "stream_epoch": "stream"},
+    )
+    receipt = OperationReceipt(
+        "operation", intent_hash(semantic, context), "SUBMITTED",
+        True, False, "session",
+    )
+    projected = project_r4_open_receipt(
+        frame, receipt, context, prepared, stream_epoch="stream",
+        receipt_revision=1)
+    assert projected["intent_hash"] == frame["intent_hash"]
+    assert projected["stage"] == "SUBMITTED"
+    altered = {**frame, "payload": {**frame["payload"],
+                                    "candidate_ref": "nexus-install-v1:" + "f" * 64}}
+    altered["intent_hash"] = r4_submit_intent_hash(altered)
+    with pytest.raises(CoreError) as drift:
+        project_r4_open_receipt(
+            altered, receipt, context, prepared, stream_epoch="stream",
+            receipt_revision=1)
+    assert drift.value.code == "PROFILE_DRIFT"
+    assert drift.value.possible_effect and not drift.value.retry_safe
+    with pytest.raises(CoreError) as semantic_drift:
+        project_r4_open_receipt(
+            frame, receipt, context, replace(
+                prepared, profile_fingerprint="changed"),
+            stream_epoch="stream", receipt_revision=1)
+    assert semantic_drift.value.code == "OPERATION_CONFLICT"
+    with pytest.raises(CoreError):
+        project_r4_open_receipt(
+            frame, receipt, context, prepared,
+            stream_epoch="changed", receipt_revision=1)
 
 
 def test_r4_turn_receipt_projects_distinct_hashes_after_core_proof():

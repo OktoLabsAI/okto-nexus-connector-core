@@ -46,7 +46,7 @@ from .lease_reducer_r4 import (
 )
 from .receipt_reducer_r4 import R4ReceiptProjection, reduce_r4_receipt
 from .receipt_bridge_r4 import (
-    project_r4_turn_receipt, project_r4_steer_receipt,
+    project_r4_open_receipt, project_r4_turn_receipt, project_r4_steer_receipt,
     project_r4_interrupt_receipt, project_r4_close_receipt,
 )
 from .control_reducer_r4 import (
@@ -85,7 +85,7 @@ from .executor_inventory import (
 )
 from .discovery import discover_installations
 
-__version__ = "0.2.21.dev0"
+__version__ = "0.2.22.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
@@ -94,7 +94,7 @@ __all__ = [
     "R4LeaseAttempt", "R4LeaseProjection", "r4_lease_renew_frame",
     "reduce_r4_lease_grant", "reduce_r4_lease_applied", "r4_lease_productive",
     "R4ReceiptProjection", "reduce_r4_receipt",
-    "project_r4_turn_receipt", "project_r4_steer_receipt",
+    "project_r4_open_receipt", "project_r4_turn_receipt", "project_r4_steer_receipt",
     "project_r4_interrupt_receipt", "project_r4_close_receipt",
     "R4ReconcileAttempt", "R4ControlProjection", "R4AttachAttempt",
     "R4LaneProjection", "reduce_r4_reconcile_accepted",
