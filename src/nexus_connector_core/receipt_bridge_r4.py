@@ -26,6 +26,27 @@ def project_r4_turn_receipt(
     The host remains responsible for admission, lease, source connection and
     monotonic receipt revision. This function grants no effect authority.
     """
+    return _project_r4_text_receipt(
+        submit_frame, core_receipt, context, receipt_revision=receipt_revision,
+        action="turn.submit",
+    )
+
+
+def project_r4_steer_receipt(
+    submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, *, receipt_revision: int,
+) -> dict[str, Any]:
+    """Verify a Core steer receipt before publishing its R4 wire fact."""
+    return _project_r4_text_receipt(
+        submit_frame, core_receipt, context, receipt_revision=receipt_revision,
+        action="turn.steer",
+    )
+
+
+def _project_r4_text_receipt(
+    submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, *, receipt_revision: int, action: str,
+) -> dict[str, Any]:
     if (not isinstance(core_receipt, OperationReceipt) or
             not isinstance(context, ExecutionContext) or
             type(receipt_revision) is not int or receipt_revision < 1):
@@ -37,7 +58,7 @@ def project_r4_turn_receipt(
         raise CoreError("VALIDATION_ERROR", "r4_receipt_projection",
                         possible_effect=True,
                         operation_id=core_receipt.operation_id) from exc
-    if frame["type"] != "operation.submit" or frame["action"] != "turn.submit":
+    if frame["type"] != "operation.submit" or frame["action"] != action:
         raise CoreError("CAPABILITY_UNSUPPORTED", "r4_receipt_projection",
                         possible_effect=True,
                         operation_id=core_receipt.operation_id)
@@ -59,7 +80,7 @@ def project_r4_turn_receipt(
                         possible_effect=True,
                         operation_id=core_receipt.operation_id)
     semantic = Operation(
-        frame["operation_id"], frame["session_id"], "turn.submit",
+        frame["operation_id"], frame["session_id"], action,
         {"text": frame["payload"]["text"]}, frame.get("expected_turn_id"),
     )
     if core_receipt.intent_hash != intent_hash(semantic, context):

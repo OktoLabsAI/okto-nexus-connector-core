@@ -7,6 +7,7 @@ import pytest
 from nexus_connector_core import (
     CoreError, ExecutionContext, Operation, OperationReceipt,
     R4_PREVIEW_REVISION, project_r4_turn_receipt,
+    project_r4_steer_receipt,
     r4_submit_intent_hash,
 )
 from nexus_connector_core.protocol import intent_hash
@@ -67,3 +68,38 @@ def test_r4_turn_receipt_projects_distinct_hashes_after_core_proof():
     with pytest.raises(CoreError):
         project_r4_turn_receipt(frame, replace(receipt, operation_id="other"),
                                 context, receipt_revision=1)
+
+
+def test_r4_steer_receipt_requires_matching_core_semantic_and_turn_target():
+    frame = _frame()
+    frame["action"] = "turn.steer"
+    frame["payload"] = {"text": "Change direction"}
+    frame["expected_turn_id"] = "turn-1"
+    frame["intent_hash"] = r4_submit_intent_hash(frame)
+    context = ExecutionContext(
+        "server", "executor", "binding", "agent", "workspace",
+        1, 1, 1, 100.0, frozenset({"turn.steer"}),
+    )
+    semantic = Operation("operation", "session", "turn.steer",
+                         {"text": "Change direction"}, "turn-1")
+    receipt = OperationReceipt(
+        "operation", intent_hash(semantic, context), "SUBMITTED",
+        True, False, "session",
+    )
+    projected = project_r4_steer_receipt(
+        frame, receipt, context, receipt_revision=1)
+    assert projected["intent_hash"] == frame["intent_hash"]
+    assert projected["stage"] == "SUBMITTED"
+
+    altered = {**frame, "expected_turn_id": "turn-2"}
+    altered["intent_hash"] = r4_submit_intent_hash(altered)
+    with pytest.raises(CoreError) as mismatch:
+        project_r4_steer_receipt(altered, receipt, context,
+                                 receipt_revision=1)
+    assert mismatch.value.code == "OPERATION_CONFLICT"
+    assert mismatch.value.possible_effect is True
+    assert mismatch.value.retry_safe is False
+    with pytest.raises(CoreError) as wrong_action:
+        project_r4_turn_receipt(frame, receipt, context,
+                                receipt_revision=1)
+    assert wrong_action.value.code == "CAPABILITY_UNSUPPORTED"

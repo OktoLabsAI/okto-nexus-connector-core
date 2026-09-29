@@ -46,3 +46,8 @@ Current: `nexus_connector_core-0.2.19.dev0-py3-none-any.whl`, SHA-256
 `3b1b334f61f8ad5a2a59c63dcd127ced26a9d426dde7bff68085e4081d01c072`.
 Projection failures after a Core receipt now preserve possible effect and
 refuse safe retry. Remote R4 execution remains disabled.
+
+Current: `nexus_connector_core-0.2.20.dev0-py3-none-any.whl`, SHA-256
+`7e9addcb72c52aefe35ea136b4c706721b104f6f9ce4a804a0071d2e829ec4c1`.
+The verified R4 projection also supports steer receipts and rejects a changed
+native turn target. Interrupt and close reasons still need Core alignment.
