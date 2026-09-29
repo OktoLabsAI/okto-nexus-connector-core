@@ -17,3 +17,9 @@ Current: `nexus_connector_core-0.2.14.dev0-py3-none-any.whl`, SHA-256
 Acrescenta payloads fechados de decisão/input, recibo/query escopados e
 adapter IDs gerados do registry. `CONTRACT_REVISION` ainda é R3 e
 `R4_BUNDLE_EXECUTABLE=False`; não autoriza efeitos remotos R4.
+
+Current: `nexus_connector_core-0.2.15.dev0-py3-none-any.whl`, SHA-256
+4caa45add41da1fbc409316b90c34beafd60e3ea8a752c866071616af50f152a.
+Adds pure R4 lease correlation and receipt reducers. The grant alone does not
+authorize a native effect; Core application is a separate host step. The R4
+bundle remains development-partial and R4_BUNDLE_EXECUTABLE=False.

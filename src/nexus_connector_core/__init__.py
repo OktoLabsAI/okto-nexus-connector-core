@@ -40,6 +40,11 @@ from .frame_codec_r4 import (
     R4_PREVIEW_REVISION, R4_BUNDLE_EXECUTABLE, decode_r4_frame,
     encode_r4_frame, r4_submit_intent_hash, verify_r4_development_bundle,
 )
+from .lease_reducer_r4 import (
+    R4LeaseAttempt, R4LeaseProjection, r4_lease_renew_frame,
+    reduce_r4_lease_grant, reduce_r4_lease_applied, r4_lease_productive,
+)
+from .receipt_reducer_r4 import R4ReceiptProjection, reduce_r4_receipt
 from .ports import OwnedSlotLedger, RuntimeCore
 from .composition import create_runtime
 from .catalog import (
@@ -63,12 +68,15 @@ from .executor_inventory import (
 )
 from .discovery import discover_installations
 
-__version__ = "0.2.14.dev0"
+__version__ = "0.2.15.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
     "R4_PREVIEW_REVISION", "R4_BUNDLE_EXECUTABLE", "decode_r4_frame",
     "encode_r4_frame", "r4_submit_intent_hash", "verify_r4_development_bundle",
+    "R4LeaseAttempt", "R4LeaseProjection", "r4_lease_renew_frame",
+    "reduce_r4_lease_grant", "reduce_r4_lease_applied", "r4_lease_productive",
+    "R4ReceiptProjection", "reduce_r4_receipt",
     "OperationReceipt", "OperationKey", "SessionKey", "AttachPolicy", "AttachTarget", "ClaimedSession", "SessionClaimPage", "SessionLeaseState", "OwnedSlotReservation", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
     "InstallationCandidate", "LaunchIntent", "PreparedLaunch",
     "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
