@@ -35,3 +35,9 @@ Current: `nexus_connector_core-0.2.17.dev0-py3-none-any.whl`, SHA-256
 The closed R4 schema now covers 21 frame kinds. Pure event and approval
 notification reducers preserve replay and scope facts. The hosts do not yet
 execute R4 work, so the bundle remains `development-partial`.
+
+Current: `nexus_connector_core-0.2.18.dev0-py3-none-any.whl`, SHA-256
+`547ab7dfde09adff79f38f5cdf688e5b9d0d7ed3caddf4de445766afdefde0da`.
+Adds a pure verified projection from a Core turn receipt to an R4 transport
+receipt. The journal and wire hashes stay separate. The bundle remains
+`development-partial` and `R4_BUNDLE_EXECUTABLE=False`.

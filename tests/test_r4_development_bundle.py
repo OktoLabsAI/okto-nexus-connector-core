@@ -57,7 +57,7 @@ def test_r4_handshake_and_reconcile_pages_are_closed():
     base = {"protocol_major": 1, "contract_revision": R4_PREVIEW_REVISION}
     hello = {**base, "type": "hello", "link_attempt_id": "attempt",
              "server_id": "srv", "executor_id": "exe",
-             "core_version": "0.2.17.dev0",
+             "core_version": "0.2.18.dev0",
              "management_revision": "nexus-connections-2026-09-29-r4",
              "supported_nxl": [R4_PREVIEW_REVISION],
              "snapshot_formats": [1], "control_capabilities": []}
