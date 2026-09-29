@@ -164,6 +164,22 @@ def build_executor_inventory_snapshot(
     return snapshot
 
 
+def calculate_inventory_revision(
+    candidates: Iterable[InstallationCandidate], *,
+    availability: AvailabilityReport | None = None,
+) -> str:
+    """Compute the same complete revision for a local selection preview.
+
+    The preview is not a publishable snapshot: the application supplies the
+    real executor/producer identity and publication sequence when publishing.
+    """
+    return build_executor_inventory_snapshot(
+        candidates, server_id="preview", executor_id="preview",
+        producer_instance_id="preview", publication_sequence=1,
+        availability=availability,
+    )["inventory_revision"]
+
+
 def verify_executor_inventory_snapshot(snapshot: Mapping[str, Any]) -> None:
     """Reject malformed/tampered wire projections before a host stores them.
 
@@ -251,4 +267,5 @@ def verify_executor_inventory_snapshot(snapshot: Mapping[str, Any]) -> None:
 
 
 __all__ = ["SNAPSHOT_FORMAT_VERSION", "MAX_SNAPSHOT_CANDIDATES",
-           "build_executor_inventory_snapshot", "verify_executor_inventory_snapshot"]
+           "build_executor_inventory_snapshot", "calculate_inventory_revision",
+           "verify_executor_inventory_snapshot"]

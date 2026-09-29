@@ -9,6 +9,7 @@ import pytest
 
 from nexus_connector_core import (
     CoreError, InstallationCandidate, build_executor_inventory_snapshot,
+    calculate_inventory_revision,
     verify_executor_inventory_snapshot,
 )
 
@@ -50,6 +51,7 @@ def test_revision_tracks_evidence_but_not_publication_metadata(tmp_path):
     original = _snapshot(first, second)
     reordered = _snapshot(second, first, sequence=2, age=100)
     assert reordered["inventory_revision"] == original["inventory_revision"]
+    assert calculate_inventory_revision([second, first]) == original["inventory_revision"]
     changed = _snapshot(replace(first, fingerprint="sha256:new"), second)
     assert changed["inventory_revision"] != original["inventory_revision"]
     same_version_new_build = _snapshot(

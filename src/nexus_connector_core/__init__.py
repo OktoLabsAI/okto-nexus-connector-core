@@ -54,10 +54,11 @@ from .runtime import LocalRuntimeCore
 from .slot_ledger import SQLiteOwnedSlotLedger
 from .executor_inventory import (
     SNAPSHOT_FORMAT_VERSION, build_executor_inventory_snapshot,
+    calculate_inventory_revision,
     verify_executor_inventory_snapshot,
 )
 
-__version__ = "0.2.10.dev0"
+__version__ = "0.2.11.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
@@ -72,5 +73,6 @@ __all__ = [
     "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
     "SQLiteOwnedSlotLedger",
     "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot",
+    "calculate_inventory_revision",
     "verify_executor_inventory_snapshot",
 ]
