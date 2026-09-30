@@ -36,6 +36,10 @@ QUALIFIED_CONTROL_BUILDS: set[tuple[str, str, str, str, str]] = set()
 # promise that every model task succeeds, not resume/deduplication, not the
 # Pi work bridge, and not native approval traffic.
 _QUALIFIED_PRODUCTION_BUILDS = {
+    # 2026-09-30 Windows real turn, steer and interrupt campaign.
+    # Scope: conversation and controls only; no native approval grant.
+    ("codex", "0.159.0", "win32", "x86_64",
+     "sha256:0e2a4cd6ac1b329e64ec74745e38b71a3d4fa701102c86f49cf605d23a02c4df"),
     ("codex", "0.157.0", "win32", "x86_64",
      "sha256:ed1c7b36e44536809c868864c833af8a857f56599a7a7fe23b908a1ba1093b1f"),
     ("pi", "0.87.1", "win32", "x86_64",
@@ -83,6 +87,8 @@ def qualified_build(kind, version, platform, architecture, fingerprint,
 #: approves the *local binding* separately; this set never authorizes a
 #: path, only conserves qualification of identical bytes.
 QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
+    ("codex", "0.159.0", "win32", "x86_64",
+     "sha256:ac0413e2cd18e80561c8e1e50511f7e05465630dc16bf60656e04d7fff2e994c"),
     # Portable content digests of the same three authorized builds above
     # (PC09): identical bytes in a different directory conserve the
     # qualification; the local binding approval still applies separately.

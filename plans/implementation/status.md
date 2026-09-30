@@ -1,3 +1,7 @@
+## September 30, 2026 — Codex 0.159.0
+
+Core 0.2.31.dev0 adds exact Windows conversation/control qualification. Installed suite: 951 passed, 74 skipped. Real Pi/Codex/Claude R4 lease probes completed turns. Close classification and full product acceptance remain open. See evidence/codex-0159-qualification.md.
+
 # Implementation status — 2026-09-25
 
 ## R4 pending renewal containment — 2026-09-30

@@ -22,7 +22,7 @@ from pathlib import Path
 from nexus_connector_core import (
     CloseOperation, CoreError, EventCursor, ExecutionContext, LaunchIntent,
     LocalRuntimeCore, OpenOperation, OperationKey, SessionKey,
-    ShutdownPolicy, TurnOperation,
+    ShutdownPolicy, TurnOperation, R4_PREVIEW_REVISION,
 )
 from nexus_connector_core.discovery import (
     candidate as discovery_candidate, candidate_pi_node_cli,
@@ -38,7 +38,7 @@ _TERMINALS = {
 }
 
 
-async def _run(adapter: str, paths: dict[str, str]) -> dict[str, object]:
+async def _run(adapter: str, paths: dict[str, str], *, r4: bool = False) -> dict[str, object]:
     with tempfile.TemporaryDirectory(
             prefix=f"nexus-core-managed-{adapter}-") as directory:
         root = Path(directory)
@@ -84,8 +84,27 @@ async def _run(adapter: str, paths: dict[str, str]) -> dict[str, object]:
             time.monotonic() + 90,
             frozenset({"runtime.open", "turn.submit", "turn.interrupt",
                        "runtime.close"}))
-        report: dict[str, object] = {}
+        report: dict[str, object] = {"authority_mode": "r4" if r4 else "legacy"}
         try:
+            if r4:
+                request = await runtime.begin_r4_lease_request(
+                    scope=dict(server_id="srv", executor_id="exe", binding_id="binding",
+                        agent_id="agent", workspace_id="ws", workspace_binding_id="wxb",
+                        session_id="session", session_owner_generation=1,
+                        authorization_revision=1, configuration_revision=1,
+                        binding_revision=1, credential_epoch=1),
+                    grant_id="grant", connection_id="connection",
+                    connection_generation=1, purpose="initial")
+                installed = await runtime.install_r4_lease(request, dict(
+                    protocol_major=1, contract_revision=R4_PREVIEW_REVISION,
+                    type="lease.granted", request_id=request.request_id,
+                    lease_id="lease", lease_serial=request.expected_lease_serial + 1,
+                    grant_id=request.grant_id, scope=dict(request.scope),
+                    valid_for_ms=60000,
+                    allowed_actions=["runtime.open", "turn.submit", "turn.interrupt",
+                                     "runtime.close"]))
+                context = installed.context
+                report["lease_application_stage"] = installed.acknowledgement["application_stage"]
             prepared = await runtime.prepare(
                 LaunchIntent("agent", "ws", adapter), context)
             report["prepared_version"] = prepared.candidate.version
@@ -116,7 +135,9 @@ async def _run(adapter: str, paths: dict[str, str]) -> dict[str, object]:
             report["turn_receipt_stage"] = receipt.stage if receipt else None
             try:
                 closed = await runtime.close(
-                    CloseOperation("close", "session"), context)
+                    CloseOperation("close", "session",
+                        reason="Local qualification completed" if r4 else None,
+                        policy=ShutdownPolicy(5, 5) if r4 else None), context)
                 report["close_stage"] = closed.stage
             except CoreError as exc:
                 # An honestly-unknown close (possible effect, unconfirmed
@@ -138,6 +159,7 @@ async def _run(adapter: str, paths: dict[str, str]) -> dict[str, object]:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("adapter", choices=sorted(_TERMINALS))
+    parser.add_argument("--r4", action="store_true", help="Install R4 lease authority before native execution.")
     parser.add_argument("--codex", default="")
     parser.add_argument("--codex-home", default="")
     parser.add_argument("--node", default="")
@@ -148,7 +170,7 @@ def main() -> None:
     paths = {name.replace("-", "_"): getattr(args, name.replace("-", "_"))
              for name in ("codex", "codex-home", "node", "pi-cli",
                           "pi-config", "claude")}
-    report = asyncio.run(_run(args.adapter, paths))
+    report = asyncio.run(_run(args.adapter, paths, r4=args.r4))
     print(json.dumps(report, sort_keys=True))
 
 

@@ -1,0 +1,9 @@
+Processing C:\Users\jpamb\AppData\Local\Temp\core-0231-build-md3gn1v7
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: nexus-connector-core
+  Building wheel for nexus-connector-core (pyproject.toml): started
+  Building wheel for nexus-connector-core (pyproject.toml): finished with status 'done'
+  Created wheel for nexus-connector-core: filename=nexus_connector_core-0.2.31.dev0-py3-none-any.whl size=379434 sha256=6bee08e31516262e778906cd6b476c858826cbcb46fad78dda96da3345abcf24
+  Stored in directory: C:\Users\jpamb\AppData\Local\Temp\pip-ephem-wheel-cache-pj1ptcxy\wheels\bd\3f\70\f91906ea5a5b135c7d6f395ef1a9e0ede83d05024f297ff9e3
+Successfully built nexus-connector-core
