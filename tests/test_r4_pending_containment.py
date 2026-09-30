@@ -180,3 +180,48 @@ def test_renewal_during_containment_admission_returns_safe_retry(tmp_path):
             journal.close()
 
     asyncio.run(run())
+
+
+def test_containment_uses_committed_context_while_renewal_event_is_pending(tmp_path):
+    async def run():
+        clock = FakeClock()
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock)
+        entered, release = asyncio.Event(), asyncio.Event()
+        original = runtime._lease_event
+        renewal = None
+
+        async def held(session, binding, event_type, payload):
+            if event_type == 'core.lease_renewed':
+                entered.set()
+                await release.wait()
+            return await original(session, binding, event_type, payload)
+
+        try:
+            request = await attempt(runtime, clock)
+            installed = await runtime.install_r4_lease(request, grant(request))
+            await open_session(runtime, installed.context)
+            runtime._lease_event = held
+            clock.advance(1)
+            renewing = await attempt(runtime, clock, purpose='renew')
+            renewal = asyncio.create_task(runtime.install_r4_lease(renewing, grant(renewing)))
+            await asyncio.wait_for(entered.wait(), 2)
+            frame = operation(request, 'contain', action='turn.interrupt', payload={'reason':'Stop'})
+            context = runtime.r4_operation_context(frame, connection_id='connection', connection_generation=1)
+            assert context.r4_authority.lease_serial == 2
+            with pytest.raises(CoreError, match='LEASE_UPDATE_PENDING'):
+                await runtime.submit(TurnOperation('blocked', 'session', 'Wait'), context)
+            result = await asyncio.wait_for(runtime.control(
+                ControlOperation('contain', 'session', 'interrupt', reason='Stop'), context), .5)
+            assert result.stage == 'SUBMITTED' and len(factory.native.sent) == 1
+            assert not renewal.done()
+            release.set()
+            renewed = await renewal
+            assert renewed.context == context
+        finally:
+            release.set()
+            if renewal is not None:
+                await asyncio.gather(renewal, return_exceptions=True)
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+
+    asyncio.run(run())

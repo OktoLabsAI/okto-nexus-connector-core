@@ -1665,6 +1665,15 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                         # the active generation in memory.
                         binding.context = context
                         binding.lease_expired = False
+                        # Publish the same committed authority before inspection
+                        # or event persistence can yield. The installation task
+                        # remains pending, so productive work still waits for its
+                        # acknowledgement; containment sees one coherent context.
+                        entry = self._r4_leases.get(session)
+                        if (entry is not None and entry.pending is not None and
+                                entry.candidate_context == context):
+                            entry.context = context
+                            entry.projection = entry.candidate
         except TimeoutError as exc:
             raise CoreError("RECONNECT_BUSY", "lease_renew",
                             retry_safe=True) from exc
