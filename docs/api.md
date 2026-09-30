@@ -241,3 +241,9 @@ OUTCOME_UNKNOWN while the producer continues. Canceling either waiter does not
 cancel the producer. Trusted daemon/embedded operation owners use the complete
 wait; failures of the producer, including storage failures, propagate to them.
 This option requires an explicit close policy and is not a wire payload field.
+
+## Durable R4 receipt bindings
+
+`prepare_r4_receipt_binding(frame, context, prepared=..., stream_epoch=..., applied_operation=...)` verifies the dispatched semantic and returns a schema-1, non-secret record associating its R4 hash with the exact Core hash. Supply prepared launch/stream for open and the typed native decision for approval/input. The trusted host must commit this record before calling the runtime. It contains no prompt, response, native request, executable path, environment or credential.
+
+After restart, read `Journal.get_receipt(OperationKey(...))` and call `project_r4_bound_receipt(binding, receipt, key=key, receipt_revision=...)`. This validates the stored digest, namespace, operation/session IDs and Core hash, and preserves the original source connection. `validate_r4_receipt_binding` returns a detached checked record for storage readers. The digest detects corruption, not hostile forgery: these are trusted local records, not network authority. No API creates a receipt from absence, renews a lease, restores a native handle or authorizes replay. Missing or legacy associations remain unresolved.

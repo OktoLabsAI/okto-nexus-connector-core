@@ -171,15 +171,32 @@ def _checked_submit(
         raise CoreError("VALIDATION_ERROR", "r4_receipt_projection",
                         possible_effect=True)
     try:
+        frame = _checked_source(submit_frame, context, action=action)
+    except CoreError as error:
+        # Preserve the established live-projection diagnostic identity even
+        # when the submitted envelope itself is malformed or foreign.
+        raise CoreError(error.code, "r4_receipt_projection", possible_effect=True,
+                        operation_id=core_receipt.operation_id) from error
+    if (core_receipt.operation_id != frame["operation_id"] or
+            core_receipt.session_id != frame["session_id"]):
+        raise CoreError("SCOPE_MISMATCH", "r4_receipt_projection",
+                        possible_effect=True, operation_id=core_receipt.operation_id)
+    return frame
+
+
+def _checked_source(submit_frame, context, *, action):
+    if not isinstance(context, ExecutionContext):
+        raise CoreError("VALIDATION_ERROR", "r4_receipt_projection")
+    try:
         frame = decode_r4_frame(canonical_json(dict(submit_frame)))
     except (CoreError, ValueError, TypeError, AttributeError, RecursionError) as exc:
         raise CoreError("VALIDATION_ERROR", "r4_receipt_projection",
                         possible_effect=True,
-                        operation_id=core_receipt.operation_id) from exc
+                        operation_id=None) from exc
     if frame["type"] != "operation.submit" or frame["action"] != action:
         raise CoreError("CAPABILITY_UNSUPPORTED", "r4_receipt_projection",
                         possible_effect=True,
-                        operation_id=core_receipt.operation_id)
+                        operation_id=frame.get("operation_id"))
     expected_scope = {
         "server_id": context.server_id,
         "executor_id": context.executor_id,
@@ -201,12 +218,10 @@ def _checked_submit(
             "grant_id": authority.grant_id,
             "connection_id": authority.connection_id,
         })
-    if (any(frame[name] != value for name, value in expected_scope.items()) or
-            core_receipt.operation_id != frame["operation_id"] or
-            core_receipt.session_id != frame["session_id"]):
+    if any(frame[name] != value for name, value in expected_scope.items()):
         raise CoreError("SCOPE_MISMATCH", "r4_receipt_projection",
                         possible_effect=True,
-                        operation_id=core_receipt.operation_id)
+                        operation_id=frame["operation_id"])
     return frame
 
 

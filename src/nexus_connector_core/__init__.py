@@ -47,6 +47,9 @@ from .lease_reducer_r4 import (
     reduce_r4_lease_grant, reduce_r4_lease_applied, r4_lease_productive,
 )
 from .receipt_reducer_r4 import R4ReceiptProjection, reduce_r4_receipt
+from .receipt_binding_r4 import (
+    prepare_r4_receipt_binding, validate_r4_receipt_binding, project_r4_bound_receipt,
+)
 from .receipt_bridge_r4 import (
     project_r4_open_receipt, project_r4_turn_receipt, project_r4_steer_receipt,
     project_r4_interrupt_receipt, project_r4_close_receipt, project_r4_decision_receipt,
@@ -91,9 +94,10 @@ from .discovery import discover_installations
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.2.34.dev0"
+__version__ = "0.2.35.dev0"
 
 __all__ = [
+    "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
     "r4_close_operation",
     "ControlTargeting", "get_control_targeting", "validate_control_target",
     "R4Authority", "R4LeaseApplication",
