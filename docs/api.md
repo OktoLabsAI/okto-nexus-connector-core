@@ -219,6 +219,7 @@ for native decision hash domains and the remaining executable-bundle gate.
 |---|---|
 | `R4_PREVIEW_REVISION`, `R4_BUNDLE_EXECUTABLE`, `verify_r4_development_bundle` | Inspect the verified independent bundle; the executable flag is currently false. |
 | `decode_r4_frame`, `encode_r4_frame`, `r4_submit_intent_hash` | Strict closed schemas, bounded UTF-8 and independent JCS intent hashing. Preserve R3 history. |
+| `r4_close_operation` | Validate an R4 close frame and convert its reason and bounded drain/interrupt policy into `CloseOperation`. Apply it with the installed context; never discard policy fields. |
 | `R4ReconcileAttempt`, `R4ControlProjection`, `reduce_r4_reconcile_accepted` | Correlate a Server ACK with its connection and reconciliation attempt. Control readiness does not imply a session lease. |
 | `R4AttachAttempt`, `R4LaneProjection`, `reduce_r4_binding_attached`, `r4_lane_ready` | Correlate committed attach ACKs, revisions and local expiry; socket write alone does not admit a lane. |
 | `R4LeaseAttempt`, `R4LeaseProjection`, `r4_lease_renew_frame`, `reduce_r4_lease_grant` | Capture monotonic time before the request, correlate scope/serial, and consume transport delay from the granted duration. |

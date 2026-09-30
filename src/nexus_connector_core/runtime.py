@@ -36,6 +36,7 @@ from .protocol import canonical_json
 from .ports import Journal, Clock, OwnedSlotLedger
 from .targeting import validate_control_target
 from .lease_runtime_r4 import R4LeaseRuntime
+from .close_runtime import CloseRuntimeMixin
 
 
 def _finite_timing(value: object) -> bool:
@@ -135,6 +136,7 @@ class _Session:
     force_awake: asyncio.Event | None = None
     force_dispatched: bool = False
     closing: bool = False
+    draining: bool = False
     closed: bool = False
     faulted: bool = False
     effect_fence: object = field(default=None)
@@ -299,7 +301,7 @@ class _OpeningAttempt:
         self.waiter_done = False
 
 
-class LocalRuntimeCore(R4LeaseRuntime):
+class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
     """One installation's runtime kernel.
 
     The trusted host supplies selected binaries, local roots and a native
@@ -370,6 +372,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
                                               for root in trusted_discovery_roots)
         self._event_sink = event_sink
         self._sessions: dict[SessionKey, _Session] = {}
+        self._policy_closes: dict = {}
         self._session_tombstones = _SessionTombstones()
         self._opening: dict[SessionKey, _OpeningAttempt] = {}
         # C4/T04: additive opening_guard seam - passed only when declared.
@@ -565,7 +568,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
                         lambda: (binding.closed, binding.closing,
                                   binding.revoked or self._r4_revoked(session_key),
                                  binding.lease_expired or
-                                 binding.lease_hold or
+                                 binding.lease_hold or binding.draining or
                                   binding.superseded or self._r4_pending(session_key),
                                  binding.faulted),
                         clock=self._clock.monotonic,
@@ -643,7 +646,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
         if operation.verb == "interrupt" and operation.text is None:
             if operation.reason is not None and (
                     not isinstance(operation.reason, str) or
-                    not 1 <= len(operation.reason) <= 256):
+                    len(operation.reason) > 1024):
                 raise CoreError("VALIDATION_ERROR", "control")
             semantic = Operation(operation.operation_id, operation.session_id,
                                  "turn.interrupt",
@@ -747,7 +750,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
                                     containment_reply=containment_reply)
             if binding.closed:
                 raise CoreError("SESSION_CLOSED", "approval_decide")
-            if (self._shutting_down or binding.closing or binding.faulted) and                     not containment_reply:
+            if (self._shutting_down or binding.closing or binding.draining or binding.faulted) and not containment_reply:
                 # C7/W04: a closing/faulted stream still accepts its
                 # strictly NEGATIVE reply (containment); draining must
                 # never make a pending approval unanswerable.
@@ -769,6 +772,8 @@ class LocalRuntimeCore(R4LeaseRuntime):
             async def effect() -> None:
                 self._check_r4_context(context, action, operation.session_id,
                                        containment_reply=containment_reply)
+                if binding.draining and not containment_reply:
+                    raise EffectNotSent("SESSION_CLOSING")
                 try:
                     await reply(frozen_request, operation.decision,
                                 frozen_response)
@@ -817,6 +822,9 @@ class LocalRuntimeCore(R4LeaseRuntime):
                 else:
                     error = "SESSION_CLOSING"
                 raise CoreError(error, "admission", retry_safe=True)
+            if (fence_binding is not None and fence_binding.draining and
+                    semantic.action != "turn.interrupt"):
+                raise CoreError("SESSION_CLOSING", "admission", retry_safe=True)
             if (fence_binding is not None and
                     (fence_binding.lease_hold or
                      fence_binding.superseded) and
@@ -866,6 +874,8 @@ class LocalRuntimeCore(R4LeaseRuntime):
                 raise CoreError("SESSION_CLOSED", "admission")
             if binding.closing:
                 raise CoreError("SESSION_CLOSING", "admission")
+            if binding.draining and semantic.action != "turn.interrupt":
+                raise CoreError("SESSION_CLOSING", "admission", retry_safe=True)
             if binding.faulted:
                 raise CoreError("EVENT_STREAM_UNAVAILABLE", "admission")
             if verb in {"steer", "interrupt"}:
@@ -876,6 +886,8 @@ class LocalRuntimeCore(R4LeaseRuntime):
 
             async def effect() -> None:
                 self._check_r4_context(context, semantic.action, semantic.session_id)
+                if binding.draining and semantic.action != "turn.interrupt":
+                    raise EffectNotSent("SESSION_CLOSING")
                 await binding.native.send(
                     verb, payload, semantic.operation_id,
                     expected_turn_id=semantic.expected_turn_id)
@@ -885,17 +897,15 @@ class LocalRuntimeCore(R4LeaseRuntime):
 
     async def close(self, operation: CloseOperation,
                      context: ExecutionContext) -> OperationReceipt:
+        from .close_operation import close_operation_semantic
+        semantic = close_operation_semantic(operation)
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "close")
-        if operation.reason is not None and (
-                not isinstance(operation.reason, str) or
-                not 1 <= len(operation.reason) <= 256):
+        if context.r4_authority is not None and (operation.policy is None or operation.reason is None):
             raise CoreError("VALIDATION_ERROR", "close")
-        semantic = Operation(operation.operation_id, operation.session_id,
-                             "runtime.close",
-                             ({"reason": operation.reason}
-                              if operation.reason is not None else {}))
         self._authorize(context, semantic.action)
+        if operation.policy is not None:
+            return await self._close_policy(semantic, context, operation.policy)
         # C2/R01+C2/R04: the dedup read answers an idempotent retry from
         # its durable receipt even after EOF/closing/eviction; it never
         # runs under the global state lock.
@@ -903,12 +913,17 @@ class LocalRuntimeCore(R4LeaseRuntime):
         if old is not None:
             return old
         binding = self._session(operation.session_id, context)
+        policy_key = SessionKey(context.server_id, context.executor_id, operation.session_id)
+        if binding.draining or policy_key in self._policy_closes:
+            raise CoreError("SESSION_CLOSING", "close", retry_safe=True)
         async with binding.normal_lock:
             async with binding.control_lock:
                 old = await self._existing(semantic, context)
                 if old is not None:
                     return old
                 binding = self._session(operation.session_id, context)
+                if binding.draining or policy_key in self._policy_closes:
+                    raise CoreError("SESSION_CLOSING", "close", retry_safe=True)
 
                 async def effect() -> None:
                     self._check_r4_context(context, semantic.action, operation.session_id)
@@ -1194,6 +1209,9 @@ class LocalRuntimeCore(R4LeaseRuntime):
         for session, entry in self._r4_leases.items():
             if entry.pending is not None and not entry.pending.done():
                 outcomes[session] = "unknown"
+        for session, attempt in self._policy_closes.items():
+            if not attempt.task.done():
+                outcomes[session] = "unknown"
         self._dispose_factory_if_resolved()
         return ShutdownReport(outcomes)
 
@@ -1203,7 +1221,8 @@ class LocalRuntimeCore(R4LeaseRuntime):
         # C4/T04: a pending open can still produce an effect (callbacks,
         # queued spawn units) - its capacity is NOT disposable.
         if (self._opening or self._uncertain_opens or self._cleanup_tasks
-                or self._late_handles or self._release_obligations or self._r4_lease_tasks):
+                or self._late_handles or self._release_obligations or self._r4_lease_tasks
+                or self._policy_closes):
             return
         for binding in self._sessions.values():
             if not binding.closed:
@@ -1413,7 +1432,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
             return True
 
     async def _shutdown_session(self, session: SessionKey, binding: _Session,
-                                policy: ShutdownPolicy) -> str:
+                                policy: ShutdownPolicy, *, deadline: float | None = None) -> str:
         try:
             async with self._lock:
                 if binding.closed:
@@ -1421,13 +1440,15 @@ class LocalRuntimeCore(R4LeaseRuntime):
                 closing = binding.closing
             if not closing:
                 loop = asyncio.get_running_loop()
+                if deadline is None:
+                    deadline = loop.time() + policy.drain_seconds + policy.interrupt_seconds
                 await self._wait_turn_drain(binding,
-                                            loop.time() + policy.drain_seconds)
+                    min(deadline, loop.time() + policy.drain_seconds))
                 if self._active_turn(binding):
                     interrupted = await self._shutdown_interrupt(session, binding)
                     if interrupted:
                         await self._wait_turn_drain(
-                            binding, loop.time() + policy.interrupt_seconds)
+                            binding, min(deadline, loop.time() + policy.interrupt_seconds))
             async with binding.normal_lock:
                 async with binding.control_lock:
                     async with self._lock:
@@ -1535,7 +1556,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
             if self._shutting_down:
                 raise CoreError("RUNTIME_DRAINING", "lease_renew")
             binding = self._sessions.get(session)
-            if (binding is None or binding.closed or binding.closing or
+            if (binding is None or binding.closed or binding.closing or binding.draining or
                     binding.revoked):
                 raise CoreError("SESSION_UNKNOWN", "lease_renew")
         # Both kinds of send hold a session lock through their native effect.
@@ -1549,7 +1570,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
                             if self._shutting_down:
                                 raise CoreError("RUNTIME_DRAINING", "lease_renew")
                             if (self._sessions.get(session) is not binding or
-                                    binding.closed or binding.closing or
+                                    binding.closed or binding.closing or binding.draining or
                                     binding.revoked):
                                 raise CoreError("SESSION_UNKNOWN", "lease_renew")
                             old = binding.context

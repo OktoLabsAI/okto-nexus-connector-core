@@ -72,10 +72,12 @@ SUBMIT = obj({"text": {"type": "string", "minLength": 1, "maxLength": 65536},
               "delivery_id": ID}, ("text",))
 STEER = obj({"text": {"type": "string", "minLength": 1, "maxLength": 65536}},
             ("text",))
-INTERRUPT = obj({"reason": {"type": "string", "minLength": 1, "maxLength": 256}},
+INTERRUPT = obj({"reason": {"type": "string", "maxLength": 1024}},
                 ("reason",))
-CLOSE = obj({"reason": {"type": "string", "minLength": 1, "maxLength": 256}},
-            ("reason",))
+CLOSE = obj({"reason": {"type": "string", "maxLength": 1024},
+             "drain_seconds": {"type": "number", "minimum": 0, "maximum": 30},
+             "interrupt_seconds": {"type": "number", "minimum": 0, "maximum": 15}},
+            ("reason", "drain_seconds", "interrupt_seconds"))
 NATIVE_REQUEST = {
     "type": "object", "minProperties": 1, "maxProperties": 32,
     "required": ["request_hash"],

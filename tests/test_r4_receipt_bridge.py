@@ -178,6 +178,8 @@ def test_r4_reason_receipt_requires_matching_core_reason(action, project):
     frame["payload"] = {"reason": "Requested by the agent"}
     if action == "turn.interrupt":
         frame["expected_turn_id"] = "turn-1"
+    else:
+        frame["payload"].update(drain_seconds=1, interrupt_seconds=1)
     frame["intent_hash"] = r4_submit_intent_hash(frame)
     context = ExecutionContext(
         "server", "executor", "binding", "agent", "workspace",
@@ -185,7 +187,7 @@ def test_r4_reason_receipt_requires_matching_core_reason(action, project):
     )
     semantic = Operation(
         "operation", "session", action,
-        {"reason": "Requested by the agent"},
+        frame["payload"],
         frame.get("expected_turn_id"),
     )
     receipt = OperationReceipt(
@@ -194,7 +196,7 @@ def test_r4_reason_receipt_requires_matching_core_reason(action, project):
     )
     projected = project(frame, receipt, context, receipt_revision=1)
     assert projected["intent_hash"] == frame["intent_hash"]
-    changed = {**frame, "payload": {"reason": "A different request"}}
+    changed = {**frame, "payload": {**frame["payload"], "reason": "A different request"}}
     changed["intent_hash"] = r4_submit_intent_hash(changed)
     with pytest.raises(CoreError) as mismatch:
         project(changed, receipt, context, receipt_revision=1)

@@ -1,5 +1,20 @@
 # Implementation status — 2026-09-25
 
+## R4 close policy increment — 2026-09-30
+
+Core 0.2.27.dev0 implements typed per-session close policy, full 0–1024
+interrupt/close reasons, verified R4 policy projection and one owned close
+producer surviving waiter cancellation. The same wheel is consumed by
+Nexus and Connector. Source regression: 908 passed/74 skipped; installed
+close/projection cases: 21 passed. Generated R3/R4 checks and clean-wheel
+verification passed. See `evidence/r4-close-policy.json` and the close
+policy section of `docs/nxl-r4-development.md` for commands and limits.
+
+Pending lease CAS containment and full provider/host conformance remain
+open. Public close still observes its durable admission frontier; independent
+owned-resource shutdown remains available when storage blocks admission.
+R4 is development-partial, not executable; no full milestone is closed.
+
 The current Pi 0.87.1 integration slice is closed in
 [`milestone-pi-0871-2026-09-26.md`](milestone-pi-0871-2026-09-26.md).
 This does not close the integral K00–K11 plan or enable production release.

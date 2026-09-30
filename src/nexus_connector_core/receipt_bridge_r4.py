@@ -150,6 +150,9 @@ def _project_r4_receipt(
         {payload_key: frame["payload"][payload_key]},
         frame.get("expected_turn_id"),
     )
+    if action == "runtime.close":
+        from .close_operation import close_operation_semantic, r4_close_operation
+        semantic = close_operation_semantic(r4_close_operation(frame))
     if core_receipt.intent_hash != intent_hash(semantic, context):
         raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
                         possible_effect=True,

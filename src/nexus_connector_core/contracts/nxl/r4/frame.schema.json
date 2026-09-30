@@ -1354,8 +1354,7 @@
               "additionalProperties": false,
               "properties": {
                 "reason": {
-                  "maxLength": 256,
-                  "minLength": 1,
+                  "maxLength": 1024,
                   "type": "string"
                 }
               },
@@ -1374,14 +1373,25 @@
             "payload": {
               "additionalProperties": false,
               "properties": {
+                "drain_seconds": {
+                  "maximum": 30,
+                  "minimum": 0,
+                  "type": "number"
+                },
+                "interrupt_seconds": {
+                  "maximum": 15,
+                  "minimum": 0,
+                  "type": "number"
+                },
                 "reason": {
-                  "maxLength": 256,
-                  "minLength": 1,
+                  "maxLength": 1024,
                   "type": "string"
                 }
               },
               "required": [
-                "reason"
+                "reason",
+                "drain_seconds",
+                "interrupt_seconds"
               ],
               "type": "object"
             }

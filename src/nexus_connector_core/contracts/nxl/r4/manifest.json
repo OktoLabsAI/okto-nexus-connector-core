@@ -1,6 +1,6 @@
 {
   "files": {
-    "frame.schema.json": "sha256:74f2f53b452e4a4100289b2cea2cc8298cf784502dd2bec086013b60acf5d4ea",
+    "frame.schema.json": "sha256:5682f068280dfb70ea127547d8b4f5b42f03a604672f5d579f8361d79eb731f2",
     "inventory.schema.json": "sha256:7331a4e18c52f64cccbf543205bbf7d4ba8a6183b9be12637117c9039cd6d525"
   },
   "management_revision": "nexus-connections-2026-09-29-r4",

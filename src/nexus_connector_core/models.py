@@ -395,6 +395,7 @@ class CloseOperation:
     operation_id: str
     session_id: str
     reason: str | None = None
+    policy: ShutdownPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)

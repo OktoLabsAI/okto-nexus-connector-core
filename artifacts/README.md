@@ -1,5 +1,14 @@
 # Wheel de integração local
 
+## Current development artifact: 0.2.27.dev0
+
+`nexus_connector_core-0.2.27.dev0-py3-none-any.whl`, SHA-256
+`f0a3203d3d6faa50ecdbcf98614cc9fdf121e0dfafb1be1d3f0b84d0f4c39af6`.
+Adds typed close policy and full interrupt/close reason conformance. The
+same bytes are vendored by Nexus and Connector. R4 remains development-partial
+with its executable flag false. See `plans/implementation/evidence/r4-close-policy.json`.
+The entries below are historical development artifacts.
+
 `nexus_connector_core-0.2.12.dev0-py3-none-any.whl`
 
 SHA-256: `bd5326357608906bdd80ccefc3db4890137d9e8dc00935a88c5f6dd955bf9d8e`
