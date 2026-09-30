@@ -1,3 +1,7 @@
+## September 30, 2026 — Owned late close completion
+
+Core 0.2.34.dev0 adds explicit retained completion observation for policy close. Installed focused regression: 78 passed. Physical deadlines are unchanged; storage errors propagate. See evidence/late-close-owner-20260930.md. Full acceptance remains open.
+
 ## September 30, 2026 — Terminal R4 close receipts
 
 Core 0.2.33.dev0 persists SUCCEEDED after confirmed R4 policy close. Focused installed regression: 76 passed. Real Pi, Codex and Claude returned and persisted terminal close success. Delayed/disconnected publication and full acceptance remain open. See evidence/r4-terminal-close-20260930.md.

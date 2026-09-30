@@ -230,3 +230,14 @@ for native decision hash domains and the remaining executable-bundle gate.
 | `project_r4_decision_receipt`, `r4_native_decision_operation`, `r4_operational_request_hash` | Preserve native request evidence, validate response digests and project approval/input receipts from the exact applied operation. |
 | `R4EventCommitProjection`, `reduce_r4_durable_event_batch`, `r4_event_ack_frame` | Compute contiguous event ACKs. The host commits durable ingress before emitting an ACK and retains connection scope. |
 | `R4ApprovalProjection`, `reduce_r4_approval_request`, `reduce_r4_approval_decision` | Retain the complete operational request hash and correlated decision notification. These reducers never apply a native decision. |
+
+
+### Waiting for an owned close result
+
+For policy close, `close(operation, context, wait_for_completion=True)` joins the
+retained producer through the final receipt commit. The physical drain/interrupt
+deadline is unchanged. The default remains a bounded observation that can return
+OUTCOME_UNKNOWN while the producer continues. Canceling either waiter does not
+cancel the producer. Trusted daemon/embedded operation owners use the complete
+wait; failures of the producer, including storage failures, propagate to them.
+This option requires an explicit close policy and is not a wire payload field.

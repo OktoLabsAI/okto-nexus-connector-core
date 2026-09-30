@@ -18,7 +18,7 @@ class _CloseAttempt:
 
 
 class CloseRuntimeMixin:
-    async def _close_policy(self, semantic, context, policy):
+    async def _close_policy(self, semantic, context, policy, *, wait_for_completion=False):
         session = SessionKey(context.server_id, context.executor_id, semantic.session_id)
         digest = intent_hash(semantic, context)
         # Same-operation waiters share the producer, including while the
@@ -50,6 +50,11 @@ class CloseRuntimeMixin:
             raise CoreError("SESSION_CLOSING", "close", retry_safe=True)
         if attempt.digest != digest:
             raise CoreError("OPERATION_CONFLICT", "close", operation_id=semantic.operation_id)
+        if wait_for_completion:
+            # Trusted operation owners may join the retained producer instead
+            # of observing only until its physical drain/interrupt deadline.
+            # Cancellation still detaches only this waiter.
+            return await asyncio.shield(attempt.task)
         # Observation timeout is not cancellation of an owned native unit.
         # The eventual receipt is committed by the same producer, queryable
         # under the same ID. A timeout never fabricates a durable receipt.

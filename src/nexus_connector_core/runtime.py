@@ -900,16 +900,21 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             return await self._kernel.execute(semantic, context, effect)
 
     async def close(self, operation: CloseOperation,
-                     context: ExecutionContext) -> OperationReceipt:
+                     context: ExecutionContext, *,
+                     wait_for_completion: bool = False) -> OperationReceipt:
         from .close_operation import close_operation_semantic
         semantic = close_operation_semantic(operation)
+        if type(wait_for_completion) is not bool or (
+                wait_for_completion and operation.policy is None):
+            raise CoreError("VALIDATION_ERROR", "close")
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "close")
         if context.r4_authority is not None and (operation.policy is None or operation.reason is None):
             raise CoreError("VALIDATION_ERROR", "close")
         self._authorize(context, semantic.action)
         if operation.policy is not None:
-            return await self._close_policy(semantic, context, operation.policy)
+            return await self._close_policy(semantic, context, operation.policy,
+                                            wait_for_completion=wait_for_completion)
         # C2/R01+C2/R04: the dedup read answers an idempotent retry from
         # its durable receipt even after EOF/closing/eviction; it never
         # runs under the global state lock.
