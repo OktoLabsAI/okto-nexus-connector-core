@@ -147,6 +147,9 @@ async def _run(adapter: str, paths: dict[str, str], *, r4: bool = False) -> dict
             shutdown = await runtime.shutdown(ShutdownPolicy(5, 5))
             report["shutdown_outcome"] = shutdown.session_outcomes.get(
                 SessionKey("srv", "exe", "session"))
+            close_receipt = await journal.get_receipt(OperationKey("srv", "exe", "close"))
+            report["close_receipt_stage"] = close_receipt.stage if close_receipt else None
+            report["close_receipt_error"] = close_receipt.error_code if close_receipt else None
         finally:
             try:
                 await runtime.shutdown(ShutdownPolicy(0.1, 0.1))

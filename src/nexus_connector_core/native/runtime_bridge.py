@@ -461,7 +461,7 @@ class CopiedAdapterSession:
             before_close = await self._lifecycle()
         except Exception:
             before_close = {}
-        await self._run_control(self._connector.close)
+        reported = await self._run_control(self._connector.close)
         try:
             after_close = await self._lifecycle()
         except Exception:
@@ -473,8 +473,11 @@ class CopiedAdapterSession:
         # followed by legitimate late observation/retries, and the public
         # lifecycle for factory-owned capacity is the runtime shutdown.
         self._closed = after_close.get("stop_observed") is True
-        # A tree that stopped only because close() enforced containment did
-        # not demonstrate graceful native shutdown.
+        # Adapter classification is trusted only after independent tree-stop
+        # observation. Older adapters without a report retain the conservative
+        # pre-close observation rule.
+        if self._closed and isinstance(reported, str) and reported in {"graceful", "forced"}:
+            return reported
         return ("graceful" if self._closed and self._end_sent and
                 before_close.get("stop_observed") is True else "unknown")
 

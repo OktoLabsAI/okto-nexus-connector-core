@@ -1,0 +1,18 @@
+{
+  "command": [
+    "C:\\Users\\jpamb\\AppData\\Local\\Temp\\okto-r4-native-installed-zk_r383i\\Scripts\\python.exe",
+    "-I",
+    "D:\\Projetos\\Techridy\\okto-nexus-connector-core\\tools\\probe_managed_factory.py",
+    "codex_app_server",
+    "--codex",
+    "C:/Users/jpamb/AppData/Roaming/npm/node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
+    "--codex-home",
+    "C:/Users/jpamb/.codex",
+    "--r4"
+  ],
+  "exit_code": 0,
+  "stdout": "{\"authority_mode\": \"r4\", \"close_receipt_error\": null, \"close_receipt_stage\": \"SUBMITTED\", \"close_stage\": \"SUBMITTED\", \"lease_application_stage\": \"INSTALLED\", \"open_stage\": \"SUBMITTED\", \"prepared_architecture\": \"x86_64\", \"prepared_version\": \"0.159.0\", \"shutdown_outcome\": \"already_closed\", \"submit_stage\": \"SUBMITTED\", \"terminal_operation_id\": \"turn\", \"terminal_outcome\": \"success\", \"turn_receipt_stage\": \"SUCCEEDED\"}\n",
+  "stderr": "",
+  "core_version": "0.2.32.dev0",
+  "wheel_sha256": "a32d49400c0e22ccedd1fbe7f26b8f74ff0b3bb2d55f21eac469dd0ae8a8784f"
+}

@@ -287,6 +287,7 @@ class _CodexTransport:
         self._pending_lock = threading.Lock()
         self._stderr_tail = _StderrTail()
         self._closed = threading.Event()
+        self._termination_requested = threading.Event()
 
     # ------------------------------------------------------------------ #
     def start(self) -> None:
@@ -556,18 +557,22 @@ class _CodexTransport:
         # else: neither id nor method - not a JSON-RPC message we recognise;
         # silently ignored (no callback contract for it exists on this port).
 
-    def close(self, *, grace_s: float = 5.0) -> None:
+    def close(self, *, grace_s: float = 5.0) -> str:
         self._closed.set()
         if self._proc is None:
-            return
+            return "unknown"
         if self._proc.poll() is None:
             try:
+                self._termination_requested.set()
                 self._proc.terminate()
                 self._proc.wait(timeout=grace_s)
             except subprocess.TimeoutExpired:
                 self._proc.kill()
                 self._proc.wait(timeout=grace_s)
         self._fail_pending("connector closed")
+        if not observe_owned_process(self._proc)["stop_observed"]:
+            return "unknown"
+        return "forced" if self._termination_requested.is_set() else "graceful"
 
     def _fail_pending(self, reason: str) -> None:
         # EOF during initialize must release startup capacity immediately,
@@ -856,15 +861,16 @@ class CodexAppServerConnector:
     # ------------------------------------------------------------------ #
     # Lifecycle helpers (not part of the port; connector-owned resources)
     # ------------------------------------------------------------------ #
-    def close(self) -> None:
-        if self._transport is not None:
-            self._transport.close()
+    def close(self) -> str:
+        outcome = self._transport.close() if self._transport is not None else "unknown"
         self._closed_event.set()
+        return outcome
 
     def force_stop(self) -> None:
         """Kill only this connector's Core-owned process tree."""
         transport = self._transport
         if transport is not None and transport._proc is not None:
+            transport._termination_requested.set()
             transport._proc.kill()
 
     # ------------------------------------------------------------------ #

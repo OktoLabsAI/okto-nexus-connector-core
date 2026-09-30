@@ -1,3 +1,7 @@
+## September 30, 2026 — Confirmed native close outcomes
+
+Core 0.2.32.dev0 distinguishes observed normal/forced stop from unknown cleanup. Installed Core: 966 passed, 74 skipped. Real Codex and Claude R4 close accepted with no receipt error; Codex long-turn shutdown reports forced. Full product acceptance remains open. See evidence/native-close-outcome-20260930.md.
+
 ## September 30, 2026 — Codex 0.159.0
 
 Core 0.2.31.dev0 adds exact Windows conversation/control qualification. Installed suite: 951 passed, 74 skipped. Real Pi/Codex/Claude R4 lease probes completed turns. Close classification and full product acceptance remain open. See evidence/codex-0159-qualification.md.

@@ -298,6 +298,7 @@ class ClaudeCodeStreamConnector:
         # otherwise block forever on an unbounded get() with nothing left
         # to receive. threading.Event is safe to read from any thread.
         self._closed_event = threading.Event()
+        self._termination_requested = threading.Event()
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
 
@@ -372,6 +373,7 @@ class ClaudeCodeStreamConnector:
         # its queue happens to run momentarily dry, even though this
         # session is healthy and still has real events coming.
         self._closed_event.clear()
+        self._termination_requested.clear()
 
         # C5/U02: re-validate immediately before the spawn primitive
         # (after the connector's own pre-start checks/waits).
@@ -623,12 +625,17 @@ class ClaudeCodeStreamConnector:
             try:
                 self._proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
+                self._termination_requested.set()
                 self._proc.kill()
                 self._proc.wait(timeout=5)
+            if observe_owned_process(self._proc)["stop_observed"]:
+                return "forced" if self._termination_requested.is_set() else "graceful"
+        return "unknown"
 
     def force_stop(self):
         """Kill only this connector's Core-owned process tree."""
         if self._proc is not None:
+            self._termination_requested.set()
             self._proc.kill()
 
     def _end(self) -> None:

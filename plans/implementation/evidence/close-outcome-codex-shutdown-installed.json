@@ -1,0 +1,16 @@
+{
+  "command": [
+    "C:\\Users\\jpamb\\AppData\\Local\\Temp\\okto-r4-native-installed-zk_r383i\\Scripts\\python.exe",
+    "-I",
+    "D:\\Projetos\\Techridy\\okto-nexus-connector-core\\tools\\probe_managed_shutdown.py",
+    "codex_app_server",
+    "--codex",
+    "C:/Users/jpamb/AppData/Roaming/npm/node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe",
+    "--codex-home",
+    "C:/Users/jpamb/.codex"
+  ],
+  "exit_code": 0,
+  "stdout": "{\"late_submit_code\": \"SESSION_UNKNOWN\", \"late_submit_refused\": true, \"outcome_honest\": true, \"session_outcome\": \"forced\", \"shutdown_bounded\": true, \"shutdown_seconds\": 4.13, \"submit_stage\": \"SUBMITTED\", \"turn_receipt_possible_effect\": true, \"turn_receipt_stage\": \"CANCELLED\"}\n",
+  "stderr": "",
+  "core_version": "0.2.32.dev0"
+}
