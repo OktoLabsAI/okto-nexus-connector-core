@@ -138,6 +138,9 @@ def test_installation_slot_ledger_passes_reusable_port_and_restart_kits(tmp_path
 
 def test_slot_kit_rejects_an_adapter_that_drops_reservations():
     class FaultyLedger:
+        async def owned_slot_state(self, session):
+            return None
+
         async def reserve_owned_slot(self, key, session_id):
             return None
 

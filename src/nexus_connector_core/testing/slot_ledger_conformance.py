@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import AsyncContextManager, Callable
 from uuid import uuid4
 
-from ..models import CoreError, OperationKey, SessionKey
+from ..models import CoreError, OperationKey, SessionKey, OwnedSlotState
 from ..ports import OwnedSlotLedger
 
 
@@ -30,7 +30,10 @@ async def run_owned_slot_conformance(ledger: OwnedSlotLedger, *,
     sessions = [f"{prefix}-session-{index}"
                 for index in range(max_slots + 1)]
     for index in range(max_slots):
+        session = SessionKey(prefix, "exe", sessions[index])
+        assert await ledger.owned_slot_state(session) is None
         await ledger.reserve_owned_slot(keys[index], sessions[index])
+        assert await ledger.owned_slot_state(session) == OwnedSlotState(session, keys[index].operation_id, False)
     first_page = await ledger.owned_slot_page(limit=1)
     observed = list(first_page.reservations)
     next_after = first_page.next_after_rowid
@@ -61,6 +64,8 @@ async def run_owned_slot_conformance(ledger: OwnedSlotLedger, *,
                        "SESSION_CONFLICT")
     assert await ledger.release_owned_slot(keys[0], sessions[0]) is True
     assert await ledger.release_owned_slot(keys[0], sessions[0]) is False
+    session = SessionKey(prefix, "exe", sessions[0])
+    assert await ledger.owned_slot_state(session) == OwnedSlotState(session, keys[0].operation_id, True)
     active = await ledger.owned_slot_page()
     assert SessionKey(prefix, "exe", sessions[0]) not in {
         item.key for item in active.reservations}
@@ -86,5 +91,7 @@ async def run_owned_slot_restart_conformance(
         assert page.reservations[0].opening_operation_id == first.operation_id
         assert await ledger.release_owned_slot(first, prefix + "-first") is True
     async with open_ledger() as ledger:
+        session = SessionKey(prefix, "exe", prefix + "-first")
+        assert await ledger.owned_slot_state(session) == OwnedSlotState(session, first.operation_id, True)
         await ledger.reserve_owned_slot(second, prefix + "-second")
         assert await ledger.release_owned_slot(second, prefix + "-second") is True

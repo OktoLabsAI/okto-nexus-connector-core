@@ -8,7 +8,7 @@ from .models import (
     CloseOperation, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
     ExecutionContext, Inventory, LaunchIntent, OpenOperation, OperationReceipt,
     R4LeaseApplication,
-    OperationKey, OwnedSlotPage, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
+    OperationKey, OwnedSlotPage, OwnedSlotState, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
     SessionKey, SessionClaimPage, SessionLeaseState, ProcessBirthEvidence,
     ProcessBirthRecord,
     ProcessBirthObservation,
@@ -76,6 +76,7 @@ class Clock(Protocol):
 
 
 class OwnedSlotLedger(Protocol):
+    async def owned_slot_state(self, session: SessionKey) -> OwnedSlotState | None: ...
     async def reserve_owned_slot(self, key: OperationKey,
                                  session_id: str) -> None: ...
     async def release_owned_slot(self, key: OperationKey,

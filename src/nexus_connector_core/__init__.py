@@ -11,7 +11,7 @@ from .models import (
     AttachPolicy, AttachTarget, ClaimedSession,
     SessionClaimPage,
     SessionLeaseState,
-    OwnedSlotReservation,
+    OwnedSlotReservation, OwnedSlotState,
     OwnedSlotPage,
     ProcessBirthEvidence,
     ProcessBirthRecord,
@@ -50,6 +50,7 @@ from .receipt_reducer_r4 import R4ReceiptProjection, reduce_r4_receipt
 from .receipt_binding_r4 import (
     prepare_r4_receipt_binding, validate_r4_receipt_binding, project_r4_bound_receipt,
 )
+from .resource_release_r4 import r4_resource_release_digest, project_r4_resource_release
 from .receipt_bridge_r4 import (
     project_r4_open_receipt, project_r4_turn_receipt, project_r4_steer_receipt,
     project_r4_interrupt_receipt, project_r4_close_receipt, project_r4_decision_receipt,
@@ -94,7 +95,7 @@ from .discovery import discover_installations
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.2.35.dev0"
+__version__ = "0.2.36.dev0"
 
 __all__ = [
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
@@ -117,7 +118,7 @@ __all__ = [
     "r4_event_ack_frame",
     "R4ApprovalProjection", "reduce_r4_approval_request",
     "reduce_r4_approval_decision",
-    "OperationReceipt", "OperationKey", "SessionKey", "AttachPolicy", "AttachTarget", "ClaimedSession", "SessionClaimPage", "SessionLeaseState", "OwnedSlotReservation", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
+    "OperationReceipt", "OperationKey", "SessionKey", "AttachPolicy", "AttachTarget", "ClaimedSession", "SessionClaimPage", "SessionLeaseState", "OwnedSlotReservation", "OwnedSlotState", "r4_resource_release_digest", "project_r4_resource_release", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
     "InstallationCandidate", "LaunchIntent", "PreparedLaunch",
     "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ReconcileRequest",

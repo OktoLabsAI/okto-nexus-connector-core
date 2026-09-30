@@ -158,6 +158,15 @@ class OwnedSlotReservation:
 
 
 @dataclass(frozen=True, slots=True)
+class OwnedSlotState:
+    """Historical reservation/release fact, never live process authority."""
+
+    key: SessionKey
+    opening_operation_id: str
+    released: bool
+
+
+@dataclass(frozen=True, slots=True)
 class OwnedSlotPage:
     reservations: tuple[OwnedSlotReservation, ...]
     high_water_rowid: int
