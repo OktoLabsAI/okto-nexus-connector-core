@@ -149,7 +149,7 @@ def test_expired_r4_lease_preserves_only_previously_authorized_containment(tmp_p
             close_frame = operation(req, 'close', action='runtime.close', payload={
                 'reason':'Requested by the agent', 'drain_seconds':1, 'interrupt_seconds':1})
             context = runtime.r4_operation_context(close_frame, connection_id='connection', connection_generation=1)
-            assert (await runtime.close(CloseOperation('close','session','Requested by the agent', ShutdownPolicy(1,1)), context)).stage == 'SUBMITTED'
+            assert (await runtime.close(CloseOperation('close','session','Requested by the agent', ShutdownPolicy(1,1)), context)).stage == 'SUCCEEDED'
             assert factory.native.stopped
             assert await journal.get_receipt(OperationKey('srv','exe','turn')) is None
         finally:

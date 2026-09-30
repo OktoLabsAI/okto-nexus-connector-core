@@ -77,4 +77,7 @@ class CloseRuntimeMixin:
             if outcome not in {"graceful", "forced", "already_closed"} or not binding.closed:
                 raise CoreError("OUTCOME_UNKNOWN", "close", possible_effect=True,
                                 operation_id=semantic.operation_id)
-        return await self._kernel.execute(semantic, context, effect)
+        # R4 close is complete only after physical stop and owned-slot release.
+        # Commit the terminal fact in the retained producer before publishing.
+        return await self._kernel.execute(semantic, context, effect,
+            completion_stage="SUCCEEDED" if context.r4_authority is not None else "SUBMITTED")

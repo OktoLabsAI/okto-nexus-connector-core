@@ -1,3 +1,7 @@
+## September 30, 2026 — Terminal R4 close receipts
+
+Core 0.2.33.dev0 persists SUCCEEDED after confirmed R4 policy close. Focused installed regression: 76 passed. Real Pi, Codex and Claude returned and persisted terminal close success. Delayed/disconnected publication and full acceptance remain open. See evidence/r4-terminal-close-20260930.md.
+
 ## September 30, 2026 — Confirmed native close outcomes
 
 Core 0.2.32.dev0 distinguishes observed normal/forced stop from unknown cleanup. Installed Core: 966 passed, 74 skipped. Real Codex and Claude R4 close accepted with no receipt error; Codex long-turn shutdown reports forced. Full product acceptance remains open. See evidence/native-close-outcome-20260930.md.

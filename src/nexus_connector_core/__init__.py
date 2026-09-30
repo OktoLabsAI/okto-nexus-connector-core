@@ -91,7 +91,7 @@ from .discovery import discover_installations
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.2.32.dev0"
+__version__ = "0.2.33.dev0"
 
 __all__ = [
     "r4_close_operation",
