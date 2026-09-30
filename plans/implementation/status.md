@@ -1,5 +1,20 @@
 # Implementation status — 2026-09-25
 
+## R4 pending renewal containment — 2026-09-30
+
+Core 0.2.28.dev0 releases session locks after reserving the productive hold,
+before waiting on durable lease CAS. Same-scope authorized containment can
+proceed while the CAS port is retained; reconnect, changed scope, removed
+actions and revocation cannot borrow old authority. A late renewal cannot
+acknowledge an already draining or closed session.
+
+Source regression: 920 passed/74 skipped, with three previously observed
+test warnings. Twelve new cases passed against the installed wheel, with
+the CAS barrier held during assertions. See `evidence/r4-pending-containment.json`.
+This verifies runtime coordination, not concurrent admission through a
+blocked SQLite writer. Full R4 conformance and provider/product gates remain
+open. The earlier entries below record historical increment boundaries.
+
 ## R4 close policy increment — 2026-09-30
 
 Core 0.2.27.dev0 implements typed per-session close policy, full 0–1024

@@ -168,7 +168,21 @@ class R4LeaseRuntime:
             raise CoreError("AGENT_REVOKED", "r4_context", retry_safe=True)
         containment = action in {"turn.interrupt", "runtime.close"} or containment_reply
         if entry.pending is not None:
-            raise CoreError("LEASE_UPDATE_PENDING", "r4_context", retry_safe=True)
+            candidate = entry.candidate
+            # A serial/deadline renewal does not revoke existing containment.
+            # A different owner, source, scope or grant must never borrow the
+            # previous context while its durable installation is uncertain.
+            compatible = (candidate is not None and
+                candidate.scope == entry.projection.scope and
+                candidate.connection_id == entry.projection.connection_id and
+                candidate.connection_generation == entry.projection.connection_generation and
+                candidate.grant_id == entry.projection.grant_id and
+                action in candidate.allowed_actions)
+            if not containment or not compatible:
+                raise CoreError("LEASE_UPDATE_PENDING", "r4_context", retry_safe=True)
+        binding = self._sessions.get(key)
+        if binding is not None and binding.superseded:
+            raise CoreError("STALE_GENERATION", "r4_context", retry_safe=True)
         if context != entry.context:
             raise CoreError("STALE_GENERATION", "r4_context", retry_safe=True)
         if not containment and self._clock.monotonic() >= context.lease_deadline_monotonic:
@@ -236,7 +250,8 @@ class R4LeaseRuntime:
                 if task.done():
                     binding = self._sessions.get(key)
                     if (binding is not None and binding.context == entry.candidate_context and
-                            not binding.closed and not binding.revoked and not binding.lease_hold):
+                            not binding.closed and not binding.closing and not binding.draining and
+                            not binding.revoked and not binding.lease_hold):
                         entry.context = entry.candidate_context
                         entry.projection = candidate
                         entry.pending = None
@@ -285,6 +300,7 @@ class R4LeaseRuntime:
                               expected_connection_generation=entry.context.connection_generation)
         binding = self._sessions.get(key)
         if (self._shutting_down or entry.revoked or binding is None or binding.closed or
+                binding.closing or binding.draining or
                 binding.revoked or binding.lease_hold or binding.context != context or
                 self._clock.monotonic() >= context.lease_deadline_monotonic):
             raise CoreError("LEASE_REVALIDATION_REQUIRED", "r4_install")

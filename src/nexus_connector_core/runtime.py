@@ -876,6 +876,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 raise CoreError("SESSION_CLOSING", "admission")
             if binding.draining and semantic.action != "turn.interrupt":
                 raise CoreError("SESSION_CLOSING", "admission", retry_safe=True)
+            if binding.lease_hold and semantic.action != "turn.interrupt":
+                raise CoreError("LEASE_UPDATE_PENDING", "admission", retry_safe=True)
             if binding.faulted:
                 raise CoreError("EVENT_STREAM_UNAVAILABLE", "admission")
             if verb in {"steer", "interrupt"}:
@@ -888,6 +890,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 self._check_r4_context(context, semantic.action, semantic.session_id)
                 if binding.draining and semantic.action != "turn.interrupt":
                     raise EffectNotSent("SESSION_CLOSING")
+                if binding.lease_hold and semantic.action != "turn.interrupt":
+                    raise EffectNotSent("LEASE_UPDATE_PENDING")
                 await binding.native.send(
                     verb, payload, semantic.operation_id,
                     expected_turn_id=semantic.expected_turn_id)
@@ -1559,9 +1563,10 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             if (binding is None or binding.closed or binding.closing or binding.draining or
                     binding.revoked):
                 raise CoreError("SESSION_UNKNOWN", "lease_renew")
-        # Both kinds of send hold a session lock through their native effect.
-        # A new generation must not become active while an old effect is
-        # pending. A stuck send leaves the old generation in place.
+        # Drain existing effects and reserve the productive hold under both
+        # session locks. Storage runs after releasing them, so authorized
+        # containment can progress while CAS is pending. Productive callers
+        # recheck the hold after acquiring their lock and at the effect frontier.
         try:
             async with asyncio.timeout(self._reconnect_fence_seconds):
                 async with binding.normal_lock:
@@ -1613,48 +1618,48 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                             # claim that nothing happened - and a late
                             # commit is applied conservatively below.
                             binding.lease_cas_pending = True
-                        cas = asyncio.ensure_future(self._journal.cas_session_lease(
-                            session,
-                            expected_connection_generation=old.connection_generation,
-                            connection_generation=context.connection_generation,
-                            owner_generation=context.session_owner_generation,
-                            authorization_revision=context.authorization_revision,
-                            configuration_revision=context.configuration_revision,
-                            revoked=False))
-                        try:
-                            # The shield keeps the delivered unit alive when
-                            # the caller stops waiting: the worker may still
-                            # commit, and the applier recovers it below.
-                            await asyncio.shield(cas)
-                        except asyncio.CancelledError:
-                            cas.add_done_callback(self._late_cas_applier(
-                                session, binding, context, revoke=False))
-                            raise
-                        except BaseException:
-                            # C5/U06: reconcile against the durable record
-                            # before touching the reservation - a Future
-                            # that finished with an exception proves
-                            # nothing about the commit (the port allows
-                            # confirmation loss after the write). Pre-
-                            # delivery refusals resolve here as "no row
-                            # change"; a committed revocation closes the
-                            # fences immediately.
-                            await self._finalize_lease_attempt(
-                                session, binding, context, revoke=False,
-                                producer_done=cas.done(),
-                                base_context=old)
-                            raise
-                        async with self._lock:
-                            binding.lease_cas_pending = False
-                            binding.lease_hold = False
-                            if (self._sessions.get(session) is binding and
-                                    not binding.closed and
-                                    not binding.revoked):
-                                # Durable fence already advanced (PC1): a
-                                # competing Core lost without ever becoming
-                                # the active generation in memory.
-                                binding.context = context
-                                binding.lease_expired = False
+                cas = asyncio.ensure_future(self._journal.cas_session_lease(
+                    session,
+                    expected_connection_generation=old.connection_generation,
+                    connection_generation=context.connection_generation,
+                    owner_generation=context.session_owner_generation,
+                    authorization_revision=context.authorization_revision,
+                    configuration_revision=context.configuration_revision,
+                    revoked=False))
+                try:
+                    # The shield keeps the delivered unit alive when
+                    # the caller stops waiting: the worker may still
+                    # commit, and the applier recovers it below.
+                    await asyncio.shield(cas)
+                except asyncio.CancelledError:
+                    cas.add_done_callback(self._late_cas_applier(
+                        session, binding, context, revoke=False))
+                    raise
+                except BaseException:
+                    # C5/U06: reconcile against the durable record
+                    # before touching the reservation - a Future
+                    # that finished with an exception proves
+                    # nothing about the commit (the port allows
+                    # confirmation loss after the write). Pre-
+                    # delivery refusals resolve here as "no row
+                    # change"; a committed revocation closes the
+                    # fences immediately.
+                    await self._finalize_lease_attempt(
+                        session, binding, context, revoke=False,
+                        producer_done=cas.done(),
+                        base_context=old)
+                    raise
+                async with self._lock:
+                    binding.lease_cas_pending = False
+                    binding.lease_hold = False
+                    if (self._sessions.get(session) is binding and
+                            not binding.closed and
+                            not binding.revoked):
+                        # Durable fence already advanced (PC1): a
+                        # competing Core lost without ever becoming
+                        # the active generation in memory.
+                        binding.context = context
+                        binding.lease_expired = False
         except TimeoutError as exc:
             raise CoreError("RECONNECT_BUSY", "lease_renew",
                             retry_safe=True) from exc

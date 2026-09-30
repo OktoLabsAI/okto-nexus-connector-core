@@ -1,6 +1,15 @@
 # Wheel de integração local
 
-## Current development artifact: 0.2.27.dev0
+## Current development artifact: 0.2.28.dev0
+
+`nexus_connector_core-0.2.28.dev0-py3-none-any.whl`, SHA-256
+`27df75100dea033ca5456f2d571eb41b6311fa3ce530a723ecd6c606d257953c`.
+Allows authorized same-scope containment during retained renewal CAS,
+while preserving productive and changed-authority fences. Same bytes in
+both consumers; R4 remains development-partial with executable flag false.
+See `plans/implementation/evidence/r4-pending-containment.json`.
+
+## Historical development artifact: 0.2.27.dev0
 
 `nexus_connector_core-0.2.27.dev0-py3-none-any.whl`, SHA-256
 `f0a3203d3d6faa50ecdbcf98614cc9fdf121e0dfafb1be1d3f0b84d0f4c39af6`.
