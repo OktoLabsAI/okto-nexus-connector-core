@@ -703,7 +703,8 @@ class LocalRuntimeCore(R4LeaseRuntime):
         # C7/W04: ONE classification - decline/cancel map to a strictly
         # negative native reply (never new permission); accept and any
         # input carrying operator content remain productive.
-        containment_reply = operation.decision in {"decline", "cancel"}
+        containment_reply = (operation.decision in {"decline", "cancel"} and
+                             operation.operator_response is None)
         self._authorize(context, action,
                         containment_reply=containment_reply)
         try:
@@ -766,7 +767,8 @@ class LocalRuntimeCore(R4LeaseRuntime):
                                 retry_safe=True)
 
             async def effect() -> None:
-                self._check_r4_context(context, action, operation.session_id)
+                self._check_r4_context(context, action, operation.session_id,
+                                       containment_reply=containment_reply)
                 try:
                     await reply(frozen_request, operation.decision,
                                 frozen_response)
@@ -2594,7 +2596,7 @@ class LocalRuntimeCore(R4LeaseRuntime):
 
     def _authorize(self, context: ExecutionContext, action: str, *,
                     containment_reply: bool = False) -> None:
-        self._check_r4_context(context, action)
+        self._check_r4_context(context, action, containment_reply=containment_reply)
         self._validate_lease_deadline(context)
         # C7/W04: a strictly NEGATIVE approval reply (decline/cancel to
         # a still-observed request of the same turn) is containment, not
@@ -2637,7 +2639,11 @@ class LocalRuntimeCore(R4LeaseRuntime):
 
     async def _existing(self, semantic: Operation,
                          context: ExecutionContext) -> OperationReceipt | None:
-        self._check_r4_context(context, semantic.action, semantic.session_id)
+        containment_reply = (semantic.action in {"approval.decide", "input.provide"} and
+                             semantic.payload.get("decision") in {"decline", "cancel"} and
+                             semantic.payload.get("response_sha256") is None)
+        self._check_r4_context(context, semantic.action, semantic.session_id,
+                               containment_reply=containment_reply)
         old = await self._journal.get_receipt(OperationKey(
             context.server_id, context.executor_id, semantic.operation_id))
         if old is not None and old.intent_hash != intent_hash(semantic, context):

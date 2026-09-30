@@ -90,7 +90,7 @@ from .executor_inventory import (
 from .discovery import discover_installations
 from .targeting import get_control_targeting, validate_control_target
 
-__version__ = "0.2.25.dev0"
+__version__ = "0.2.26.dev0"
 
 __all__ = [
     "ControlTargeting", "get_control_targeting", "validate_control_target",

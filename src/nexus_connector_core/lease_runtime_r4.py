@@ -151,7 +151,8 @@ class R4LeaseRuntime:
         return task
 
     def _check_r4_context(self, context: ExecutionContext, action: str,
-                          session_id: str | None = None) -> None:
+                          session_id: str | None = None, *,
+                          containment_reply: bool = False) -> None:
         authority = context.r4_authority
         if authority is None:
             if session_id is not None and SessionKey(
@@ -165,11 +166,12 @@ class R4LeaseRuntime:
             raise CoreError("LEASE_REVALIDATION_REQUIRED", "r4_context", retry_safe=True)
         if entry.revoked:
             raise CoreError("AGENT_REVOKED", "r4_context", retry_safe=True)
+        containment = action in {"turn.interrupt", "runtime.close"} or containment_reply
         if entry.pending is not None:
             raise CoreError("LEASE_UPDATE_PENDING", "r4_context", retry_safe=True)
         if context != entry.context:
             raise CoreError("STALE_GENERATION", "r4_context", retry_safe=True)
-        if self._clock.monotonic() >= context.lease_deadline_monotonic:
+        if not containment and self._clock.monotonic() >= context.lease_deadline_monotonic:
             raise CoreError("LEASE_EXPIRED", "r4_context", retry_safe=True)
         if action not in context.allowed_actions:
             raise CoreError("BINDING_NOT_AUTHORIZED", "r4_context", retry_safe=True)
@@ -306,7 +308,19 @@ class R4LeaseRuntime:
                 operation["grant_id"] != p.grant_id or
                 any(operation[key] != value for key, value in p.scope.items())):
             raise CoreError("STALE_GENERATION", "r4_context")
-        self._check_r4_context(entry.context, operation["action"], key.session_id)
+        containment_reply = False
+        if operation['action'] in {'approval.decide', 'input.provide'}:
+            payload = operation['payload']
+            if (payload['decision'] in {'decline', 'cancel'} and
+                    payload.get('response') is None and payload.get('response_ref') is None and
+                    payload.get('response_digest') is None):
+                # Derive the exemption from the validated native decision;
+                # no host- or wire-supplied containment flag grants authority.
+                from .decision_bridge_r4 import r4_native_decision_operation
+                r4_native_decision_operation(operation)
+                containment_reply = True
+        self._check_r4_context(entry.context, operation["action"], key.session_id,
+                               containment_reply=containment_reply)
         return entry.context
 
     async def revoke_r4_lease(self, context: ExecutionContext, *,

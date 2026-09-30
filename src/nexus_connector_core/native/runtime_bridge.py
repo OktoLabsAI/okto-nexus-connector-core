@@ -306,7 +306,7 @@ class CopiedAdapterSession:
         # deadline would only make containment harder: they stay allowed
         # while the session is not closed.
         outcome = "decline" if decision == "cancel" else decision
-        permissive = outcome not in {
+        permissive = operator_response is not None or outcome not in {
             "decline", "deny", "denied", "reject", "refuse", "cancel"}
         fence = getattr(self, "effect_fence", None)
         guards = getattr(self._connector, "_dispatch_guards", None)

@@ -6,9 +6,11 @@ from dataclasses import replace
 import pytest
 
 from nexus_connector_core import (
-    CoreError, LaunchIntent, OpenOperation, OperationKey, R4LeaseAttempt,
+    CloseOperation, ControlOperation, CoreError, LaunchIntent, NativeApprovalOperation,
+    OpenOperation, OperationKey, R4LeaseAttempt,
     R4_PREVIEW_REVISION, SessionKey, ShutdownPolicy, TurnOperation,
     r4_submit_intent_hash, project_r4_turn_receipt,
+    r4_native_decision_operation,
 )
 from test_runtime import FakeClock, make_runtime
 
@@ -110,6 +112,104 @@ def test_initial_application_binds_full_scope_before_effect_and_preserves_replay
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('interrupt_allowed', [True, False])
+def test_expired_r4_lease_preserves_only_previously_authorized_containment(tmp_path, interrupt_allowed):
+    async def run():
+        clock = FakeClock()
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock)
+        req = await attempt(runtime, clock)
+        try:
+            actions = ['runtime.open', 'runtime.close', 'turn.submit']
+            if interrupt_allowed:
+                actions.append('turn.interrupt')
+            installed = await runtime.install_r4_lease(req, grant(req, actions))
+            await open_session(runtime, installed.context)
+            clock.advance(61)  # Expired, still inside the owned shutdown grace.
+            with pytest.raises(CoreError, match='LEASE_EXPIRED'):
+                runtime.r4_operation_context(operation(req), connection_id='connection', connection_generation=1)
+            frame = operation(req, 'interrupt', action='turn.interrupt', expected_turn_id='turn',
+                              payload={'reason':'Requested by the agent'})
+            for changed in ({**frame, 'connection_generation':2}, {**frame, 'workspace_binding_id':'other'}):
+                with pytest.raises(CoreError):
+                    runtime.r4_operation_context(changed, connection_id='connection', connection_generation=1)
+            with pytest.raises(CoreError):
+                runtime.r4_operation_context({**frame, 'containment':True}, connection_id='connection', connection_generation=1)
+            if interrupt_allowed:
+                context = runtime.r4_operation_context(frame, connection_id='connection', connection_generation=1)
+                control = ControlOperation('interrupt','session','interrupt',expected_turn_id='turn',reason='Requested by the agent')
+                receipt = await runtime.control(control, context)
+                assert receipt.stage == 'SUBMITTED'
+                assert await runtime.control(control, context) == receipt
+                assert factory.native.sent == [('interrupt', {}, 'interrupt')]
+                assert factory.native.targets == ['turn']
+            else:
+                with pytest.raises(CoreError, match='BINDING_NOT_AUTHORIZED'):
+                    runtime.r4_operation_context(frame, connection_id='connection', connection_generation=1)
+                assert not factory.native.sent
+            close_frame = operation(req, 'close', action='runtime.close', payload={'reason':'Requested by the agent'})
+            context = runtime.r4_operation_context(close_frame, connection_id='connection', connection_generation=1)
+            assert (await runtime.close(CloseOperation('close','session','Requested by the agent'), context)).stage == 'SUBMITTED'
+            assert factory.native.stopped
+            assert await journal.get_receipt(OperationKey('srv','exe','turn')) is None
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('action', ['approval.decide', 'input.provide'])
+@pytest.mark.parametrize('decision', ['decline', 'cancel'])
+def test_expired_r4_negative_reply_preserves_request_identity_and_revocation(tmp_path, action, decision):
+    from test_runtime import FakeNative, _emit_durable_native_request
+    from test_r4_decision_bridge import decision_frame
+    class Native(FakeNative):
+        def __init__(self):
+            super().__init__()
+            self.replies = []
+        async def reply_native_approval(self, request, reply, response):
+            self.replies.append((request, reply, response))
+    async def run():
+        clock = FakeClock()
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock)
+        factory.native = Native()
+        req = await attempt(runtime, clock)
+        try:
+            installed = await runtime.install_r4_lease(req, grant(req, ['runtime.open','runtime.close',action]))
+            await open_session(runtime, installed.context)
+            payload = decision_frame(action)['payload']
+            payload.update(decision=decision, response_digest=None)
+            payload.pop('response', None)
+            await _emit_durable_native_request(runtime, factory.native, payload['request'])
+            clock.advance(61)
+            frame = operation(req, 'negative', action=action, payload=payload)
+            context = runtime.r4_operation_context(frame, connection_id='connection', connection_generation=1)
+            for denied in ('accept',):
+                with pytest.raises(CoreError):
+                    await runtime.decide_native_approval(NativeApprovalOperation('positive','session',payload['request'],
+                        denied, {'answers':{'q':{'answers':['Answer']}}}), context)
+            with pytest.raises(CoreError, match='LEASE_EXPIRED'):
+                await runtime.decide_native_approval(NativeApprovalOperation('negative-with-content','session',
+                    payload['request'], decision, {'answer':'Productive content'}), context)
+            altered = {**payload['request'], 'params':{**payload['request']['params'],'turnId':'another-turn'}}
+            with pytest.raises(CoreError, match='NATIVE_REQUEST_NOT_OBSERVED'):
+                await runtime.decide_native_approval(NativeApprovalOperation('wrong-turn','session',altered,decision), context)
+            native_operation = r4_native_decision_operation(frame)
+            receipt = await runtime.decide_native_approval(native_operation, context)
+            assert receipt.stage == 'SUBMITTED'
+            assert await runtime.decide_native_approval(native_operation, context) == receipt
+            assert len(factory.native.replies) == 1 and factory.native.replies[0][1:] == (decision, None)
+            await runtime.revoke_r4_lease(context, authorization_revision=2)
+            with pytest.raises(CoreError, match='AGENT_REVOKED'):
+                runtime.r4_operation_context(frame, connection_id='connection', connection_generation=1)
+            assert len(factory.native.replies) == 1
+            for operation_id in ('positive','negative-with-content','wrong-turn'):
+                assert await journal.get_receipt(OperationKey('srv','exe',operation_id)) is None
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+    asyncio.run(run())
+
+
 def test_revocation_during_reconnect_waits_for_actual_generation_and_fences_immediately(tmp_path):
     async def run():
         clock = FakeClock()
@@ -149,6 +249,46 @@ def test_revocation_during_reconnect_waits_for_actual_generation_and_fences_imme
             assert durable.revoked and durable.connection_generation == 2 and durable.authorization_revision == 3
             assert len(calls) == 2 and calls[1]['expected_connection_generation'] == 2
             assert await runtime.revoke_r4_lease(initial.context, authorization_revision=3) == revoked
+            assert not factory.native.sent
+        finally:
+            release.set()
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+    asyncio.run(run())
+
+
+def test_pending_renewal_refuses_control_before_locks_and_fences_old_context(tmp_path):
+    async def run():
+        clock = FakeClock()
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock)
+        entered, release = asyncio.Event(), asyncio.Event()
+        original_cas = journal.cas_session_lease
+        async def held_cas(*args, **kwargs):
+            entered.set()
+            await release.wait()
+            return await original_cas(*args, **kwargs)
+        try:
+            req = await attempt(runtime, clock)
+            initial = await runtime.install_r4_lease(req, grant(req))
+            await open_session(runtime, initial.context)
+            journal.cas_session_lease = held_cas
+            clock.advance(1)
+            renewal = await attempt(runtime, clock, purpose='renew')
+            renewing = asyncio.create_task(runtime.install_r4_lease(renewal, grant(renewal,
+                ['runtime.open','runtime.close','turn.submit'])))
+            await asyncio.wait_for(entered.wait(), 2)
+            with pytest.raises(CoreError, match='LEASE_UPDATE_PENDING'):
+                await runtime.submit(TurnOperation('productive','session','Hello'), initial.context)
+            control = ControlOperation('contain','session','interrupt',expected_turn_id='turn')
+            with pytest.raises(CoreError, match='LEASE_UPDATE_PENDING'):
+                await asyncio.wait_for(runtime.control(control, initial.context), 2)
+            assert not renewing.done() and not factory.native.sent
+            release.set()
+            current = await asyncio.wait_for(renewing, 2)
+            with pytest.raises(CoreError, match='STALE_GENERATION'):
+                await runtime.control(replace(control,operation_id='old'), initial.context)
+            with pytest.raises(CoreError, match='BINDING_NOT_AUTHORIZED'):
+                await runtime.control(replace(control,operation_id='removed'), current.context)
             assert not factory.native.sent
         finally:
             release.set()
