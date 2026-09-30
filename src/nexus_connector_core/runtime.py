@@ -2692,7 +2692,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("SESSION_UNKNOWN", "admission")
         original = binding.context
         if context.r4_authority != original.r4_authority:
-            raise CoreError("STALE_GENERATION", "r4_context")
+            raise CoreError("STALE_GENERATION", "r4_context", retry_safe=True)
         if ((context.server_id, context.executor_id, context.binding_id,
              context.agent_id, context.workspace_id) !=
             (original.server_id, original.executor_id, original.binding_id,

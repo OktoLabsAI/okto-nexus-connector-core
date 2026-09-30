@@ -75,7 +75,7 @@ def test_containment_completes_while_renewal_cas_is_retained(tmp_path, action, e
                 result = await asyncio.wait_for(runtime.decide_native_approval(
                     r4_native_decision_operation(frame), context), .5)
                 assert factory.native.replies == [('decline', None)]
-            assert result.stage == 'SUBMITTED'
+            assert result.stage == ('SUCCEEDED' if action == 'runtime.close' else 'SUBMITTED')
             assert not release.is_set() and not renewal.done() and len(calls) == 1
             assert await journal.get_receipt(OperationKey('srv', 'exe', 'productive')) is None
             release.set()
@@ -139,6 +139,43 @@ def test_pending_renewal_never_lends_old_containment_to_new_authority(tmp_path, 
         finally:
             release.set()
             await asyncio.gather(*tasks, return_exceptions=True)
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+
+    asyncio.run(run())
+
+
+def test_renewal_during_containment_admission_returns_safe_retry(tmp_path):
+    async def run():
+        clock = FakeClock()
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock)
+        try:
+            request = await attempt(runtime, clock)
+            installed = await runtime.install_r4_lease(request, grant(request))
+            await open_session(runtime, installed.context)
+            clock.advance(1)
+            renewal = await attempt(runtime, clock, purpose='renew')
+            original = journal.get_receipt
+            renewed = None
+
+            async def race(key):
+                nonlocal renewed
+                result = await original(key)
+                if key.operation_id == 'contain' and renewed is None:
+                    renewed = await runtime.install_r4_lease(renewal, grant(renewal))
+                return result
+
+            journal.get_receipt = race
+            operation = ControlOperation('contain', 'session', 'interrupt', reason='Stop')
+            with pytest.raises(CoreError, match='STALE_GENERATION') as failure:
+                await runtime.control(operation, installed.context)
+            assert failure.value.retry_safe and not failure.value.possible_effect
+            assert not factory.native.sent
+            assert await original(OperationKey('srv', 'exe', 'contain')) is None
+            result = await runtime.control(operation, renewed.context)
+            assert result.stage == 'SUBMITTED'
+            assert len(factory.native.sent) == 1
+        finally:
             await runtime.shutdown(ShutdownPolicy(0, 0))
             journal.close()
 
