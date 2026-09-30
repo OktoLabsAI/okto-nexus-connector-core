@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, AsyncIterator, Mapping, Protocol
 from .models import (
     CloseOperation, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
     ExecutionContext, Inventory, LaunchIntent, OpenOperation, OperationReceipt,
+    R4LeaseApplication,
     OperationKey, OwnedSlotPage, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
     SessionKey, SessionClaimPage, SessionLeaseState, ProcessBirthEvidence,
     ProcessBirthRecord,
@@ -14,9 +15,22 @@ from .models import (
     RuntimeSnapshot, ShutdownPolicy, ShutdownReport, StorageStatus,
     TurnOperation,
 )
+from .lease_reducer_r4 import R4LeaseAttempt
 
 
 class RuntimeCore(Protocol):
+    @property
+    def r4_boot_id(self) -> str: ...
+    async def begin_r4_lease_request(self, *, scope: Mapping[str, Any], grant_id: str,
+                                      connection_id: str, connection_generation: int,
+                                      purpose: str) -> R4LeaseAttempt: ...
+    async def install_r4_lease(self, attempt: R4LeaseAttempt,
+                               grant: Mapping[str, Any]) -> R4LeaseApplication: ...
+    def r4_operation_context(self, frame: Mapping[str, Any], *,
+                              connection_id: str,
+                              connection_generation: int) -> ExecutionContext: ...
+    async def revoke_r4_lease(self, context: ExecutionContext, *,
+                              authorization_revision: int) -> R4LeaseApplication: ...
     async def discover(self, request: DiscoveryRequest) -> Inventory: ...
     async def prepare(self, intent: LaunchIntent,
                       context: ExecutionContext) -> PreparedLaunch: ...

@@ -2,6 +2,7 @@
 
 from .models import (
     ControlTargeting,
+    R4Authority, R4LeaseApplication,
     ExecutionContext,
     Operation,
     OperationReceipt,
@@ -89,10 +90,11 @@ from .executor_inventory import (
 from .discovery import discover_installations
 from .targeting import get_control_targeting, validate_control_target
 
-__version__ = "0.2.24.dev0"
+__version__ = "0.2.25.dev0"
 
 __all__ = [
     "ControlTargeting", "get_control_targeting", "validate_control_target",
+    "R4Authority", "R4LeaseApplication",
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
     "R4_PREVIEW_REVISION", "R4_BUNDLE_EXECUTABLE", "decode_r4_frame",
     "encode_r4_frame", "r4_submit_intent_hash", "verify_r4_development_bundle",

@@ -210,8 +210,9 @@ registry's control contract. Catalog format 2 includes these facts in each
 admission; active-run identity is checked again at the native write frontier.
 Implemented targeting does not grant authority or qualify a provider build.
 
-All R4 exports below are contract/host primitives. They do not authenticate a
-caller or authorize a native effect. See [the R4 guide](nxl-r4-development.md)
+All R4 exports below require authenticated host authority. The runtime lease
+methods install that authority; pure reducers alone grant no native effect.
+See [the R4 guide](nxl-r4-development.md)
 for native decision hash domains and the remaining executable-bundle gate.
 
 | Public exports | Host responsibility and behavior |
@@ -221,6 +222,7 @@ for native decision hash domains and the remaining executable-bundle gate.
 | `R4ReconcileAttempt`, `R4ControlProjection`, `reduce_r4_reconcile_accepted` | Correlate a Server ACK with its connection and reconciliation attempt. Control readiness does not imply a session lease. |
 | `R4AttachAttempt`, `R4LaneProjection`, `reduce_r4_binding_attached`, `r4_lane_ready` | Correlate committed attach ACKs, revisions and local expiry; socket write alone does not admit a lane. |
 | `R4LeaseAttempt`, `R4LeaseProjection`, `r4_lease_renew_frame`, `reduce_r4_lease_grant` | Capture monotonic time before the request, correlate scope/serial, and consume transport delay from the granted duration. |
+| `R4Authority`, `R4LeaseApplication` | Immutable full R4 context scope and the actual runtime application result. Use `RuntimeCore.begin_r4_lease_request`, `install_r4_lease`, `r4_operation_context` and `revoke_r4_lease`; never manufacture a context or ACK from receipt of a grant. |
 | `reduce_r4_lease_applied`, `r4_lease_productive` | Track reported Core installation and check local deadline/action. The host must actually install or renew the Core context before ACKing it. |
 | `R4ReceiptProjection`, `reduce_r4_receipt` | Validate scoped revisions, stages, possible effects and idempotent replay. Hosts persist the result atomically. |
 | `project_r4_open_receipt`, `project_r4_turn_receipt`, `project_r4_steer_receipt`, `project_r4_interrupt_receipt`, `project_r4_close_receipt` | Verify the corresponding Core journal semantic before projecting a distinct R4 receipt; open also requires prepared launch/stream evidence. |

@@ -188,6 +188,16 @@ def _checked_submit(
         "connection_generation": context.connection_generation,
         "session_owner_generation": context.session_owner_generation,
     }
+    if context.r4_authority is not None:
+        authority = context.r4_authority
+        expected_scope.update({
+            "session_id": authority.session_id,
+            "workspace_binding_id": authority.workspace_binding_id,
+            "binding_revision": authority.binding_revision,
+            "credential_epoch": authority.credential_epoch,
+            "grant_id": authority.grant_id,
+            "connection_id": authority.connection_id,
+        })
     if (any(frame[name] != value for name, value in expected_scope.items()) or
             core_receipt.operation_id != frame["operation_id"] or
             core_receipt.session_id != frame["session_id"]):

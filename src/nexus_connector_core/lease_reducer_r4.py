@@ -67,6 +67,7 @@ def _validated(frame: Mapping[str, Any], kind: str) -> dict[str, Any]:
 def r4_lease_renew_frame(attempt: R4LeaseAttempt) -> dict[str, Any]:
     """Build a schema-checked request after the caller captures monotonic t0."""
     if (not isinstance(attempt, R4LeaseAttempt) or
+            not isinstance(attempt.scope, Mapping) or
             not isinstance(attempt.boot_id, str) or not attempt.boot_id or
             not _finite_time(attempt.sent_at_monotonic)):
         raise CoreError("VALIDATION_ERROR", "r4_lease")
@@ -103,19 +104,36 @@ def reduce_r4_lease_grant(previous: R4LeaseProjection | None,
     if previous is not None:
         if previous.revoked:
             raise CoreError("AGENT_REVOKED", "r4_lease")
+        revisions = {"authorization_revision", "configuration_revision",
+                     "binding_revision", "credential_epoch"}
         if (previous.boot_id != attempt.boot_id or
-                previous.scope != attempt.scope or
+                any(previous.scope[key] != attempt.scope[key]
+                    for key in previous.scope if key not in revisions) or
+                any(attempt.scope[key] < previous.scope[key] for key in revisions) or
                 previous.grant_id != attempt.grant_id):
             raise CoreError("LEASE_REVALIDATION_REQUIRED", "r4_lease")
         if previous.request_id == attempt.request_id:
-            if digest != previous.grant_digest:
+            if (digest != previous.grant_digest or
+                    attempt.connection_id != previous.connection_id or
+                    attempt.connection_generation != previous.connection_generation):
                 raise CoreError("LEASE_CONFLICT", "r4_lease")
             return previous
+        if (attempt.purpose == "initial" or
+                (attempt.connection_generation == previous.connection_generation and
+                 attempt.connection_id != previous.connection_id) or
+                (attempt.purpose == "renew" and
+                 (attempt.connection_generation != previous.connection_generation or
+                  attempt.connection_id != previous.connection_id)) or
+                (attempt.purpose == "reconnect" and
+                 attempt.connection_generation <= previous.connection_generation)):
+            raise CoreError("LEASE_REVALIDATION_REQUIRED", "r4_lease")
         if (attempt.expected_lease_serial != previous.lease_serial or
                 attempt.sent_at_monotonic <= previous.sent_at_monotonic or
                 received_at_monotonic >= previous.deadline_monotonic or
                 attempt.connection_generation < previous.connection_generation):
             raise CoreError("LEASE_REVALIDATION_REQUIRED", "r4_lease")
+    elif attempt.purpose != "initial" or attempt.expected_lease_serial != 0:
+        raise CoreError("LEASE_REVALIDATION_REQUIRED", "r4_lease")
     deadline = (attempt.sent_at_monotonic +
                 grant["valid_for_ms"] / 1000 - safety_seconds)
     if deadline <= received_at_monotonic:

@@ -48,6 +48,21 @@ class ControlTargeting:
 
 
 @dataclass(frozen=True, slots=True)
+class R4Authority:
+    """Additional immutable scope of a Core-installed R4 lease."""
+
+    session_id: str
+    workspace_binding_id: str
+    binding_revision: int
+    credential_epoch: int
+    grant_id: str
+    lease_id: str
+    lease_serial: int
+    connection_id: str
+    boot_id: str
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionContext:
     server_id: str
     executor_id: str
@@ -60,6 +75,13 @@ class ExecutionContext:
     lease_deadline_monotonic: float
     allowed_actions: frozenset[str]
     session_owner_generation: int = 1
+    r4_authority: R4Authority | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class R4LeaseApplication:
+    context: ExecutionContext
+    acknowledgement: Mapping[str, Any]
 
 
 @dataclass(frozen=True, slots=True)

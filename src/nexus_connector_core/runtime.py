@@ -35,6 +35,7 @@ from .protocol import intent_hash
 from .protocol import canonical_json
 from .ports import Journal, Clock, OwnedSlotLedger
 from .targeting import validate_control_target
+from .lease_runtime_r4 import R4LeaseRuntime
 
 
 def _finite_timing(value: object) -> bool:
@@ -265,10 +266,19 @@ class _OpeningGuard:
     so a late environment resolution cannot start a native adapter under
     a runtime that already began draining."""
 
-    __slots__ = ("closed",)
+    __slots__ = ("_closed", "authority_probe")
 
     def __init__(self) -> None:
-        self.closed = False
+        self._closed = False
+        self.authority_probe = None
+
+    @property
+    def closed(self):
+        return self._closed or (self.authority_probe is not None and self.authority_probe())
+
+    @closed.setter
+    def closed(self, value):
+        self._closed = value
 
 
 class _OpeningAttempt:
@@ -289,7 +299,7 @@ class _OpeningAttempt:
         self.waiter_done = False
 
 
-class LocalRuntimeCore:
+class LocalRuntimeCore(R4LeaseRuntime):
     """One installation's runtime kernel.
 
     The trusted host supplies selected binaries, local roots and a native
@@ -388,6 +398,7 @@ class LocalRuntimeCore:
         self._release_producers: set[asyncio.Task] = set()
         # C3/S08: one-shot public disposal of factory-owned executors.
         self._factory_disposed = False
+        self._init_r4_leases()
 
     async def discover(self, request: DiscoveryRequest) -> Inventory:
         # The passive public facade and the runtime share one discovery path.
@@ -411,7 +422,9 @@ class LocalRuntimeCore:
             raise CoreError("BINARY_NOT_FOUND", "prepare")
         if root is None:
             raise CoreError("WORKSPACE_UNAVAILABLE", "prepare")
-        return await asyncio.to_thread(prepare_launch, intent, candidate, root)
+        prepared = await asyncio.to_thread(prepare_launch, intent, candidate, root)
+        self._authorize(context, "runtime.open")
+        return prepared
 
     async def open(self, operation: OpenOperation,
                    context: ExecutionContext) -> OperationReceipt:
@@ -461,6 +474,7 @@ class LocalRuntimeCore:
                 raise CoreError("CAPACITY_EXCEEDED", "open", retry_safe=True,
                                 operation_id=operation.operation_id)
             attempt = _OpeningAttempt()
+            attempt.guard.authority_probe = lambda: self._r4_open_blocked(context, operation.session_id)
             self._opening[session_key] = attempt
         # C4/T04: factories that declare the additive opening_guard seam
         # receive the draining fence (legacy/test factories without the
@@ -479,6 +493,7 @@ class LocalRuntimeCore:
 
             async def effect() -> str:
                 nonlocal effect_started, binding_registered
+                self._check_r4_context(context, "runtime.open", operation.session_id)
                 async with self._lock:
                     if self._shutting_down:
                         raise EffectNotSent("runtime is draining",
@@ -508,12 +523,13 @@ class LocalRuntimeCore:
                 # attempt owns it - a cancelled caller stops waiting but
                 # the Future (and any live handle it returns) stays
                 # supervised by the runtime, never abandoned.
-                open_task = asyncio.ensure_future(
-                    self._native_factory.open(
-                        prepared, operation.session_id, context,
-                        **open_kwargs))
-                attempt.native_task = open_task
                 try:
+                    self._check_r4_context(context, "runtime.open", operation.session_id)
+                    open_task = asyncio.ensure_future(
+                        self._native_factory.open(
+                            prepared, operation.session_id, context,
+                            **open_kwargs))
+                    attempt.native_task = open_task
                     native = await asyncio.shield(open_task)
                 except asyncio.CancelledError:
                     loop = asyncio.get_running_loop()
@@ -547,10 +563,10 @@ class LocalRuntimeCore:
                     from .native.runtime_bridge import EffectFence
                     binding.effect_fence = EffectFence(
                         lambda: (binding.closed, binding.closing,
-                                 binding.revoked,
+                                  binding.revoked or self._r4_revoked(session_key),
                                  binding.lease_expired or
                                  binding.lease_hold or
-                                 binding.superseded,
+                                  binding.superseded or self._r4_pending(session_key),
                                  binding.faulted),
                         clock=self._clock.monotonic,
                         deadline_probe=lambda:
@@ -750,6 +766,7 @@ class LocalRuntimeCore:
                                 retry_safe=True)
 
             async def effect() -> None:
+                self._check_r4_context(context, action, operation.session_id)
                 try:
                     await reply(frozen_request, operation.decision,
                                 frozen_response)
@@ -856,6 +873,7 @@ class LocalRuntimeCore:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
 
             async def effect() -> None:
+                self._check_r4_context(context, semantic.action, semantic.session_id)
                 await binding.native.send(
                     verb, payload, semantic.operation_id,
                     expected_turn_id=semantic.expected_turn_id)
@@ -891,6 +909,7 @@ class LocalRuntimeCore:
                 binding = self._session(operation.session_id, context)
 
                 async def effect() -> None:
+                    self._check_r4_context(context, semantic.action, operation.session_id)
                     async with self._lock:
                         binding.closing = True
                     outcome = await self._close_owned(
@@ -1170,6 +1189,9 @@ class LocalRuntimeCore:
         # still-running forces, live bindings) RETAINS the containment
         # capacity those sessions may still need; a later fully-resolved
         # shutdown disposes it. Idempotent by flag.
+        for session, entry in self._r4_leases.items():
+            if entry.pending is not None and not entry.pending.done():
+                outcomes[session] = "unknown"
         self._dispose_factory_if_resolved()
         return ShutdownReport(outcomes)
 
@@ -1179,7 +1201,7 @@ class LocalRuntimeCore:
         # C4/T04: a pending open can still produce an effect (callbacks,
         # queued spawn units) - its capacity is NOT disposable.
         if (self._opening or self._uncertain_opens or self._cleanup_tasks
-                or self._late_handles or self._release_obligations):
+                or self._late_handles or self._release_obligations or self._r4_lease_tasks):
             return
         for binding in self._sessions.values():
             if not binding.closed:
@@ -2571,7 +2593,8 @@ class LocalRuntimeCore:
                 return
 
     def _authorize(self, context: ExecutionContext, action: str, *,
-                   containment_reply: bool = False) -> None:
+                    containment_reply: bool = False) -> None:
+        self._check_r4_context(context, action)
         self._validate_lease_deadline(context)
         # C7/W04: a strictly NEGATIVE approval reply (decline/cancel to
         # a still-observed request of the same turn) is containment, not
@@ -2613,7 +2636,8 @@ class LocalRuntimeCore:
         validate_external_session_id(session_id, stage=stage)
 
     async def _existing(self, semantic: Operation,
-                        context: ExecutionContext) -> OperationReceipt | None:
+                         context: ExecutionContext) -> OperationReceipt | None:
+        self._check_r4_context(context, semantic.action, semantic.session_id)
         old = await self._journal.get_receipt(OperationKey(
             context.server_id, context.executor_id, semantic.operation_id))
         if old is not None and old.intent_hash != intent_hash(semantic, context):
@@ -2630,6 +2654,8 @@ class LocalRuntimeCore:
         if binding is None:
             raise CoreError("SESSION_UNKNOWN", "admission")
         original = binding.context
+        if context.r4_authority != original.r4_authority:
+            raise CoreError("STALE_GENERATION", "r4_context")
         if ((context.server_id, context.executor_id, context.binding_id,
              context.agent_id, context.workspace_id) !=
             (original.server_id, original.executor_id, original.binding_id,
