@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-This project is `0.2.28.dev0`, an unpublished development build. Its API and
+This project is `0.2.29.dev0`, an unpublished development build. Its API and
 contract bundle can still change. The current exact revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with

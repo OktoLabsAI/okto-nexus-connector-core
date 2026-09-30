@@ -1,0 +1,50 @@
+{
+  "status": "PARTIAL_INTEGRATION_VERIFIED",
+  "core_version": "0.2.29.dev0",
+  "wheel_sha256": "a465c1ec1aaba9814872b21984a436bbf4cac5f28c2b4bed776f1a7042426cba",
+  "branch": "feature/v0.2.0",
+  "previous_head": "9d244cfecc31c817661d560bbcee75cc9f8d5513",
+  "campaigns": [
+    {
+      "path": "native-domain-initial.xml",
+      "passed": 24,
+      "phase": "initial source"
+    },
+    {
+      "path": "native-domain-core.xml",
+      "passed": 34,
+      "failed": 1,
+      "cause": "Test close observation deadline was zero; changed fixture to bounded positive wait."
+    },
+    {
+      "path": "native-domain-core-final.xml",
+      "passed": 109,
+      "phase": "source before final constructor type hardening"
+    },
+    {
+      "path": "native-domain-installed-core-initial.xml",
+      "passed": 108,
+      "failed": 1,
+      "cause": "Legacy tests.regression import missing from isolated runner; no product defect."
+    },
+    {
+      "path": "native-domain-installed-core.xml",
+      "passed": 109,
+      "phase": "final installed wheel"
+    }
+  ],
+  "commands": "native-domain-installed-core.json",
+  "integration_manifest": "Nexus plans/r4_execution/test_runs_20260930_native_domain.json",
+  "gates_closed": [],
+  "remaining": [
+    "Approved host composition and capability lifecycle",
+    "Native socket lifecycle ownership",
+    "Real provider and platform qualification",
+    "Remaining R4 bundle acceptance"
+  ],
+  "source_sha256": {
+    "src/nexus_connector_core/native_action_bridge.py": "061c8833a7345b2eca147b79f77a04c34691602fd844ff122996e08a07235eba",
+    "src/nexus_connector_core/lease_runtime_r4.py": "38594ee81c78c30dc1cd4cdb531fad26f9546360e72e46134dafbc6ca785d746",
+    "src/nexus_connector_core/ports.py": "0c46401bbba15f826b5ecfbefccafc8fdafe594a978371414c2ba15655b44b45"
+  }
+}

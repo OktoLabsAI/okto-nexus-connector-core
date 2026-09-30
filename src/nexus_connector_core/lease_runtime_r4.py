@@ -339,6 +339,41 @@ class R4LeaseRuntime:
                                containment_reply=containment_reply)
         return entry.context
 
+    def r4_native_action_context(self, scope: Mapping[str, Any], *,
+                                 connection_id: str, connection_generation: int) -> ExecutionContext:
+        """Read current installed session authority for a separate domain capability.
+
+        Runtime allowed_actions remains the seven-operation wire vocabulary.
+        The native bridge checks its separate canonical capability ceiling.
+        This accessor grants no runtime operation and never extends a deadline.
+        """
+        from .native_action_bridge import native_action_scope
+        scope = native_action_scope(scope)
+        key = SessionKey(scope['server_id'], scope['executor_id'], scope['session_id'])
+        entry = self._r4_leases.get(key)
+        if self._shutting_down:
+            raise CoreError('RUNTIME_DRAINING', 'native_action_context')
+        if entry is None:
+            raise CoreError('LEASE_REVALIDATION_REQUIRED', 'native_action_context')
+        p = entry.projection
+        if (type(connection_generation) is not int or connection_generation != p.connection_generation
+                or connection_id != p.connection_id or canonical_json(scope) != canonical_json(dict(p.scope))
+                or entry.context.r4_authority.boot_id != self._r4_boot_id):
+            raise CoreError('STALE_GENERATION', 'native_action_context')
+        if entry.revoked:
+            raise CoreError('AGENT_REVOKED', 'native_action_context')
+        if entry.pending is not None:
+            raise CoreError('LEASE_UPDATE_PENDING', 'native_action_context')
+        binding = self._sessions.get(key)
+        if binding is None and key not in self._opening:
+            raise CoreError('SESSION_UNKNOWN', 'native_action_context')
+        if binding is not None and any((binding.closed, binding.closing, binding.draining,
+                                       binding.revoked, binding.superseded)):
+            raise CoreError('SESSION_UNKNOWN', 'native_action_context')
+        if self._clock.monotonic() >= entry.context.lease_deadline_monotonic:
+            raise CoreError('LEASE_EXPIRED', 'native_action_context')
+        return entry.context
+
     async def revoke_r4_lease(self, context: ExecutionContext, *,
                               authorization_revision: int) -> R4LeaseApplication:
         """Fence immediately, then acknowledge the actual Core revocation.
