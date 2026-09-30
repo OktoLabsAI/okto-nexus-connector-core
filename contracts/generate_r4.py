@@ -21,6 +21,8 @@ SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
 from nexus_connector_core.native.registry import adapter_specs  # noqa: E402
+from nexus_connector_core.executor_inventory import SNAPSHOT_FORMAT_VERSION  # noqa: E402
+from nexus_connector_core.catalog import CATALOG_FORMAT_VERSION  # noqa: E402
 
 ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()]
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
@@ -188,7 +190,7 @@ def build_schema() -> dict:
             "core_version": ID, "management_revision": {"const": MANAGEMENT},
             "supported_nxl": {"type": "array", "items": {"const": REVISION},
                               "minItems": 1, "maxItems": 1},
-            "snapshot_formats": {"type": "array", "items": {"const": 1},
+            "snapshot_formats": {"type": "array", "items": {"const": SNAPSHOT_FORMAT_VERSION},
                                  "minItems": 1, "maxItems": 1},
             "control_capabilities": id_list,
         }, ("link_attempt_id", "server_id", "executor_id", "core_version",
@@ -198,7 +200,7 @@ def build_schema() -> dict:
             "link_attempt_id": ID, "server_id": ID, "executor_id": ID,
             **CONNECTION, "management_revision": {"const": MANAGEMENT},
             "accepted_nxl": {"const": REVISION},
-            "snapshot_format": {"const": 1},
+            "snapshot_format": {"const": SNAPSHOT_FORMAT_VERSION},
             "control_capabilities": id_list,
         }, ("link_attempt_id", "server_id", "executor_id", *CONNECTION,
             "management_revision", "accepted_nxl", "snapshot_format",
@@ -364,9 +366,42 @@ def build_schema() -> dict:
             "oneOf": frames}
 
 
+def build_inventory_schema() -> dict:
+    source = Path(__file__).parent / "specification/executor-inventory-baseline.json"
+    definitions = json.loads(source.read_text(encoding="utf-8"))["definitions"]
+    definitions["ExecutorInventorySnapshot"]["properties"]["snapshot_format_version"] = {
+        "const": SNAPSHOT_FORMAT_VERSION}
+    definitions["RuntimeCatalog"]["properties"]["format_version"] = {
+        "const": CATALOG_FORMAT_VERSION}
+    controls = obj({
+        "action": {"enum": ["turn.steer", "turn.interrupt"]},
+        "supported": {"type": "boolean"},
+        "native_turn_id": {"enum": ["required", "optional", "forbidden"]},
+        "requires_active_run": {"type": "boolean"},
+        "steer_timing": {"enum": ["IMMEDIATE", "NEXT_TURN_BOUNDARY", None]},
+    }, ("action", "supported", "native_turn_id", "requires_active_run", "steer_timing"))
+    descriptor = definitions["RuntimeDescriptor"]
+    descriptor["properties"]["control_targeting"] = {
+        "type": "array", "items": controls, "minItems": 2, "maxItems": 2}
+    descriptor["required"].append("control_targeting")
+    evidence = definitions["CandidateEvidence"]
+    for name in ("qualification", "containment"):
+        evidence["properties"][name] = definitions["CandidateAvailability"]["properties"][name]
+        evidence["required"].append(name)
+    evidence["properties"]["qualified_control_actions"] = {
+        "type": "array", "items": {"enum": ["turn.steer", "turn.interrupt"]},
+        "uniqueItems": True, "maxItems": 2}
+    evidence["required"].append("qualified_control_actions")
+    return {"$schema": "https://json-schema.org/draft/2020-12/schema",
+            "$id": "https://nexus.oktolabs.ai/contracts/nxl/r4/inventory.schema.json",
+            "$defs": definitions, "$ref": "#/$defs/ExecutorInventorySnapshot"}
+
+
 def generated_files() -> dict[str, bytes]:
     schema_bytes = (json.dumps(build_schema(), sort_keys=True, ensure_ascii=False,
                                indent=2) + "\n").encode("utf-8")
+    inventory_bytes = (json.dumps(build_inventory_schema(), sort_keys=True,
+                                  ensure_ascii=False, indent=2) + "\n").encode("utf-8")
     manifest = {
         "revision": REVISION, "protocol_major": 1,
         "management_revision": MANAGEMENT,
@@ -374,11 +409,14 @@ def generated_files() -> dict[str, bytes]:
         "supported_frames": [item["title"] for item in build_schema()["oneOf"]],
         "unsupported_actions": [],
         "files": {"frame.schema.json":
-                  "sha256:" + hashlib.sha256(schema_bytes).hexdigest()},
+                  "sha256:" + hashlib.sha256(schema_bytes).hexdigest(),
+                  "inventory.schema.json":
+                  "sha256:" + hashlib.sha256(inventory_bytes).hexdigest()},
     }
     return {
         "__init__.py": b'"""Independent NXL R4 development bundle."""\n',
         "frame.schema.json": schema_bytes,
+        "inventory.schema.json": inventory_bytes,
         "manifest.json": (json.dumps(manifest, sort_keys=True, ensure_ascii=False,
                                      indent=2) + "\n").encode("utf-8"),
     }

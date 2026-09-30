@@ -34,6 +34,7 @@ from .profiles import prepare_launch, verify_prepared
 from .protocol import intent_hash
 from .protocol import canonical_json
 from .ports import Journal, Clock, OwnedSlotLedger
+from .targeting import validate_control_target
 
 
 def _finite_timing(value: object) -> bool:
@@ -848,23 +849,9 @@ class LocalRuntimeCore:
                 raise CoreError("SESSION_CLOSING", "admission")
             if binding.faulted:
                 raise CoreError("EVENT_STREAM_UNAVAILABLE", "admission")
-            if verb == "steer":
-                # Codex steer must name the active native turn ID. Pi
-                # steer is the ID-less contract: the bridge targets the
-                # agent run it observed starting for the active submit
-                # (native queue semantics, next turn boundary) and
-                # refuses before the write when there is none. Supplying
-                # a native turn ID for Pi is refused the same way, so
-                # neither adapter silently accepts an untargetable
-                # steer. Other adapters keep refusing steer outright.
-                if binding.adapter_id == "codex_app_server":
-                    if not semantic.expected_turn_id:
-                        raise CoreError("CAPABILITY_UNSUPPORTED", "control")
-                elif binding.adapter_id == "pi_rpc":
-                    if semantic.expected_turn_id is not None:
-                        raise CoreError("CAPABILITY_UNSUPPORTED", "control")
-                else:
-                    raise CoreError("CAPABILITY_UNSUPPORTED", "control")
+            if verb in {"steer", "interrupt"}:
+                validate_control_target(binding.adapter_id, semantic.action,
+                                        semantic.expected_turn_id)
             if semantic.action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
 

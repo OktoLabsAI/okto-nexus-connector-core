@@ -11,6 +11,7 @@ from nexus_connector_core import (
     CONTRACT_REVISION, R4_BUNDLE_EXECUTABLE, R4_PREVIEW_REVISION,
     decode_r4_frame, encode_r4_frame, r4_submit_intent_hash,
     verify_r4_development_bundle,
+    SNAPSHOT_FORMAT_VERSION,
 )
 from nexus_connector_core.frame_codec import decode_frame
 from nexus_connector_core.models import CoreError
@@ -60,7 +61,7 @@ def test_r4_handshake_and_reconcile_pages_are_closed():
              "core_version": "0.2.19.dev0",
              "management_revision": "nexus-connections-2026-09-29-r4",
              "supported_nxl": [R4_PREVIEW_REVISION],
-             "snapshot_formats": [1], "control_capabilities": []}
+             "snapshot_formats": [SNAPSHOT_FORMAT_VERSION], "control_capabilities": []}
     attach = {**base, "type": "binding.attach",
               "attach_request_id": "attach", "server_id": "srv",
               "executor_id": "exe", "binding_id": "bind",

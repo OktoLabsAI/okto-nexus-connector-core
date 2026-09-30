@@ -31,11 +31,14 @@ def _resources() -> tuple[Draft202012Validator, dict[str, Any], str]:
     manifest_bytes = folder.joinpath("manifest.json").read_bytes()
     manifest = strict_json(manifest_bytes.decode("utf-8"))
     schema_bytes = folder.joinpath("frame.schema.json").read_bytes()
+    inventory_bytes = folder.joinpath("inventory.schema.json").read_bytes()
     if (manifest.get("revision") != R4_PREVIEW_REVISION or
             manifest.get("protocol_major") != 1 or
             manifest.get("status") != "development-partial" or
             manifest.get("files") != {"frame.schema.json":
-                "sha256:" + hashlib.sha256(schema_bytes).hexdigest()}):
+                "sha256:" + hashlib.sha256(schema_bytes).hexdigest(),
+                "inventory.schema.json":
+                "sha256:" + hashlib.sha256(inventory_bytes).hexdigest()}):
         raise CoreError("CONTRACT_MISMATCH", "r4_bundle")
     schema = strict_json(schema_bytes.decode("utf-8"))
     Draft202012Validator.check_schema(schema)

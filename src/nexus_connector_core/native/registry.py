@@ -11,7 +11,7 @@ from importlib import import_module
 import sys
 from typing import Any
 
-from ..models import CoreError
+from ..models import CoreError, ControlTargeting
 
 
 @dataclass(frozen=True, slots=True)
@@ -23,24 +23,33 @@ class AdapterSpec:
     mode: str
     executable_name: str | None
     platforms: frozenset[str]
+    control_targeting: tuple[ControlTargeting, ...]
 
 
 _SPECS = {
     "codex_app_server": AdapterSpec(
         "codex_app_server", "codex", ".adapters.codex",
         "CodexAppServerConnector", "managed", "codex",
-        frozenset({"win32", "linux", "darwin"})),
+        frozenset({"win32", "linux", "darwin"}),
+        (ControlTargeting("turn.steer", True, "required", True, "IMMEDIATE"),
+         ControlTargeting("turn.interrupt", True, "optional", True))),
     "pi_rpc": AdapterSpec(
         "pi_rpc", "pi", ".adapters.pi", "PiRpcConnector", "managed", "pi",
-        frozenset({"win32", "linux", "darwin"})),
+        frozenset({"win32", "linux", "darwin"}),
+        (ControlTargeting("turn.steer", True, "forbidden", True, "NEXT_TURN_BOUNDARY"),
+         ControlTargeting("turn.interrupt", True, "forbidden", True))),
     "claude_stream": AdapterSpec(
         "claude_stream", "claude_code", ".adapters.claude_code_stream",
         "ClaudeCodeStreamConnector", "managed", "claude",
-        frozenset({"win32", "linux", "darwin"})),
+        frozenset({"win32", "linux", "darwin"}),
+        (ControlTargeting("turn.steer", False, "forbidden", False),
+         ControlTargeting("turn.interrupt", True, "forbidden", True))),
     "claude_attach": AdapterSpec(
         "claude_attach", "claude_code", ".adapters.claude_code_attach",
         "ClaudeCodeAttachConnector", "attach", None,
-        frozenset({"linux", "darwin", "freebsd"})),
+        frozenset({"linux", "darwin", "freebsd"}),
+        (ControlTargeting("turn.steer", False, "forbidden", False),
+         ControlTargeting("turn.interrupt", False, "forbidden", False))),
 }
 
 

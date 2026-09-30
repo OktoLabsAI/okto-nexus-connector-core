@@ -1,6 +1,7 @@
 """Embeddable native harness core. Importing this package has no runtime side effects."""
 
 from .models import (
+    ControlTargeting,
     ExecutionContext,
     Operation,
     OperationReceipt,
@@ -81,14 +82,17 @@ from .runtime import LocalRuntimeCore
 from .slot_ledger import SQLiteOwnedSlotLedger
 from .executor_inventory import (
     SNAPSHOT_FORMAT_VERSION, build_executor_inventory_snapshot,
+    get_executor_inventory_schema,
     calculate_inventory_revision,
     verify_executor_inventory_snapshot,
 )
 from .discovery import discover_installations
+from .targeting import get_control_targeting, validate_control_target
 
-__version__ = "0.2.23.dev0"
+__version__ = "0.2.24.dev0"
 
 __all__ = [
+    "ControlTargeting", "get_control_targeting", "validate_control_target",
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
     "R4_PREVIEW_REVISION", "R4_BUNDLE_EXECUTABLE", "decode_r4_frame",
     "encode_r4_frame", "r4_submit_intent_hash", "verify_r4_development_bundle",
@@ -117,6 +121,7 @@ __all__ = [
     "discover_installations",
     "SQLiteOwnedSlotLedger",
     "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot",
+    "get_executor_inventory_schema",
     "calculate_inventory_revision",
     "verify_executor_inventory_snapshot",
 ]

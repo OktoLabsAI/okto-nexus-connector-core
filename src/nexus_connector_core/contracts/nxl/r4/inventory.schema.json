@@ -1,0 +1,598 @@
+{
+  "$defs": {
+    "AvailabilityReport": {
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "items": {
+            "$ref": "#/$defs/CandidateAvailability"
+          },
+          "maxItems": 256,
+          "type": "array"
+        },
+        "core_version": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 2
+        },
+        "platform": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "core_version",
+        "format_version",
+        "platform",
+        "availability"
+      ],
+      "type": "object"
+    },
+    "CandidateAvailability": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "architecture": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_identity": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_ref": {
+          "anyOf": [
+            {
+              "pattern": "^nexus-install-v1:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "const": ""
+            }
+          ]
+        },
+        "connection_mode": {
+          "enum": [
+            "managed",
+            "attach"
+          ],
+          "type": "string"
+        },
+        "containment": {
+          "enum": [
+            "available",
+            "unavailable",
+            "unverified"
+          ],
+          "type": "string"
+        },
+        "display_name": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "label": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "qualification": {
+          "enum": [
+            "qualified",
+            "unqualified",
+            "not_probed"
+          ],
+          "type": "string"
+        },
+        "reasons": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "source": {
+          "maxLength": 80,
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "NOT_INSTALLED",
+            "UNSUPPORTED_PLATFORM",
+            "NOT_PROBED",
+            "UNQUALIFIED_BUILD",
+            "CONTAINMENT_UNAVAILABLE",
+            "PREPARATION_REQUIRED",
+            "READY_FOR_RUNTIME"
+          ],
+          "type": "string"
+        },
+        "trust": {
+          "maxLength": 80,
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "adapter_id",
+        "candidate_ref",
+        "display_name",
+        "connection_mode",
+        "state",
+        "reasons",
+        "version",
+        "architecture",
+        "build_identity",
+        "trust",
+        "source",
+        "qualification",
+        "containment",
+        "label"
+      ],
+      "type": "object"
+    },
+    "CandidateEvidence": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "architecture": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "build_identity": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "candidate_ref": {
+          "pattern": "^nexus-install-v1:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "capability_report": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ObservedCapabilities"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "containment": {
+          "enum": [
+            "available",
+            "unavailable",
+            "unverified"
+          ],
+          "type": "string"
+        },
+        "content_fingerprint": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "platform": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "qualification": {
+          "enum": [
+            "qualified",
+            "unqualified",
+            "not_probed"
+          ],
+          "type": "string"
+        },
+        "qualified_control_actions": {
+          "items": {
+            "enum": [
+              "turn.steer",
+              "turn.interrupt"
+            ]
+          },
+          "maxItems": 2,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "reasons": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 64,
+          "type": "array"
+        },
+        "source": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "state": {
+          "enum": [
+            "NOT_INSTALLED",
+            "UNSUPPORTED_PLATFORM",
+            "NOT_PROBED",
+            "UNQUALIFIED_BUILD",
+            "CONTAINMENT_UNAVAILABLE",
+            "PREPARATION_REQUIRED",
+            "READY_FOR_RUNTIME"
+          ],
+          "type": "string"
+        },
+        "support_status": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "trust": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "version": {
+          "anyOf": [
+            {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "adapter_id",
+        "candidate_ref",
+        "content_fingerprint",
+        "build_identity",
+        "version",
+        "architecture",
+        "trust",
+        "source",
+        "support_status",
+        "platform",
+        "state",
+        "reasons",
+        "capability_report",
+        "qualification",
+        "containment",
+        "qualified_control_actions"
+      ],
+      "type": "object"
+    },
+    "ExecutorInventorySnapshot": {
+      "additionalProperties": false,
+      "properties": {
+        "availability": {
+          "$ref": "#/$defs/AvailabilityReport"
+        },
+        "catalog": {
+          "$ref": "#/$defs/RuntimeCatalog"
+        },
+        "core_version": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "evidence": {
+          "items": {
+            "$ref": "#/$defs/CandidateEvidence"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "inventory_revision": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "observation_age_ms": {
+          "maximum": 300000,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "producer_instance_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "publication_sequence": {
+          "minimum": 1,
+          "type": "integer"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "snapshot_format_version": {
+          "const": 2
+        }
+      },
+      "required": [
+        "snapshot_format_version",
+        "server_id",
+        "executor_id",
+        "producer_instance_id",
+        "publication_sequence",
+        "inventory_revision",
+        "core_version",
+        "catalog",
+        "availability",
+        "evidence",
+        "observation_age_ms"
+      ],
+      "type": "object"
+    },
+    "ObservedCapabilities": {
+      "additionalProperties": false,
+      "properties": {
+        "approvals": {
+          "type": "boolean"
+        },
+        "conversation": {
+          "type": "boolean"
+        },
+        "evidence_revision": {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        "input": {
+          "type": "boolean"
+        },
+        "interrupt": {
+          "type": "boolean"
+        },
+        "managed_work": {
+          "type": "boolean"
+        },
+        "steer_timing": {
+          "enum": [
+            "IMMEDIATE",
+            "NEXT_TURN_BOUNDARY",
+            "UNSUPPORTED"
+          ],
+          "type": "string"
+        },
+        "targeting": {
+          "additionalProperties": false,
+          "properties": {
+            "interrupt": {
+              "enum": [
+                "native_turn_id",
+                "current_run",
+                "unsupported"
+              ],
+              "type": "string"
+            },
+            "steer": {
+              "enum": [
+                "native_turn_id",
+                "current_run",
+                "unsupported"
+              ],
+              "type": "string"
+            }
+          },
+          "required": [
+            "steer",
+            "interrupt"
+          ],
+          "type": "object"
+        },
+        "tool_path": {
+          "enum": [
+            "direct_mcp_http",
+            "structured_native",
+            "none"
+          ],
+          "type": "string"
+        }
+      },
+      "required": [
+        "evidence_revision",
+        "conversation",
+        "managed_work",
+        "tool_path",
+        "interrupt",
+        "steer_timing",
+        "approvals",
+        "input",
+        "targeting"
+      ],
+      "type": "object"
+    },
+    "RuntimeCatalog": {
+      "additionalProperties": false,
+      "properties": {
+        "core_version": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "format_version": {
+          "const": 2
+        },
+        "runtimes": {
+          "items": {
+            "$ref": "#/$defs/RuntimeDescriptor"
+          },
+          "maxItems": 128,
+          "type": "array"
+        }
+      },
+      "required": [
+        "core_version",
+        "format_version",
+        "runtimes"
+      ],
+      "type": "object"
+    },
+    "RuntimeDescriptor": {
+      "additionalProperties": false,
+      "properties": {
+        "adapter_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "connection_mode": {
+          "enum": [
+            "managed",
+            "attach"
+          ],
+          "type": "string"
+        },
+        "control_targeting": {
+          "items": {
+            "additionalProperties": false,
+            "properties": {
+              "action": {
+                "enum": [
+                  "turn.steer",
+                  "turn.interrupt"
+                ]
+              },
+              "native_turn_id": {
+                "enum": [
+                  "required",
+                  "optional",
+                  "forbidden"
+                ]
+              },
+              "requires_active_run": {
+                "type": "boolean"
+              },
+              "steer_timing": {
+                "enum": [
+                  "IMMEDIATE",
+                  "NEXT_TURN_BOUNDARY",
+                  null
+                ]
+              },
+              "supported": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "action",
+              "supported",
+              "native_turn_id",
+              "requires_active_run",
+              "steer_timing"
+            ],
+            "type": "object"
+          },
+          "maxItems": 2,
+          "minItems": 2,
+          "type": "array"
+        },
+        "discoverable": {
+          "type": "boolean"
+        },
+        "display_name": {
+          "maxLength": 4096,
+          "type": "string"
+        },
+        "harness_family": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "implementation_platforms": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 16,
+          "type": "array"
+        },
+        "native_kind": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "support_status": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        }
+      },
+      "required": [
+        "adapter_id",
+        "display_name",
+        "harness_family",
+        "native_kind",
+        "connection_mode",
+        "implementation_platforms",
+        "support_status",
+        "discoverable",
+        "control_targeting"
+      ],
+      "type": "object"
+    }
+  },
+  "$id": "https://nexus.oktolabs.ai/contracts/nxl/r4/inventory.schema.json",
+  "$ref": "#/$defs/ExecutorInventorySnapshot",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

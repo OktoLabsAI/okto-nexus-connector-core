@@ -1,0 +1,134 @@
+{
+  "snapshot_format_version": 1,
+  "server_id": "historical-server",
+  "executor_id": "historical-executor",
+  "producer_instance_id": "historical-owner",
+  "publication_sequence": 1,
+  "core_version": "0.2.23.dev0",
+  "catalog": {
+    "core_version": "0.2.23.dev0",
+    "format_version": 1,
+    "runtimes": [
+      {
+        "adapter_id": "codex_app_server",
+        "display_name": "Codex (app-server)",
+        "harness_family": "codex",
+        "native_kind": "codex",
+        "connection_mode": "managed",
+        "implementation_platforms": [
+          "darwin",
+          "linux",
+          "win32"
+        ],
+        "support_status": "managed_supported",
+        "discoverable": true
+      },
+      {
+        "adapter_id": "pi_rpc",
+        "display_name": "Pi (Node RPC)",
+        "harness_family": "pi",
+        "native_kind": "pi",
+        "connection_mode": "managed",
+        "implementation_platforms": [
+          "darwin",
+          "linux",
+          "win32"
+        ],
+        "support_status": "managed_supported",
+        "discoverable": true
+      },
+      {
+        "adapter_id": "claude_stream",
+        "display_name": "Claude Code (stream)",
+        "harness_family": "claude_code",
+        "native_kind": "claude_code",
+        "connection_mode": "managed",
+        "implementation_platforms": [
+          "darwin",
+          "linux",
+          "win32"
+        ],
+        "support_status": "managed_supported",
+        "discoverable": true
+      },
+      {
+        "adapter_id": "claude_attach",
+        "display_name": "Claude Code (attach)",
+        "harness_family": "claude_code",
+        "native_kind": "claude_code",
+        "connection_mode": "attach",
+        "implementation_platforms": [
+          "darwin",
+          "freebsd",
+          "linux"
+        ],
+        "support_status": "registered_unqualified",
+        "discoverable": false
+      }
+    ]
+  },
+  "availability": {
+    "core_version": "0.2.23.dev0",
+    "format_version": 2,
+    "platform": "win32",
+    "availability": [
+      {
+        "adapter_id": "codex_app_server",
+        "candidate_ref": "",
+        "display_name": "Codex (app-server)",
+        "connection_mode": "managed",
+        "state": "NOT_INSTALLED",
+        "reasons": [
+          "no_installed_candidate"
+        ],
+        "version": null,
+        "architecture": null,
+        "build_identity": null,
+        "trust": "",
+        "source": "",
+        "qualification": "not_probed",
+        "containment": "available",
+        "label": "Codex (app-server)"
+      },
+      {
+        "adapter_id": "pi_rpc",
+        "candidate_ref": "",
+        "display_name": "Pi (Node RPC)",
+        "connection_mode": "managed",
+        "state": "NOT_INSTALLED",
+        "reasons": [
+          "no_installed_candidate"
+        ],
+        "version": null,
+        "architecture": null,
+        "build_identity": null,
+        "trust": "",
+        "source": "",
+        "qualification": "not_probed",
+        "containment": "available",
+        "label": "Pi (Node RPC)"
+      },
+      {
+        "adapter_id": "claude_stream",
+        "candidate_ref": "",
+        "display_name": "Claude Code (stream)",
+        "connection_mode": "managed",
+        "state": "NOT_INSTALLED",
+        "reasons": [
+          "no_installed_candidate"
+        ],
+        "version": null,
+        "architecture": null,
+        "build_identity": null,
+        "trust": "",
+        "source": "",
+        "qualification": "not_probed",
+        "containment": "available",
+        "label": "Claude Code (stream)"
+      }
+    ]
+  },
+  "evidence": [],
+  "observation_age_ms": 0,
+  "inventory_revision": "sha256:1f1808e558de7ead397e10ccedacb39d83e95c87145ffdf01ac3308273deb04a"
+}

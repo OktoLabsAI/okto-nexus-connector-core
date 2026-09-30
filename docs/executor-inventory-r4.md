@@ -4,7 +4,8 @@
 producer_instance_id, publication_sequence, observation_age_ms)` is the
 shared, passive projection for the Nexus Server and Connector. It evaluates
 the supplied full `InstallationCandidate` objects on the execution host and
-returns a path-free JSON object with catalog format 1, availability format 2,
+returns a path-free JSON object with snapshot format 2, catalog format 2,
+availability format 2,
 ordered evidence and a complete `sha256:` revision computed with the Core's
 RFC 8785 canonicalizer. The revision excludes publication sequence, age,
 producer instance and display labels. It includes candidate ref, content and
@@ -17,6 +18,42 @@ receiving application must still authenticate the producer, compare the
 set a local freshness deadline, and enforce agent policy. A valid inventory
 does not authorize a binding or start a process. The full candidates and path
 resolution remain on the producing host.
+
+## Control targeting and historical snapshots
+
+Core `0.2.24.dev0` publishes `control_targeting` per catalog runtime and
+`qualified_control_actions` per candidate. Codex steer requires a native turn
+ID; Pi steer forbids it and reports `NEXT_TURN_BOUNDARY`. Claude stream does
+not support steer; attach remains registered and unqualified. Control facts
+come from the same registry used by runtime validation. Qualification uses
+the exact build and execution platform; an unknown build has no qualified
+control actions even when its adapter implements the action.
+
+Both fields participate in the inventory revision. The receiving Core checks
+targeting and qualification against its own shared contract, including when
+a producer recomputes a digest for false metadata. Consumers still check
+technical availability, agent policy, lease and current run before any effect.
+
+New publications require format 2. To read retained format 1 evidence,
+explicitly call `verify_executor_inventory_snapshot(snapshot,
+allow_historical=True)`. This preserves the original digest algorithm and
+does not upgrade, rewrite or authorize the old snapshot. Obtain a new
+format 2 publication before making a current selection. The frozen v1
+fixture was produced by the installed `0.2.23.dev0` wheel.
+
+The generated `inventory.schema.json` retains the planned R4 evidence fields
+`support_status`, `platform`, `state`, `reasons` and `capability_report`.
+Passive discovery emits a null capability report; it has no observed session
+or authenticated tool path to claim. Qualification, containment and qualified
+control actions are explicit additional v2 evidence. The old partial Core v1
+keys `technical_state` and `technical_reasons` remain historical only.
+
+`contracts/specification/executor-inventory-baseline.json` preserves the
+original planning definitions and source digest. The R4 generator evolves
+only inventory/catalog versions and the additional control evidence, then
+binds the generated inventory schema into the R4 manifest. The public
+`get_executor_inventory_schema` supplies these definitions to both consumers.
+Builder and verifier enforce this closed schema before publication or storage.
 
 This module is an R4 inventory building block. The NXL contract still reports
 the r3 revision; remote execution must remain disabled until the separate R4

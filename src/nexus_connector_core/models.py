@@ -31,6 +31,23 @@ class EffectNotSent(Exception):
 
 
 @dataclass(frozen=True, slots=True)
+class ControlTargeting:
+    """Implemented control shape, never a grant or provider qualification."""
+
+    action: str
+    supported: bool
+    native_turn_id: str  # required | optional | forbidden
+    requires_active_run: bool
+    steer_timing: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"action": self.action, "supported": self.supported,
+                "native_turn_id": self.native_turn_id,
+                "requires_active_run": self.requires_active_run,
+                "steer_timing": self.steer_timing}
+
+
+@dataclass(frozen=True, slots=True)
 class ExecutionContext:
     server_id: str
     executor_id: str

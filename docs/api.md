@@ -159,6 +159,9 @@ the complete Core inventory, and verify remote projections with
 `verify_executor_inventory_snapshot`. `SNAPSHOT_FORMAT_VERSION` versions this
 envelope independently from catalog and availability formats. Keep the full
 local candidate for selection; the published snapshot contains opaque refs.
+`get_executor_inventory_schema` returns the generated current HTTP inventory
+schema verified by the same R4 manifest as the wire bundle. Consumers compose
+these definitions into their HTTP response schemas without copying enums.
 
 The catalog (`get_runtime_catalog()`),
 `evaluate_runtime_availability()` and `resolve_installation()` complete
@@ -200,6 +203,12 @@ inventory (typed not-found); the Server validates scope/revision, the
 Core never issues network endpoints.
 
 ## Independent R4 development exports
+
+`ControlTargeting`, `get_control_targeting` and `validate_control_target` expose the
+registry's control contract. Catalog format 2 includes these facts in each
+`RuntimeDescriptor.control_targeting`. Validation is shared with runtime
+admission; active-run identity is checked again at the native write frontier.
+Implemented targeting does not grant authority or qualify a provider build.
 
 All R4 exports below are contract/host primitives. They do not authenticate a
 caller or authorize a native effect. See [the R4 guide](nxl-r4-development.md)

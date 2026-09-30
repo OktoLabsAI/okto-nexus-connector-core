@@ -14,12 +14,12 @@ from nexus_connector_core import (
 )
 
 
-def _candidate(path: str, fingerprint: str = "sha256:abc") -> InstallationCandidate:
+def _candidate(path: str, fingerprint: str = "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa") -> InstallationCandidate:
     return InstallationCandidate(
         adapter_id="codex_app_server", executable=path,
         fingerprint=fingerprint, source="path", trust="selected",
         version="0.157.0", architecture="x86_64",
-        build_identity="sha256:build",
+        build_identity="sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
     )
 
 
@@ -52,17 +52,17 @@ def test_revision_tracks_evidence_but_not_publication_metadata(tmp_path):
     reordered = _snapshot(second, first, sequence=2, age=100)
     assert reordered["inventory_revision"] == original["inventory_revision"]
     assert calculate_inventory_revision([second, first]) == original["inventory_revision"]
-    changed = _snapshot(replace(first, fingerprint="sha256:new"), second)
+    changed = _snapshot(replace(first, fingerprint="sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"), second)
     assert changed["inventory_revision"] != original["inventory_revision"]
     same_version_new_build = _snapshot(
-        replace(first, build_identity="sha256:another-build"), second)
+        replace(first, build_identity="sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"), second)
     assert same_version_new_build["inventory_revision"] != original["inventory_revision"]
 
 
 def test_tampered_evidence_is_rejected(tmp_path):
     snapshot = _snapshot(_candidate(str(tmp_path / "codex")))
     tampered = deepcopy(snapshot)
-    tampered["evidence"][0]["technical_state"] = "READY_FOR_RUNTIME"
+    tampered["evidence"][0]["state"] = "READY_FOR_RUNTIME"
     with pytest.raises(CoreError) as error:
         verify_executor_inventory_snapshot(tampered)
     assert error.value.code == "VALIDATION_ERROR"
@@ -85,3 +85,16 @@ def test_no_provider_is_valid_inventory():
     snapshot = _snapshot()
     assert snapshot["evidence"] == []
     verify_executor_inventory_snapshot(snapshot)
+
+
+def test_generated_schema_retains_planned_evidence_and_refuses_malformed_hash(tmp_path):
+    from jsonschema import Draft202012Validator
+    from nexus_connector_core import get_executor_inventory_schema
+    schema = get_executor_inventory_schema()
+    snapshot = _snapshot(_candidate(str(tmp_path / "codex")))
+    Draft202012Validator(schema).validate(snapshot)
+    row = snapshot["evidence"][0]
+    assert {"support_status", "platform", "state", "reasons", "capability_report"} <= row.keys()
+    assert row["capability_report"] is None
+    with pytest.raises(CoreError):
+        _snapshot(replace(_candidate(str(tmp_path / "codex")), fingerprint="sha256:bad"))
