@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import os
 import queue
@@ -9,7 +10,13 @@ from pathlib import Path
 
 import pytest
 
-from nexus_connector_core import CoreError, ExecutionContext, SessionKey
+from nexus_connector_core import (
+    CoreError, ExecutionContext, SessionKey, R4_PREVIEW_REVISION,
+    project_r4_decision_receipt, r4_native_decision_operation,
+    r4_operational_request_hash, r4_submit_intent_hash,
+    reduce_r4_approval_request,
+)
+from nexus_connector_core.protocol import canonical_json
 from nexus_connector_core.discovery import fingerprint
 from nexus_connector_core.journal import SQLiteJournal
 from nexus_connector_core.kernel import OperationKernel
@@ -227,8 +234,9 @@ def test_claude_approval_reply_rejects_forged_tool_kind():
      {"answers": {"answer": {"answers": ["operator-secret-answer-marker"]}}},
      {"answers": {"answer": {"answers": ["operator-secret-answer-marker"]}}}),
 ])
+@pytest.mark.parametrize("wire", ["native", "r4"])
 def test_codex_peer_approval_decision_is_durable_authorized_and_correlated(
-        tmp_path, trigger, method, decision, response, expected_result):
+        tmp_path, trigger, method, decision, response, expected_result, wire):
     peer = Path(__file__).parent / "fixtures" / "codex_app_server_peer.py"
     log_path = tmp_path / "approval-peer.jsonl"
     binary = tmp_path / "synthetic-codex"
@@ -289,10 +297,46 @@ def test_codex_peer_approval_decision_is_durable_authorized_and_correlated(
             assert await journal.get_receipt(
                 OperationKey("srv", "exe", "unauthorized")) is None
 
-            receipt = await runtime.decide_native_approval(
-                NativeApprovalOperation("decision", "session", request,
-                                        decision, response), authority)
+            operation = NativeApprovalOperation("decision", "session", request,
+                                                decision, response)
+            if wire == "r4":
+                scope = {"server_id": "srv", "executor_id": "exe",
+                         "binding_id": authority.binding_id, "agent_id": "agent",
+                         "workspace_id": "ws", "workspace_binding_id": "workspace-binding",
+                         "session_id": "session", "session_owner_generation": 1,
+                         "authorization_revision": 1, "configuration_revision": 1,
+                         "binding_revision": 1, "credential_epoch": 1,
+                         "connection_id": "control", "connection_generation": authority.connection_generation}
+                native_hash = request["request_hash"]
+                notice = {"protocol_major": 1, "contract_revision": R4_PREVIEW_REVISION,
+                          "type": "approval.request", **scope,
+                          "canonical_request_id": "canonical-request", "request_revision": 1,
+                          "kind": "native_input" if response else "native_approval",
+                          "expires_in": 60, "operational_request": request,
+                          "request_hash": r4_operational_request_hash(request)}
+                assert reduce_r4_approval_request(None, notice).request_hash == notice["request_hash"]
+                frame = {"protocol_major": 1, "contract_revision": R4_PREVIEW_REVISION,
+                         "type": "operation.submit", **scope, "grant_id": "grant",
+                         "operation_id": "decision",
+                         "action": "input.provide" if response else "approval.decide",
+                         "payload": {"canonical_request_id": "canonical-request",
+                                     "decision_id": "decision", "decision_revision": 1,
+                                     "decision": decision, "request": request,
+                                     "response_digest": ("sha256:" + hashlib.sha256(canonical_json(response)).hexdigest()
+                                                         if response else None),
+                                     **({"response": response} if response else {})}}
+                frame["intent_hash"] = r4_submit_intent_hash(frame)
+                operation = r4_native_decision_operation(frame)
+                assert operation.request == request
+                assert operation.request["request_hash"] == native_hash
+            receipt = await runtime.decide_native_approval(operation, authority)
             assert receipt.stage == "SUBMITTED" and receipt.possible_effect
+            assert await runtime.decide_native_approval(operation, authority) == receipt
+            if wire == "r4":
+                projected = project_r4_decision_receipt(
+                    frame, receipt, authority, operation, receipt_revision=1)
+                assert projected["intent_hash"] == frame["intent_hash"] != receipt.intent_hash
+                assert projected["stage"] == receipt.stage
             if response is not None:
                 assert "operator-secret-answer-marker" not in "\n".join(
                     journal._run_sync(lambda db: "".join(db.iterdump())))

@@ -652,7 +652,7 @@ class LocalRuntimeCore:
             self, operation: NativeApprovalOperation,
             context: ExecutionContext) -> OperationReceipt:
         """Journal an authorized reply to one still-pending native request."""
-        from .native.native_inputs import INPUT_METHODS
+        from .decision_bridge_r4 import native_request_action, native_decision_semantic
 
         if not isinstance(operation, NativeApprovalOperation):
             raise CoreError("VALIDATION_ERROR", "approval_decide")
@@ -672,29 +672,7 @@ class LocalRuntimeCore:
                 type(operation.decision) is not str or
                 operation.decision not in {"accept", "decline", "cancel"}):
             raise CoreError("VALIDATION_ERROR", "approval_decide")
-        if method in INPUT_METHODS:
-            action = "input.provide"
-            if (type(params.get("turnId")) is not str or
-                    not params["turnId"]):
-                raise CoreError("VALIDATION_ERROR", "approval_decide")
-        elif method in {"item/commandExecution/requestApproval",
-                        "item/fileChange/requestApproval"}:
-            action = "approval.decide"
-            if (type(params.get("turnId")) is not str or
-                    not params["turnId"]):
-                raise CoreError("VALIDATION_ERROR", "approval_decide")
-        elif method == "control_request:can_use_tool":
-            tool_name = params.get("tool_name")
-            if (type(tool_name) is not str or
-                    tool_name not in {"Write", "Edit", "Bash", "AskUserQuestion"}):
-                raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
-            action = ("input.provide" if tool_name == "AskUserQuestion"
-                      else "approval.decide")
-            generation = request.get("local_generation")
-            if type(generation) is not int or generation < 0:
-                raise CoreError("VALIDATION_ERROR", "approval_decide")
-        else:
-            raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
+        action = native_request_action(request)
         if (action == "input.provide" and operation.decision == "accept" and
                 operation.operator_response is None):
             raise CoreError("VALIDATION_ERROR", "approval_decide")
@@ -727,12 +705,9 @@ class LocalRuntimeCore:
                                if encoded_response is not None else None)
         except (TypeError, ValueError, OverflowError, RecursionError) as exc:
             raise CoreError("VALIDATION_ERROR", "approval_decide") from exc
-        semantic = Operation(
-            operation.operation_id, operation.session_id, action,
-            {"request_id": request_id, "request_hash": request_hash,
-             "method": method, "decision": operation.decision,
-             "response_sha256": (hashlib.sha256(encoded_response).hexdigest()
-                                 if encoded_response is not None else None)})
+        semantic = native_decision_semantic(NativeApprovalOperation(
+            operation.operation_id, operation.session_id, frozen_request,
+            operation.decision, frozen_response))
         request_key = json.dumps(request_id)
         # C7/W04: the kernel treats a strictly negative reply as
         # containment (deadline-exempt like turn.interrupt).

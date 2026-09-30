@@ -10,6 +10,7 @@ import tarfile
 import tempfile
 import venv
 import ast
+import argparse
 import zipfile
 from pathlib import Path
 
@@ -76,10 +77,13 @@ def verify_import_boundaries(source: bytes | str, name: str) -> None:
 
 def main() -> None:
     root = Path(__file__).resolve().parents[1]
-    wheels = sorted((root / "dist").glob("nexus_connector_core-*.whl"))
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--artifact-dir", type=Path, default=root / "dist")
+    args = parser.parse_args()
+    wheels = sorted(args.artifact_dir.glob("nexus_connector_core-*.whl"))
     if len(wheels) != 1:
         raise SystemExit("expected exactly one local wheel in dist/")
-    sdists = sorted((root / "dist").glob("nexus_connector_core-*.tar.gz"))
+    sdists = sorted(args.artifact_dir.glob("nexus_connector_core-*.tar.gz"))
     if len(sdists) != 1:
         raise SystemExit("expected exactly one local sdist in dist/")
     with tarfile.open(sdists[0], "r:gz") as archive:

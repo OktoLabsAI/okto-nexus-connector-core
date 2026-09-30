@@ -1,0 +1,3 @@
+# Contract manifests hash exact bytes on both Windows and Linux.
+/src/nexus_connector_core/contracts/nxl/r4/*.json text eol=lf
+/src/nexus_connector_core/contracts/nxl/r4/__init__.py text eol=lf

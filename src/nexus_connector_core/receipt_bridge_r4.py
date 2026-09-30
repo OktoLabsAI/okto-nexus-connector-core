@@ -13,8 +13,9 @@ from typing import Any, Mapping
 from .frame_codec_r4 import decode_r4_frame, encode_r4_frame
 from .installation import effective_installation_ref
 from .models import (
-    CoreError, ExecutionContext, Operation, OperationReceipt, PreparedLaunch,
+    CoreError, ExecutionContext, NativeApprovalOperation, Operation, OperationReceipt, PreparedLaunch,
 )
+from .decision_bridge_r4 import native_decision_semantic, r4_native_decision_operation
 from .protocol import canonical_json, intent_hash
 
 
@@ -102,6 +103,37 @@ def project_r4_close_receipt(
         submit_frame, core_receipt, context, receipt_revision=receipt_revision,
         action="runtime.close",
     )
+
+
+def project_r4_decision_receipt(
+    submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
+    context: ExecutionContext, applied_operation: NativeApprovalOperation, *,
+    receipt_revision: int,
+) -> dict[str, Any]:
+    """Verify the exact native request/response applied before publishing its fact.
+
+    The native journal intentionally omits raw operator input. Verification
+    therefore requires the typed operation used at the application boundary;
+    recovery without protected response content cannot invent this proof.
+    """
+    if not isinstance(applied_operation, NativeApprovalOperation):
+        raise CoreError("VALIDATION_ERROR", "r4_receipt_projection", possible_effect=True)
+    try:
+        semantic = native_decision_semantic(applied_operation)
+        frame = _checked_submit(submit_frame, core_receipt, context,
+                                receipt_revision=receipt_revision, action=semantic.action)
+        projected = r4_native_decision_operation(
+            frame, resolved_response=(applied_operation.operator_response
+                                      if frame["payload"].get("response_ref") else None))
+        expected_hash = intent_hash(semantic, context)
+    except (CoreError, ValueError, TypeError, KeyError, RecursionError) as exc:
+        raise CoreError(getattr(exc, "code", "VALIDATION_ERROR"),
+                        "r4_receipt_projection", possible_effect=True,
+                        operation_id=getattr(core_receipt, "operation_id", None)) from exc
+    if projected != applied_operation or core_receipt.intent_hash != expected_hash:
+        raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
+                        possible_effect=True, operation_id=core_receipt.operation_id)
+    return _wire_receipt(frame, core_receipt, context, receipt_revision=receipt_revision)
 
 
 def _project_r4_receipt(

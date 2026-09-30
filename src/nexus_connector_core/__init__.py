@@ -47,8 +47,9 @@ from .lease_reducer_r4 import (
 from .receipt_reducer_r4 import R4ReceiptProjection, reduce_r4_receipt
 from .receipt_bridge_r4 import (
     project_r4_open_receipt, project_r4_turn_receipt, project_r4_steer_receipt,
-    project_r4_interrupt_receipt, project_r4_close_receipt,
+    project_r4_interrupt_receipt, project_r4_close_receipt, project_r4_decision_receipt,
 )
+from .decision_bridge_r4 import r4_native_decision_operation, r4_operational_request_hash
 from .control_reducer_r4 import (
     R4ReconcileAttempt, R4ControlProjection, R4AttachAttempt,
     R4LaneProjection, reduce_r4_reconcile_accepted,
@@ -85,7 +86,7 @@ from .executor_inventory import (
 )
 from .discovery import discover_installations
 
-__version__ = "0.2.22.dev0"
+__version__ = "0.2.23.dev0"
 
 __all__ = [
     "CONTRACT_REVISION", "CoreError", "ExecutionContext", "Operation",
@@ -95,7 +96,8 @@ __all__ = [
     "reduce_r4_lease_grant", "reduce_r4_lease_applied", "r4_lease_productive",
     "R4ReceiptProjection", "reduce_r4_receipt",
     "project_r4_open_receipt", "project_r4_turn_receipt", "project_r4_steer_receipt",
-    "project_r4_interrupt_receipt", "project_r4_close_receipt",
+    "project_r4_interrupt_receipt", "project_r4_close_receipt", "project_r4_decision_receipt",
+    "r4_native_decision_operation", "r4_operational_request_hash",
     "R4ReconcileAttempt", "R4ControlProjection", "R4AttachAttempt",
     "R4LaneProjection", "reduce_r4_reconcile_accepted",
     "reduce_r4_binding_attached", "r4_lane_ready",

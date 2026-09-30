@@ -1,5 +1,6 @@
 include contracts/generate.py
 include contracts/generate_r4.py
+recursive-include contracts/specification *.json
 include tools/build_artifacts.py
 include tools/consumer_smoke.py
 include tools/validate_release.py

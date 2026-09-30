@@ -1,0 +1,54 @@
+{
+  "milestone": "M01",
+  "status": "IN_PROGRESS",
+  "scope": "Typed native approval/input conversion and verified R4 receipt projection",
+  "source_parent": "79a315ff634bcfc8e5c4d4bab95ab46eff4579c8",
+  "python": "3.13.1",
+  "platform": "Windows 11 build 26200 AMD64",
+  "core_version": "0.2.23.dev0",
+  "wheel_sha256": "3b63c9e6be4ccd1c843f99753d997b5992affe85209b0e2e404ff2ccfab0c733",
+  "sdist_sha256": "b2472462143513052eb3a2c06fefa7b44025384645800370436ec4fc45dd441b",
+  "r4_manifest_sha256": "854ab0c87ab5e2724a7ad2ddc467979bccdb6364fb720ed71af4f4b2bfe20886",
+  "runs": [
+    {
+      "command": "python -X utf8 -c \"import sys; sys.path.insert(0,'src'); import pytest; raise SystemExit(pytest.main(['-q','tests','--junitxml=C:/Users/jpamb/AppData/Local/Temp/okto-r4-core-023.xml']))\"",
+      "status": "FAIL",
+      "passed": 862,
+      "failed": 2,
+      "skipped": 74,
+      "failures": ["tests/test_public_docs.py::test_api_guide_covers_every_top_level_export", "tests/test_public_docs.py::test_compatibility_and_migration_track_registry_and_revision"],
+      "resolution": "Updated the API guide for all previously undocumented R4/inventory exports and current compatibility version. Rechecked the complete documentation suite below; no runtime changes followed this run."
+    },
+    {
+      "command": "python -X utf8 -c \"import sys; sys.path.insert(0,'src'); import pytest; raise SystemExit(pytest.main(['-q','tests/test_public_docs.py']))\"",
+      "status": "PASS", "passed": 3, "exit_code": 0
+    },
+    {
+      "command": "<isolated installed-wheel venv>/Scripts/python.exe -X utf8 -m pytest tests/test_r4_decision_bridge.py tests/test_r4_development_bundle.py tests/test_r4_approval_reducer.py tests/test_native_runtime_bridge.py -q",
+      "status": "PASS", "passed": 65, "exit_code": 0,
+      "scope": "Installed Core wheel, native subprocess peer, real journal, direct and R4 decisions. The technical peer is not provider evidence."
+    },
+    {
+      "command": "python tools/verify_wheel.py --artifact-dir C:/Users/jpamb/AppData/Local/Temp/okto-core-023-final",
+      "status": "PASS", "exit_code": 0,
+      "scope": "Clean venv, isolated imports/resources and existing embedded/remote consumer smokes; also separately inspected R4 manifest and new public exports with python -I outside the clone."
+    },
+    {
+      "command": "python contracts/generate.py --check; python contracts/generate_r4.py --check",
+      "status": "PASS", "exit_code": 0,
+      "scope": "Independent R3/R4 generated bundles. A temporary corrupted R4 schema was refused without rewriting it."
+    }
+  ],
+  "skips": {
+    "attach_posix_fixture": 55,
+    "live_claude_opt_in": 7,
+    "other_posix_platform_requirements": 10,
+    "live_codex_opt_in": 1,
+    "live_pi_opt_in": 1
+  },
+  "warnings": ["Legacy Pi fault-injection thread exception", "Two legacy containment tests reported an unawaited close coroutine"],
+  "provider": "NOT_RUN",
+  "multi_host": "NOT_RUN",
+  "r4_bundle_executable": false,
+  "remaining": ["Complete context/grant application conformance and public targeting projection", "Wire both application dispatchers", "Canonical approval authority and durable decision lifecycle", "Full final platform/provider qualification"]
+}

@@ -1392,6 +1392,9 @@
             "action": {
               "const": "approval.decide"
             },
+            "expected_turn_id": {
+              "type": "null"
+            },
             "payload": {
               "additionalProperties": false,
               "properties": {
@@ -1417,17 +1420,49 @@
                   "type": "integer"
                 },
                 "request": {
-                  "additionalProperties": true,
-                  "maxProperties": 32,
-                  "minProperties": 1,
+                  "additionalProperties": false,
                   "properties": {
-                    "request_hash": {
-                      "pattern": "^sha256:[0-9a-f]{64}$",
+                    "local_generation": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "method": {
+                      "maxLength": 160,
+                      "minLength": 1,
                       "type": "string"
+                    },
+                    "params": {
+                      "maxProperties": 32,
+                      "type": "object"
+                    },
+                    "request_hash": {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "oneOf": [
+                        {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      ]
+                    },
+                    "schema_version": {
+                      "const": 1
                     }
                   },
                   "required": [
-                    "request_hash"
+                    "request_id",
+                    "request_hash",
+                    "method",
+                    "params"
                   ],
                   "type": "object"
                 },
@@ -1459,6 +1494,9 @@
           "properties": {
             "action": {
               "const": "input.provide"
+            },
+            "expected_turn_id": {
+              "type": "null"
             },
             "payload": {
               "additionalProperties": false,
@@ -1559,17 +1597,49 @@
                   "type": "integer"
                 },
                 "request": {
-                  "additionalProperties": true,
-                  "maxProperties": 32,
-                  "minProperties": 1,
+                  "additionalProperties": false,
                   "properties": {
-                    "request_hash": {
-                      "pattern": "^sha256:[0-9a-f]{64}$",
+                    "local_generation": {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "method": {
+                      "maxLength": 160,
+                      "minLength": 1,
                       "type": "string"
+                    },
+                    "params": {
+                      "maxProperties": 32,
+                      "type": "object"
+                    },
+                    "request_hash": {
+                      "pattern": "^[0-9a-f]{64}$",
+                      "type": "string"
+                    },
+                    "request_id": {
+                      "oneOf": [
+                        {
+                          "maxLength": 256,
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "maximum": 9007199254740991,
+                          "minimum": 0,
+                          "type": "integer"
+                        }
+                      ]
+                    },
+                    "schema_version": {
+                      "const": 1
                     }
                   },
                   "required": [
-                    "request_hash"
+                    "request_id",
+                    "request_hash",
+                    "method",
+                    "params"
                   ],
                   "type": "object"
                 },
@@ -2169,6 +2239,71 @@
     },
     {
       "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "kind": {
+                "enum": [
+                  "native_approval",
+                  "native_input"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "operational_request": {
+                "additionalProperties": false,
+                "properties": {
+                  "local_generation": {
+                    "maximum": 9007199254740991,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "method": {
+                    "maxLength": 160,
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "params": {
+                    "maxProperties": 32,
+                    "type": "object"
+                  },
+                  "request_hash": {
+                    "pattern": "^[0-9a-f]{64}$",
+                    "type": "string"
+                  },
+                  "request_id": {
+                    "oneOf": [
+                      {
+                        "maxLength": 256,
+                        "minLength": 1,
+                        "type": "string"
+                      },
+                      {
+                        "maximum": 9007199254740991,
+                        "minimum": 0,
+                        "type": "integer"
+                      }
+                    ]
+                  },
+                  "schema_version": {
+                    "const": 1
+                  }
+                },
+                "required": [
+                  "request_id",
+                  "request_hash",
+                  "method",
+                  "params"
+                ],
+                "type": "object"
+              }
+            }
+          }
+        }
+      ],
       "properties": {
         "agent_id": {
           "maxLength": 160,
@@ -2236,19 +2371,70 @@
           ]
         },
         "operational_request": {
-          "additionalProperties": true,
-          "maxProperties": 32,
-          "minProperties": 1,
-          "properties": {
-            "request_hash": {
-              "pattern": "^sha256:[0-9a-f]{64}$",
-              "type": "string"
+          "oneOf": [
+            {
+              "additionalProperties": true,
+              "maxProperties": 32,
+              "minProperties": 1,
+              "properties": {
+                "request_hash": {
+                  "pattern": "^sha256:[0-9a-f]{64}$",
+                  "type": "string"
+                }
+              },
+              "required": [
+                "request_hash"
+              ],
+              "type": "object"
+            },
+            {
+              "additionalProperties": false,
+              "properties": {
+                "local_generation": {
+                  "maximum": 9007199254740991,
+                  "minimum": 0,
+                  "type": "integer"
+                },
+                "method": {
+                  "maxLength": 160,
+                  "minLength": 1,
+                  "type": "string"
+                },
+                "params": {
+                  "maxProperties": 32,
+                  "type": "object"
+                },
+                "request_hash": {
+                  "pattern": "^[0-9a-f]{64}$",
+                  "type": "string"
+                },
+                "request_id": {
+                  "oneOf": [
+                    {
+                      "maxLength": 256,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    {
+                      "maximum": 9007199254740991,
+                      "minimum": 0,
+                      "type": "integer"
+                    }
+                  ]
+                },
+                "schema_version": {
+                  "const": 1
+                }
+              },
+              "required": [
+                "request_id",
+                "request_hash",
+                "method",
+                "params"
+              ],
+              "type": "object"
             }
-          },
-          "required": [
-            "request_hash"
-          ],
-          "type": "object"
+          ]
         },
         "protocol_major": {
           "const": 1

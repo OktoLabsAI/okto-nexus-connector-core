@@ -180,8 +180,9 @@ def test_ambiguous_json_and_wrong_decision_payload_are_rejected():
 
 def test_correlated_native_decision_payloads_are_closed():
     base = open_frame()
-    request = {"request_hash": "sha256:" + "c" * 64,
-               "native_request_id": "provider-request"}
+    request = {"request_hash": "c" * 64, "request_id": "provider-request",
+               "method": "item/commandExecution/requestApproval",
+               "params": {"turnId": "turn"}}
     decision = {
         "canonical_request_id": "canonical-request", "decision_id": "decision",
         "decision_revision": 1, "decision": "accept", "request": request,

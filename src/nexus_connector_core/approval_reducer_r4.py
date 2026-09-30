@@ -7,6 +7,7 @@ import hashlib
 from typing import Any, Mapping
 
 from .frame_codec_r4 import decode_r4_frame
+from .decision_bridge_r4 import r4_operational_request_hash, native_request_action
 from .models import CoreError
 from .protocol import canonical_json
 
@@ -50,8 +51,13 @@ def reduce_r4_approval_request(previous: R4ApprovalProjection | None,
                                ) -> R4ApprovalProjection:
     """Retain the original operational request identity, never just UI text."""
     parsed = _validated(frame, "approval.request")
-    if parsed["operational_request"]["request_hash"] != parsed["request_hash"]:
+    if r4_operational_request_hash(parsed["operational_request"]) != parsed["request_hash"]:
         raise CoreError("OPERATION_CONFLICT", "r4_approval")
+    if parsed["kind"] != "administrative":
+        action = native_request_action(parsed["operational_request"])
+        expected = "input.provide" if parsed["kind"] == "native_input" else "approval.decide"
+        if action != expected:
+            raise CoreError("CAPABILITY_UNSUPPORTED", "r4_approval")
     scope = tuple(parsed[field] for field in _SCOPE)
     if previous is not None:
         if (previous.scope != scope or

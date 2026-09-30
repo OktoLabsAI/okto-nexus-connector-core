@@ -152,6 +152,14 @@ treated as a qualified cross-application integration contract.
 
 ## Availability consumption (C10) - the two integration paths
 
+Passive discovery is also available through `discover_installations`, without
+constructing a runtime, journal or credentials. R4 hosts use
+`build_executor_inventory_snapshot` and `calculate_inventory_revision` over
+the complete Core inventory, and verify remote projections with
+`verify_executor_inventory_snapshot`. `SNAPSHOT_FORMAT_VERSION` versions this
+envelope independently from catalog and availability formats. Keep the full
+local candidate for selection; the published snapshot contains opaque refs.
+
 The catalog (`get_runtime_catalog()`),
 `evaluate_runtime_availability()` and `resolve_installation()` complete
 the selector contract (projection format **2**; see the installation
@@ -190,3 +198,23 @@ unknown `format_version` renders INCOMPATIBLE
 selection: a ref from another executor does not resolve against this
 inventory (typed not-found); the Server validates scope/revision, the
 Core never issues network endpoints.
+
+## Independent R4 development exports
+
+All R4 exports below are contract/host primitives. They do not authenticate a
+caller or authorize a native effect. See [the R4 guide](nxl-r4-development.md)
+for native decision hash domains and the remaining executable-bundle gate.
+
+| Public exports | Host responsibility and behavior |
+|---|---|
+| `R4_PREVIEW_REVISION`, `R4_BUNDLE_EXECUTABLE`, `verify_r4_development_bundle` | Inspect the verified independent bundle; the executable flag is currently false. |
+| `decode_r4_frame`, `encode_r4_frame`, `r4_submit_intent_hash` | Strict closed schemas, bounded UTF-8 and independent JCS intent hashing. Preserve R3 history. |
+| `R4ReconcileAttempt`, `R4ControlProjection`, `reduce_r4_reconcile_accepted` | Correlate a Server ACK with its connection and reconciliation attempt. Control readiness does not imply a session lease. |
+| `R4AttachAttempt`, `R4LaneProjection`, `reduce_r4_binding_attached`, `r4_lane_ready` | Correlate committed attach ACKs, revisions and local expiry; socket write alone does not admit a lane. |
+| `R4LeaseAttempt`, `R4LeaseProjection`, `r4_lease_renew_frame`, `reduce_r4_lease_grant` | Capture monotonic time before the request, correlate scope/serial, and consume transport delay from the granted duration. |
+| `reduce_r4_lease_applied`, `r4_lease_productive` | Track reported Core installation and check local deadline/action. The host must actually install or renew the Core context before ACKing it. |
+| `R4ReceiptProjection`, `reduce_r4_receipt` | Validate scoped revisions, stages, possible effects and idempotent replay. Hosts persist the result atomically. |
+| `project_r4_open_receipt`, `project_r4_turn_receipt`, `project_r4_steer_receipt`, `project_r4_interrupt_receipt`, `project_r4_close_receipt` | Verify the corresponding Core journal semantic before projecting a distinct R4 receipt; open also requires prepared launch/stream evidence. |
+| `project_r4_decision_receipt`, `r4_native_decision_operation`, `r4_operational_request_hash` | Preserve native request evidence, validate response digests and project approval/input receipts from the exact applied operation. |
+| `R4EventCommitProjection`, `reduce_r4_durable_event_batch`, `r4_event_ack_frame` | Compute contiguous event ACKs. The host commits durable ingress before emitting an ACK and retains connection scope. |
+| `R4ApprovalProjection`, `reduce_r4_approval_request`, `reduce_r4_approval_decision` | Retain the complete operational request hash and correlated decision notification. These reducers never apply a native decision. |

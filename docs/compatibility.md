@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-This project is `0.2.10.dev0`, an unpublished development build (correction revision C1). Its API and
+This project is `0.2.23.dev0`, an unpublished development build. Its API and
 contract bundle can still change. The current exact revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with
@@ -10,8 +10,15 @@ explicitly for local checks. No preceding Core release is declared supported;
 the current/previous-release TK-44 campaign remains unrun. The manifest's
 `core_version` field (currently `0.1.0.dev0`) means "introduced in": the
 Core version whose bundle first published this revision — it is NOT the
-producing package's version (0.2.10.dev0); a stable protocol revision
+producing package's version; a stable protocol revision
 intentionally keeps the introduced-in value across package releases.
+
+The independent R4 preview uses
+`nxl-1-agent-centric-http-only-2026-09-29-r4`. Its manifest is still
+`development-partial` and it must not enable production effects. See the
+[R4 contract guide](nxl-r4-development.md). Native qualification statements
+below describe their recorded historical campaigns; they do not qualify the
+current R4 artifact or either application without a new acceptance run.
 
 | Surface | Declared or observed | Qualified for production? |
 | --- | --- | --- |
