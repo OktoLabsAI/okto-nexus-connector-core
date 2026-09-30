@@ -610,10 +610,27 @@ class CopiedAdapterFactory:
 
         content_snapshot = await asyncio.to_thread(_launch_signature)
         kind = spec.native_kind
-        if not qualified_build(
-                kind, prepared.candidate.version, sys.platform,
-                prepared.candidate.architecture, prepared.candidate.fingerprint,
-                build_identity=prepared.candidate.build_identity):
+        candidate = prepared.candidate
+        def is_qualified(observed):
+            return qualified_build(kind, observed.version, sys.platform,
+                observed.architecture, observed.fingerprint,
+                build_identity=observed.build_identity)
+        if candidate.version is None and not is_qualified(candidate):
+            # Passive discovery does not execute the installation. Observe
+            # its version only at this admitted, selected launch boundary.
+            # The probe filters the process environment and resolves no
+            # provider credentials. Prepared identity remains unchanged.
+            import os
+            from ..discovery import _probe_selected_version
+            def probe_guard():
+                _revalidate_launch("version_probe")
+                _revalidate_content("version_probe", content_snapshot)
+            probe_guard()
+            candidate = await asyncio.to_thread(_probe_selected_version,
+                candidate, candidate.adapter_id, cwd=prepared.cwd,
+                env=dict(os.environ), before_observe=probe_guard)
+            probe_guard()
+        if not is_qualified(candidate):
             raise CoreError("NATIVE_VERSION_UNQUALIFIED", "open", retry_safe=True)
         if (self._native_approvals_enabled and
                 not {"approval.decide", "input.provide"}.issubset(

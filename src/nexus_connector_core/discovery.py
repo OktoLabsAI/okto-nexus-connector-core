@@ -184,7 +184,7 @@ async def probe_selected_codex(candidate: InstallationCandidate, *, cwd: str | P
 
 def _probe_selected_version(candidate: InstallationCandidate, adapter_id: str, *,
                             cwd: str | Path,
-                            env: Mapping[str, str]) -> InstallationCandidate:
+                            env: Mapping[str, str], before_observe=None) -> InstallationCandidate:
     """Bounded read-only version observation; never grants a capability."""
     # C2/R07: an active probe spawns a version process; the containment
     # gate must refuse BEFORE any observer runs in an environment whose
@@ -208,6 +208,8 @@ def _probe_selected_version(candidate: InstallationCandidate, adapter_id: str, *
     command = ((str(executable), candidate.launch_script, "--version")
                if candidate.launch_script is not None else
                (str(executable), "--version"))
+    if before_observe is not None:
+        before_observe()
     report = observer(command, cwd=str(root),
                       env={key: value for key, value in env.items()
                            if key.upper() in _PROBE_ENV})
