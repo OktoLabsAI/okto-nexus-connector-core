@@ -620,7 +620,17 @@ class CopiedAdapterFactory:
                     context.allowed_actions)):
             raise CoreError("BINDING_NOT_AUTHORIZED", "native_approval_launch",
                             retry_safe=True)
-        env = dict(await self._environment(prepared))
+        from ..environment import ProcessHTTPEnvironment
+        from ..harness_config import process_http_arguments
+        environment = await self._environment(prepared)
+        env = dict(environment)
+        command = prepared.argv
+        if isinstance(environment, ProcessHTTPEnvironment):
+            templates = environment.http_templates
+            command = (*command, *process_http_arguments(
+                prepared.intent.adapter_id, templates, prepared.secret_refs))
+            if any(template.bearer_env_name not in env for template in templates):
+                raise CoreError('PROVIDER_AUTH_REQUIRED', 'mcp_client_configuration')
         _revalidate_launch("environment")
         _revalidate_content("environment", content_snapshot)
         allowed_mcp_names = {_token_env_name(reference)
@@ -672,7 +682,7 @@ class CopiedAdapterFactory:
             if explicit_model is not None:
                 client_kwargs["thread_start_overrides"] = {
                     "model": explicit_model}
-            connector = load_adapter(spec.adapter_id)(command=prepared.argv,
+            connector = load_adapter(spec.adapter_id)(command=command,
                                                       cwd=prepared.cwd, env=env,
                                                       **client_kwargs)
         elif kind == "pi":
@@ -689,8 +699,8 @@ class CopiedAdapterFactory:
                                                       cwd=prepared.cwd, env=env,
                                                       native_action=native_action)
         else:
-            connector = load_adapter(spec.adapter_id)(binary=prepared.argv[0],
-                                                      argv=prepared.argv[1:],
+            connector = load_adapter(spec.adapter_id)(binary=command[0],
+                                                      argv=command[1:],
                                                       cwd=prepared.cwd, env=env)
         if self._native_approvals_enabled and kind in {"codex", "claude_code"}:
             connector.native_approvals_enabled = True

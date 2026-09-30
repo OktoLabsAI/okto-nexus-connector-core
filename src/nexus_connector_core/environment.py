@@ -6,6 +6,7 @@ import os
 import re
 from collections.abc import Mapping, Sequence
 from pathlib import Path
+from types import MappingProxyType
 
 from .models import CoreError, PreparedLaunch
 from .ports import SecretResolver
@@ -19,6 +20,29 @@ _RESTRICTED = frozenset({"HOME", "USERPROFILE", "CODEX_HOME",
                          "PATH", "PYTHONPATH", "PYTHONHOME"})
 
 
+class ProcessHTTPEnvironment(Mapping[str, str]):
+    """Host-only environment plus typed MCP configuration for this process.
+
+    Values are immutable and omitted from repr. This object is not a wire DTO
+    and is never persisted in a prepared launch or receipt.
+    """
+    def __init__(self, values, templates):
+        self._values = MappingProxyType(dict(values))
+        self.http_templates = tuple(templates)
+
+    def __getitem__(self, name):
+        return self._values[name]
+
+    def __iter__(self):
+        return iter(self._values)
+
+    def __len__(self):
+        return len(self._values)
+
+    def __repr__(self):
+        return 'ProcessHTTPEnvironment(<protected>)'
+
+
 async def child_environment(
     prepared: PreparedLaunch,
     resolver: SecretResolver,
@@ -28,12 +52,19 @@ async def child_environment(
     public_overrides: Mapping[str, str] | None = None,
     provider_home: str | Path | None = None,
     trusted_home: bool = False,
-) -> dict[str, str]:
+    process_http: bool = False,
+) -> Mapping[str, str]:
     """Resolve only the secret refs listed in ``prepared`` on this host.
 
     The returned mapping is for process creation only. Hosts must not put it in
     a receipt, NXL frame, event, log, or central persistence.
     """
+    if type(process_http) is not bool:
+        raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
+    if process_http:
+        from .harness_config import process_http_arguments
+        http_templates = tuple(http_templates)
+        process_http_arguments(prepared.intent.adapter_id, http_templates, prepared.secret_refs)
     env = {name: value for name, value in os.environ.items()
            if name.upper() in _ESSENTIALS}
     if provider_home is not None:
@@ -73,7 +104,7 @@ async def child_environment(
                 "nxs_" in value or "nxsept_" in value):
             raise CoreError("AGENT_AUTH_REQUIRED", "environment")
         env[name] = value
-    return env
+    return ProcessHTTPEnvironment(env, http_templates) if process_http else env
 
 
 def _check_name(name: str) -> None:

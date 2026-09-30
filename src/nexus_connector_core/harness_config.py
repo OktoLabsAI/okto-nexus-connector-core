@@ -141,3 +141,37 @@ def render_codex_toml_fragment(template: HarnessHTTPTemplate) -> str:
     return (f"[mcp_servers.{template.entry_name}]\n"
             f"url = {json.dumps(template.server_url)}\n"
             f"bearer_token_env_var = {json.dumps(template.bearer_env_name)}\n")
+
+
+def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[str, ...]:
+    """Render bounded process-only MCP options without bearer material.
+
+    The host supplies validated templates, never arbitrary argv or a config
+    pathname from an execution request. Existing provider login stays in HOME.
+    """
+    if adapter_id not in ('codex_app_server', 'claude_stream'):
+        raise CoreError('CAPABILITY_UNSUPPORTED', 'mcp_client_configuration')
+    if type(templates) is not tuple or not 1 <= len(templates) <= 8:
+        raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
+    entries = {}
+    for template in templates:
+        if (type(template) is not HarnessHTTPTemplate or template.adapter_id != adapter_id
+                or template.section != ('mcp_servers' if adapter_id == 'codex_app_server' else 'mcpServers')
+                or type(template.entry_name) is not str
+                or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,63}', template.entry_name, re.ASCII)
+                or template.entry_name in entries or template.capability_ref not in approved_refs
+                or not template.capability_ref.startswith('mcp-cap:')
+                or template.bearer_env_name != _token_env_name(template.capability_ref)
+                or type(template.server_url) is not str or len(template.server_url) > 2048):
+            raise CoreError('BINDING_NOT_AUTHORIZED', 'mcp_client_configuration')
+        origin, loopback = _origin(template.server_url)
+        if origin.startswith('http://') and not loopback:
+            raise CoreError('PROFILE_DRIFT', 'mcp_client_configuration')
+        entries[template.entry_name] = template.entry()
+    if adapter_id == 'claude_stream':
+        return ('--strict-mcp-config', '--mcp-config',
+                json.dumps({'mcpServers': entries}, separators=(',', ':')))
+    fields = ','.join(json.dumps(name) + '={' + ','.join(
+        key + '=' + json.dumps(value) for key, value in entry.items()) + '}'
+        for name, entry in entries.items())
+    return ('-c', 'mcp_servers={' + fields + '}')
