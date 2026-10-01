@@ -233,6 +233,8 @@ def test_claude_approval_reply_rejects_forged_tool_kind():
     ("TRIGGER_INPUT_HOLD", "item/tool/requestUserInput", "accept",
      {"answers": {"answer": {"answers": ["operator-secret-answer-marker"]}}},
      {"answers": {"answer": {"answers": ["operator-secret-answer-marker"]}}}),
+    ("TRIGGER_MCP_PERMISSION_HOLD", "mcpServer/elicitation/request", "accept",
+     {"content": {}}, {"action": "accept", "content": {}}),
 ])
 @pytest.mark.parametrize("wire", ["native", "r4"])
 def test_codex_peer_approval_decision_is_durable_authorized_and_correlated(

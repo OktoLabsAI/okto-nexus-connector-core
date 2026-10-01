@@ -59,7 +59,10 @@ def validate_request(method, params):
         _require(not (set(schema) - {"type", "properties", "required", "$schema", "additionalProperties"}))
         _require(schema.get("additionalProperties", False) is False)
         props, required = schema.get("properties"), schema.get("required") or []
-        _require(isinstance(props, dict) and 1 <= len(props) <= 16 and isinstance(required, list))
+        # Codex MCP tool permissions use a valid form with no fields. It still
+        # requires an explicit operator response; no default or persistence
+        # choice is inferred from the request metadata.
+        _require(isinstance(props, dict) and len(props) <= 16 and isinstance(required, list))
         _require(all(isinstance(k, str) and 1 <= len(k) <= 128 for k in props))
         _require(all(isinstance(k, str) and k in props for k in required) and len(set(required)) == len(required))
         for prop in props.values():
