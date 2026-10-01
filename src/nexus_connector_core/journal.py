@@ -1278,9 +1278,14 @@ class SQLiteJournal:
             raise CoreError("OPERATION_STAGE_CONFLICT", "event_append",
                             possible_effect=True,
                             operation_id=event.operation_id)
+        error_code = None
+        if stage == "FAILED":
+            error_code = ("PROVIDER_AUTH_REQUIRED" if
+                event.payload.get("delivery_error_code") == "PROVIDER_AUTH_REQUIRED"
+                else "NATIVE_OPERATION_FAILED")
         db.execute(
-            "UPDATE operations_v2 SET stage=?,possible_effect=1,retry_safe=0 WHERE server_id=? AND executor_id=? AND operation_id=?",
-            (stage, key.server_id, key.executor_id, key.operation_id))
+            "UPDATE operations_v2 SET stage=?,possible_effect=1,retry_safe=0,error_code=? WHERE server_id=? AND executor_id=? AND operation_id=?",
+            (stage, error_code, key.server_id, key.executor_id, key.operation_id))
 
     async def append_event(self, event: RuntimeEvent) -> None:
         self._validate_event(event)

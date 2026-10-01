@@ -163,6 +163,7 @@ class CopiedAdapterSession:
         self._active_turn_id: str | None = None
         self._pi_started_for_active = False
         self._last_outcome: str | None = None
+        self._last_failure_code: str | None = None
         self._recent_codex_turn_ids: deque[str] = deque()
         self._recent_codex_turn_set: set[str] = set()
 
@@ -216,6 +217,7 @@ class CopiedAdapterSession:
             self._active_turn_id = None
             self._pi_started_for_active = False
             self._last_outcome = None
+            self._last_failure_code = None
         native_payload = dict(payload)
         if verb == "send_turn" and self._session.harness_kind == "claude_code":
             native_payload = {"content": native_payload["text"]}
@@ -382,7 +384,19 @@ class CopiedAdapterSession:
                                     possible_effect=True)
                 if native.turn_id is not None:
                     self._active_turn_id = native.turn_id
-            if phase == "terminal" and native.kind == "turn_completed":
+            from .failure_codes import provider_failure_code
+            failure_code = provider_failure_code(native)
+            if (failure_code and self._active_operation_id is not None
+                    and native.operation_id in (None, self._active_operation_id)
+                    and (native.harness_kind != "codex" or
+                         (native.turn_id is not None and native.turn_id == self._active_turn_id))):
+                self._last_failure_code = failure_code
+            # Claude result errors are terminal facts, unlike transport errors.
+            terminal_error = (native.harness_kind == "claude_code" and
+                native.kind == "error" and native.native_event.startswith("result:")
+                and outcome == "failed")
+            terminal_code = None
+            if phase == "terminal" and (native.kind == "turn_completed" or terminal_error):
                 active = self._active_operation_id
                 if (native.harness_kind == "pi" and native.native_event == "agent_settled" and
                         (active is None or not self._pi_started_for_active)):
@@ -399,15 +413,18 @@ class CopiedAdapterSession:
                                     possible_effect=True)
                 if outcome in {"success", "failed", "interrupted"}:
                     self._last_outcome = outcome
-                native = replace(native, operation_id=active,
-                                 delivery_phase="terminal",
-                                 delivery_outcome=outcome or self._last_outcome)
+                settled_outcome = outcome or self._last_outcome
+                if settled_outcome == "failed":
+                    terminal_code = self._last_failure_code or "NATIVE_OPERATION_FAILED"
+                native = replace(native, kind="turn_completed", operation_id=active,
+                                 delivery_phase="terminal", delivery_outcome=settled_outcome)
                 if native.harness_kind == "codex":
                     self._remember_codex_turn(native.turn_id)
                 self._active_operation_id = None
                 self._active_turn_id = None
                 self._pi_started_for_active = False
                 self._last_outcome = None
+                self._last_failure_code = None
             elif outcome in {"success", "failed", "interrupted"}:
                 self._last_outcome = outcome
             # Only the adapter's correlated request port can supply an
@@ -425,13 +442,15 @@ class CopiedAdapterSession:
                 native = replace(native, operation_id=self._active_operation_id)
             native = replace(native, native_approval=None,
                 payload={key: value for key, value in native.payload.items()
-                         if key != "native_approval"})
+                         if key not in ("native_approval", "delivery_error_code")})
             event = translate_native_event(self._redactor.scrub(native),
                                          server_id=self._context.server_id,
                                          executor_id=self._context.executor_id,
                                          session_id=self._session_id,
                                          stream_epoch=self._epoch,
                                          native_session_id=self._session.session_id)
+            if terminal_code is not None:
+                event = replace(event, payload={**event.payload, "delivery_error_code": terminal_code})
             if operational is not None:
                 # This is the authenticated execution plane. Hosts must keep
                 # the immutable proposal separate from UI/history display.
