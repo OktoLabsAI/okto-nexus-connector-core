@@ -30,6 +30,14 @@ class EffectNotSent(Exception):
         self.code = code
 
 
+class EffectRejected(Exception):
+    """A correlated native reply confirms rejection after a protocol write."""
+
+    def __init__(self, message: str, *, failure_code: str = "NATIVE_OPERATION_FAILED"):
+        super().__init__(message)
+        self.failure_code = failure_code
+
+
 @dataclass(frozen=True, slots=True)
 class ControlTargeting:
     """Implemented control shape, never a grant or provider qualification."""

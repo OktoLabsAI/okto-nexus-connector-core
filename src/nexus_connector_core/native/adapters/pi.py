@@ -122,7 +122,7 @@ from ..adapter_types import (
     HarnessSession,
     new_harness_session_id,
 )
-from ..adapter_types import ErrorCode, NativeAdapterError
+from ..adapter_types import ErrorCode, NativeAdapterError, RuntimeCommandRejected
 
 __all__ = ["PiRpcConnector"]
 
@@ -961,6 +961,13 @@ class PiRpcConnector:
 
     @staticmethod
     def _require_accepted(response: Mapping[str, Any], verb: str) -> None:
+        if (verb == _VERB_PROMPT and response.get("type") == _TYPE_RESPONSE
+                and response.get("command") == verb and response.get("success") is False
+                and isinstance(response.get("id"), str) and response["id"]):
+            from ..failure_codes import pi_prompt_failure_code
+            raise RuntimeCommandRejected(
+                "Pi rejected the prompt command before accepting it.",
+                failure_code=pi_prompt_failure_code(response))
         if response.get("success") is not True:
             # A protocol write happened. A rejection is not a confirmed
             # accepted control, but cannot be called a pre-write refusal.

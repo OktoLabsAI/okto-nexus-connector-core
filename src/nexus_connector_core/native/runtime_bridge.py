@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from .adapter_types import RuntimeCommandRejected
+
 import asyncio
 import concurrent.futures
 import re
@@ -257,6 +259,15 @@ class CopiedAdapterSession:
                 self._active_turn_id = None
                 self._pi_started_for_active = False
             raise
+        except RuntimeCommandRejected as exc:
+            if verb == "send_turn":
+                self._active_operation_id = None
+                self._active_turn_id = None
+                self._pi_started_for_active = False
+                self._last_outcome = None
+                self._last_failure_code = None
+            from ..models import EffectRejected
+            raise EffectRejected(exc.message, failure_code=exc.failure_code) from exc
         except NativeAdapterError as exc:
             # Only the adapter's explicit pre-write evidence may become a
             # durable safe failure. A write/flush error remains uncertain.

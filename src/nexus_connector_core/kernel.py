@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 
 from .clock import RollbackFencedClock, SystemClock
 from .journal import SQLiteJournal
-from .models import CoreError, EffectNotSent, ExecutionContext, Operation, OperationKey, OperationReceipt
+from .models import CoreError, EffectNotSent, EffectRejected, ExecutionContext, Operation, OperationKey, OperationReceipt
 from .ports import Journal, Clock
 from .protocol import intent_hash
 
@@ -90,6 +90,11 @@ class OperationKernel:
             raise CoreError(exc.code, "native_send",
                             retry_safe=True,
                             operation_id=operation.operation_id) from exc
+        except EffectRejected as exc:
+            rejected = OperationReceipt(operation.operation_id, digest,
+                "FAILED", True, False, operation.session_id,
+                error_code=exc.failure_code)
+            return await self.journal.record_receipt(key, rejected)
         except CoreError as exc:
             if exc.retry_safe and not exc.possible_effect:
                 await self.journal.record_not_sent(key, exc.code)
