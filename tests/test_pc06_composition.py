@@ -89,6 +89,11 @@ def test_create_runtime_validates_inputs_before_any_effect(tmp_path):
                        candidates={"codex_app_server": candidate},
                        workspace_roots={"ws": str(tmp_path)},
                        native_approvals_enabled="yes")
+    with pytest.raises(TypeError, match="native_approvals_from_lease"):
+        create_runtime(journal=object(), environment=lambda p: {},
+                       candidates={"codex_app_server": candidate},
+                       workspace_roots={"ws": str(tmp_path)},
+                       native_approvals_from_lease="yes")
     with pytest.raises(TypeError):
         create_runtime(journal=object(), environment=lambda p: {},
                        candidates={"codex_app_server": candidate},
@@ -105,6 +110,26 @@ def test_rc_06_04_runtime_core_protocol_is_complete():
     missing = expected - {
         name for name in dir(LocalRuntimeCore) if not name.startswith("_")}
     assert not missing, sorted(missing)
+
+
+def test_public_composition_passes_lease_capture_mode_without_launching(tmp_path, monkeypatch):
+    import nexus_connector_core.composition as composition
+    observed = []
+    class Factory(_Factory):
+        def __init__(self, environment, **options):
+            super().__init__()
+            observed.append(options)
+    monkeypatch.setattr(composition, "CopiedAdapterFactory", Factory)
+    journal = SQLiteJournal(tmp_path / "capture-mode.db")
+    runtime = create_runtime(journal=journal, environment=lambda p: {},
+        candidates={"codex_app_server": _candidate(tmp_path)},
+        workspace_roots={"ws": str(tmp_path)}, native_approvals_from_lease=True)
+    try:
+        assert observed[0]["native_approvals_from_lease"] is True
+        assert observed[0]["native_approvals_enabled"] is False
+    finally:
+        asyncio.run(runtime.shutdown(ShutdownPolicy(1, 1)))
+        journal.close()
 
 
 def test_rc_06_06_two_runtimes_keep_isolated_resources(tmp_path):

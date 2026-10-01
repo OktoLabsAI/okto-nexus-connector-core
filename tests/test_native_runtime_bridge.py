@@ -1043,6 +1043,27 @@ def test_factory_passes_only_preapproved_capability_env_to_adapter(monkeypatch):
         assert opted_in._connector.native_approvals_enabled is True
         with pytest.raises(ValueError, match="native_approvals_enabled"):
             CopiedAdapterFactory(approved_env, native_approvals_enabled=1)
+        with pytest.raises(ValueError, match="native_approvals_from_lease"):
+            CopiedAdapterFactory(approved_env, native_approvals_from_lease=1)
+
+        from nexus_connector_core import R4Authority
+        installed = R4Authority("session", "workspace-binding", 1, 1,
+                                "grant", "lease", 1, "connection", "boot")
+        for grant, actions, enabled in (
+            (None, {"approval.decide", "input.provide"}, False),
+            (installed, set(), False),
+            (installed, {"approval.decide"}, False),
+            (installed, {"input.provide"}, False),
+            (installed, {"approval.decide", "input.provide"}, True),
+        ):
+            launch_context = replace(context(), r4_authority=grant,
+                allowed_actions=context().allowed_actions | actions)
+            factory = CopiedAdapterFactory(approved_env, native_approvals_from_lease=True)
+            try:
+                launched = await factory.open(prepared, "session", launch_context, stream_epoch="epoch")
+                assert launched._connector.native_approvals_enabled is enabled
+            finally:
+                factory.close()
 
     asyncio.run(run())
 

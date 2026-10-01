@@ -43,6 +43,7 @@ def create_runtime(
     codex_resume=None,
     pi_native_action=None,
     native_approvals_enabled: bool = False,
+    native_approvals_from_lease: bool = False,
 ) -> LocalRuntimeCore:
     """Compose the real local runtime from typed, host-supplied inputs.
 
@@ -72,6 +73,10 @@ def create_runtime(
     native_approvals_enabled:
         Explicit opt-in for the native approval/input seam (off by
         default; requires both approval actions in every launch context).
+    native_approvals_from_lease:
+        Opt-in for R4 hosts that compose before installing a lease. Enable
+        capture at launch only when the installed R4 context permits both
+        approval actions. This never authorizes an operator decision.
     """
     if not callable(environment):
         raise TypeError("environment must be callable")
@@ -86,6 +91,8 @@ def create_runtime(
         raise TypeError("workspace_roots must be a non-empty mapping")
     if type(native_approvals_enabled) is not bool:
         raise TypeError("native_approvals_enabled must be bool")
+    if type(native_approvals_from_lease) is not bool:
+        raise TypeError("native_approvals_from_lease must be bool")
     for callback, name in ((codex_resume, "codex_resume"),
                            (pi_native_action, "pi_native_action")):
         if callback is not None and not callable(callback):
@@ -103,6 +110,7 @@ def create_runtime(
             codex_client_info=codex_client_info,
             codex_resume=codex_resume,
             native_approvals_enabled=native_approvals_enabled,
+            native_approvals_from_lease=native_approvals_from_lease,
             clock=effective_clock.monotonic)
     else:
         effective_clock = clock

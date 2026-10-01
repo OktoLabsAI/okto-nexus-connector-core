@@ -536,15 +536,19 @@ class CopiedAdapterFactory:
                  codex_resume: Callable[[PreparedLaunch, str, ExecutionContext],
                                         Awaitable[CodexResumeGrant | None]] | None = None,
                  native_approvals_enabled: bool = False,
+                 native_approvals_from_lease: bool = False,
                  clock: Callable[[], float] | None = None):
         if type(native_approvals_enabled) is not bool:
             raise ValueError("native_approvals_enabled must be bool")
+        if type(native_approvals_from_lease) is not bool:
+            raise ValueError("native_approvals_from_lease must be bool")
         self._environment = environment
         self._pi_native_action = pi_native_action
         self._codex_client_info = (dict(codex_client_info)
                                    if codex_client_info is not None else None)
         self._codex_resume = codex_resume
         self._native_approvals_enabled = native_approvals_enabled
+        self._native_approvals_from_lease = native_approvals_from_lease
         # C3/S01: the spawn gate ALWAYS has a clock - None never means
         # "protection off". The composition shares one effective source;
         # direct constructions fall back to the system monotonic clock.
@@ -658,11 +662,12 @@ class CopiedAdapterFactory:
             probe_guard()
         if not is_qualified(candidate):
             raise CoreError("NATIVE_VERSION_UNQUALIFIED", "open", retry_safe=True)
-        if (self._native_approvals_enabled and
-                not {"approval.decide", "input.provide"}.issubset(
-                    context.allowed_actions)):
+        approval_actions = {"approval.decide", "input.provide"}.issubset(context.allowed_actions)
+        if self._native_approvals_enabled and not approval_actions:
             raise CoreError("BINDING_NOT_AUTHORIZED", "native_approval_launch",
                             retry_safe=True)
+        native_approvals_enabled = self._native_approvals_enabled or (
+            self._native_approvals_from_lease and context.r4_authority is not None and approval_actions)
         from ..environment import ProcessHTTPEnvironment
         from ..harness_config import process_http_arguments
         environment = await self._environment(prepared)
@@ -745,7 +750,7 @@ class CopiedAdapterFactory:
             connector = load_adapter(spec.adapter_id)(binary=command[0],
                                                       argv=command[1:],
                                                       cwd=prepared.cwd, env=env)
-        if self._native_approvals_enabled and kind in {"codex", "claude_code"}:
+        if native_approvals_enabled and kind in {"codex", "claude_code"}:
             connector.native_approvals_enabled = True
         secrets = (*credential_values(env),
                    *((native_action.capability_ref,) if native_action is not None else ()))
