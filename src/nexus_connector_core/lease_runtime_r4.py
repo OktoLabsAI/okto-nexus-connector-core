@@ -435,7 +435,16 @@ class R4LeaseRuntime:
         context = replace(base, authorization_revision=entry.revocation_revision)
         if binding is not None:
             if binding.revoked:
-                if binding.context.authorization_revision != entry.revocation_revision:
+                # A lost CAS acknowledgement may already have fenced the
+                # binding without copying the proposed revision into memory.
+                # Recover the acknowledgement only from the complete durable
+                # row; a revoked row from another generation is not our ACK.
+                lease = await self._journal.get_session_lease(key)
+                if (lease is None or not lease.revoked or
+                        lease.connection_generation != base.connection_generation or
+                        lease.owner_generation != base.session_owner_generation or
+                        lease.authorization_revision != entry.revocation_revision or
+                        lease.configuration_revision != base.configuration_revision):
                     raise CoreError("STALE_GENERATION", "r4_revoke")
             else:
                 await self.revoke_lease(key, context,
