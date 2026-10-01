@@ -381,7 +381,8 @@ class ClaudeCodeStreamConnector:
         if launch_guard is not None:
             launch_guard("claude_start")
         argv = [self._binary, *self._argv]
-        if self.native_approvals_enabled and self._argv == _DEFAULT_ARGV:
+        if (self.native_approvals_enabled and
+                self._argv[:len(_DEFAULT_ARGV)] == _DEFAULT_ARGV):
             argv.extend(["--permission-prompt-tool", "stdio"])
         spawn_env = child_environment(self._env)
         try:
@@ -983,11 +984,11 @@ class ClaudeCodeStreamConnector:
             self._emit("error", f"result:{subtype}", payload)
 
     def _handle_permission_request(self, obj):
-        from ..native_inputs import CLAUDE_INPUT, validate_request
+        from ..native_inputs import CLAUDE_INPUT, validate_request, claude_permission_tool_supported
         request_id, params = obj.get("request_id"), obj.get("request")
         valid = (self.native_approvals_enabled and isinstance(request_id, str) and bool(request_id)
                  and isinstance(params, dict) and params.get("subtype") == "can_use_tool"
-                 and isinstance(params.get("tool_name"), str) and params["tool_name"] in {"Write", "Edit", "Bash", "AskUserQuestion"}
+                 and claude_permission_tool_supported(params.get("tool_name"))
                  and isinstance(params.get("tool_use_id"), str) and bool(params["tool_use_id"])
                  and isinstance(params.get("input"), dict))
         encoded = json.dumps([request_id, params], sort_keys=True, separators=(",", ":"))

@@ -77,7 +77,7 @@ def r4_native_decision_operation(
 
 def native_request_action(request: Mapping[str, Any]) -> str:
     """Core-owned classification shared with RuntimeCore's native decision API."""
-    from .native.native_inputs import INPUT_METHODS
+    from .native.native_inputs import INPUT_METHODS, claude_permission_tool_supported
 
     method, params = request.get("method"), request.get("params")
     if not isinstance(params, dict):
@@ -90,9 +90,7 @@ def native_request_action(request: Mapping[str, Any]) -> str:
         return "input.provide" if method in INPUT_METHODS else "approval.decide"
     if method == "control_request:can_use_tool":
         tool_name = params.get("tool_name")
-        if type(tool_name) is not str or tool_name not in {
-            "Write", "Edit", "Bash", "AskUserQuestion",
-        }:
+        if not claude_permission_tool_supported(tool_name):
             raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
         generation = request.get("local_generation")
         if type(generation) is not int or generation < 0:

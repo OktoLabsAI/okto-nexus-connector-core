@@ -410,12 +410,38 @@ class CopiedAdapterSession:
                 self._last_outcome = None
             elif outcome in {"success", "failed", "interrupted"}:
                 self._last_outcome = outcome
-            yield translate_native_event(self._redactor.scrub(native),
+            # Only the adapter's correlated request port can supply an
+            # operational proposal. Redacted event text is never its source.
+            request_of = getattr(self._connector, "native_approval_request", None)
+            operational = request_of(native) if callable(request_of) else None
+            if operational is not None:
+                from ..protocol import canonical_json, strict_json
+                from ..decision_bridge_r4 import native_request_action
+                encoded = canonical_json(operational)
+                if len(encoded) > 16384 or self._active_operation_id is None:
+                    raise CoreError("NATIVE_REQUEST_NOT_OBSERVED", "native_pump")
+                operational = strict_json(encoded.decode("utf-8"))
+                action = native_request_action(operational)
+                native = replace(native, operation_id=self._active_operation_id)
+            native = replace(native, native_approval=None,
+                payload={key: value for key, value in native.payload.items()
+                         if key != "native_approval"})
+            event = translate_native_event(self._redactor.scrub(native),
                                          server_id=self._context.server_id,
                                          executor_id=self._context.executor_id,
                                          session_id=self._session_id,
                                          stream_epoch=self._epoch,
                                          native_session_id=self._session.session_id)
+            if operational is not None:
+                # This is the authenticated execution plane. Hosts must keep
+                # the immutable proposal separate from UI/history display.
+                display = self._redactor.clean(operational)
+                display["request_hash"] = operational["request_hash"]
+                event = replace(event,
+                    category="input_request" if action == "input.provide" else "approval_request",
+                    payload={**event.payload, "native_approval": operational,
+                             "native_approval_display": display})
+            yield event
 
     async def _run_control(self, fn, /, *args):
         """Run a containment/observation call on the reserved control pool."""

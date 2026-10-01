@@ -1,11 +1,20 @@
 """Bounded, non-secret native input contracts; no I/O or implicit answers."""
 import json
 import math
+import re
 
 USER_INPUT = "item/tool/requestUserInput"
 ELICITATION = "mcpServer/elicitation/request"
 CLAUDE_INPUT = "claude/AskUserQuestion"
 INPUT_METHODS = {USER_INPUT, ELICITATION}
+
+
+def claude_permission_tool_supported(name):
+    """Recognize a bounded permission target, never grant its execution."""
+    return isinstance(name, str) and (
+        name in {"Write", "Edit", "Bash", "AskUserQuestion"} or
+        (len(name) <= 256 and re.fullmatch(
+            r"mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+", name, re.ASCII) is not None))
 
 
 def _require(condition):
