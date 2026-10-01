@@ -59,7 +59,10 @@ def _file_digest_counted(path: Path, expected: int) -> str:
     digest = hashlib.sha256()
     read = 0
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(_READ_CHUNK), b""):
+        # Small package files must not allocate a megabyte for every read.
+        # One extra byte still detects growth, including after the exact
+        # expected size has been consumed. No content or EOF check is skipped.
+        while chunk := stream.read(min(_READ_CHUNK, expected - read + 1)):
             read += len(chunk)
             if read > expected:
                 raise ValueError(

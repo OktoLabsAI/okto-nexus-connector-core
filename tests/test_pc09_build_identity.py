@@ -138,3 +138,42 @@ def test_rc_09_04_drift_blocks_prepare_via_identity(tmp_path):
     with pytest.raises(CoreError, match="PROFILE_DRIFT"):
         prepare_launch(LaunchIntent("ag", "ws", "codex_app_server"),
                        selected, tmp_path)
+
+
+@pytest.mark.parametrize("size", [0, 1, 4096, 1048576, 1048593])
+def test_counted_digest_preserves_full_content_and_eof(tmp_path, size):
+    import hashlib
+    from nexus_connector_core.build_identity import _file_digest_counted
+    path = tmp_path / "artifact"
+    content = (b"actual package content" * ((size // 22) + 2))[:size]
+    path.write_bytes(content)
+    assert _file_digest_counted(path, size) == "sha256:" + hashlib.sha256(content).hexdigest()
+
+
+@pytest.mark.parametrize(("change", "expected"), [("grow", 0), ("grow", 5), ("shrink", 5),
+                                                       ("grow", 1048576), ("shrink", 1048576)])
+def test_counted_digest_refuses_changed_size(tmp_path, change, expected):
+    from nexus_connector_core.build_identity import _file_digest_counted
+    path = tmp_path / "artifact"
+    path.write_bytes(b"x" * (expected + (1 if change == "grow" else -1)))
+    with pytest.raises(ValueError, match="grew|changed size"):
+        _file_digest_counted(path, expected)
+
+
+def test_counted_digest_detects_growth_after_expected_bytes():
+    import io
+    from nexus_connector_core.build_identity import _file_digest_counted
+    class Growing(io.BytesIO):
+        def read(self, size):
+            chunk = super().read(size)
+            if self.tell() == 4 and self.getvalue() == b"base":
+                self.seek(0, 2)
+                self.write(b"!")
+                self.seek(4)
+            return chunk
+    class Artifact:
+        name = "growing"
+        def open(self, mode):
+            return Growing(b"base")
+    with pytest.raises(ValueError, match="grew"):
+        _file_digest_counted(Artifact(), 4)
