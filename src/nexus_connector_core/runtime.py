@@ -138,6 +138,7 @@ class _Session:
     closing: bool = False
     draining: bool = False
     closed: bool = False
+    stop_observed: bool = False
     faulted: bool = False
     effect_fence: object = field(default=None)
     lease_expired: bool = False
@@ -1104,6 +1105,35 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                            for session_id in request.session_ids])
         return ReconcileReport(receipts, snapshots)
 
+    def shutdown_resources(self) -> Mapping[SessionKey, Mapping[str, object]]:
+        """Copy observed ownership facts without I/O, on the owning event loop.
+
+        STOPPED is recorded only after native observation. It does not imply
+        durable release, a successful close receipt, or permission to dispose
+        the runtime. UNKNOWN includes a still-running or unfinished opening.
+        """
+        keys = (set(self._sessions) | set(self._opening) |
+                set(self._uncertain_opens) | set(self._late_handles) |
+                set(self._release_obligations))
+        result = {}
+        for key in keys:
+            binding = self._sessions.get(key)
+            late = self._late_handles.get(key)
+            opening = self._opening.get(key)
+            stopped = (key in self._release_obligations or
+                       (binding is not None and (binding.stop_observed or binding.closed)) or
+                       (late is not None and late.last_state == "STOPPED"))
+            result[key] = {
+                "process_state": "STOPPED" if stopped else "UNKNOWN",
+                "release_pending": bool(key in self._release_obligations or
+                    (binding is not None and binding.slot_reserved) or
+                    (opening is not None and opening.slot_reserved) or
+                    (binding is None and key in self._uncertain_opens))}
+        for key, ownership in self._session_tombstones._entries.items():
+            result.setdefault(key, {"process_state": "STOPPED",
+                                    "release_pending": ownership != "released"})
+        return result
+
     async def shutdown(self, policy: ShutdownPolicy) -> ShutdownReport:
         if not isinstance(policy, ShutdownPolicy) or any(
                 not _finite_timing(value) or value < 0
@@ -1475,6 +1505,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         except Exception:
             process_state = "UNKNOWN"
         if process_state == "STOPPED":
+            binding.stop_observed = True
             if binding.slot_reserved:
                 await self._owned_slots.release_owned_slot(
                     OperationKey(session.server_id, session.executor_id,
@@ -1945,6 +1976,12 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 obligation.retry_task = None
                 continue
             del self._release_obligations[session]
+            binding = self._sessions.get(session)
+            if (binding is not None and
+                    binding.opening_operation_id == obligation.key.operation_id):
+                binding.slot_reserved = False
+            if self._session_tombstones.get(session) is not None:
+                self._session_tombstones.record(session, "released")
             self._uncertain_opens.discard(session)
             self._opening.pop(session, None)
             if obligation.attempt is not None:
@@ -2476,6 +2513,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         except Exception:
             process_state = "UNKNOWN"
         if process_state == "STOPPED":
+            binding.stop_observed = True
             if binding.slot_reserved:
                 # C10/Z02.3: same unified durable route - a failed or
                 # blocked ledger keeps a TRACKED obligation instead of
