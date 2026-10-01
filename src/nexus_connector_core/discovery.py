@@ -11,6 +11,7 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
 
+from .discovery_control import check_discovery_cancelled, discovery_scope
 from .installation import installation_ref
 from .models import CoreError, InstallationCandidate, Inventory
 from .native.process import require_containment
@@ -57,9 +58,11 @@ def binary_architecture(path: str | Path) -> str | None:
 
 
 def fingerprint(path: Path) -> str:
+    check_discovery_cancelled()
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            check_discovery_cancelled()
             digest.update(chunk)
     return "sha256:" + digest.hexdigest()
 
@@ -240,6 +243,7 @@ def discover_pi_releases(install_root: str | Path, node_path: str | Path,
         "pi-coding-agent" / "dist" / "bundle" / "cli.js"
     candidates = []
     for release in sorted(releases.iterdir(), reverse=True):
+        check_discovery_cancelled()
         if not release.is_dir():
             continue
         cli = release / cli_suffix
@@ -308,6 +312,7 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
     cwd = Path.cwd().resolve()
     found: dict[str, InstallationCandidate] = {}
     for entry in (path_env if path_env is not None else os.environ.get("PATH", "")).split(os.pathsep):
+        check_discovery_cancelled()
         if not entry:
             continue
         directory = Path(entry)
@@ -335,7 +340,7 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
     return tuple(found.values())
 
 
-def discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
+def _discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
                            trusted_roots: tuple[Path, ...] = (),
                            path_env: str | None = None,
                            pi_install_root: str | Path | None = None,
@@ -360,9 +365,27 @@ def discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
         raise ValueError("pi_install_root and pi_node must be supplied together")
     candidates: list[InstallationCandidate] = []
     for adapter_id in selected:
+        check_discovery_cancelled()
         candidates.extend(discover_path(adapter_id, path_env=path_env,
                                         trusted_roots=trusted_roots))
         if adapter_id == "pi_rpc" and pi_install_root is not None:
             candidates.extend(discover_pi_releases(
                 pi_install_root, pi_node, trusted_roots=trusted_roots))
     return Inventory(tuple(candidates))
+
+
+def discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
+                           trusted_roots: tuple[Path, ...] = (),
+                           path_env: str | None = None,
+                           pi_install_root: str | Path | None = None,
+                           pi_node: str | Path | None = None,
+                           cancel_requested=None) -> Inventory:
+    """Observe installations; a host may cooperatively stop passive reads.
+
+    Cancellation raises DiscoveryCancelled, never a partial Inventory. The
+    callback is checked between filesystem operations, not during an OS read.
+    It does not cancel provider operations, state writes or runtime owners.
+    """
+    with discovery_scope(cancel_requested):
+        return _discover_installations(adapter_ids=adapter_ids, trusted_roots=trusted_roots,
+            path_env=path_env, pi_install_root=pi_install_root, pi_node=pi_node)

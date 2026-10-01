@@ -285,7 +285,7 @@ class _ClockLateNative:
         return
         yield  # pragma: no cover
 
-    async def close(self):
+    def close(self):
         return "graceful"
 
     async def observe(self):

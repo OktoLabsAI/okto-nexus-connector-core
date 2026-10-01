@@ -1,5 +1,6 @@
 """Embeddable native harness core. Importing this package has no runtime side effects."""
 
+from .discovery_control import DiscoveryCancelled
 from .models import (
     ControlTargeting,
     R4Authority, R4LeaseApplication,
@@ -95,7 +96,7 @@ from .discovery import discover_installations
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.2.47.dev0"
+__version__ = "0.2.48.dev0"
 
 __all__ = [
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
@@ -127,7 +128,7 @@ __all__ = [
     "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "CATALOG_FORMAT_VERSION",
     "AvailabilityReport", "CandidateAvailability", "evaluate_runtime_availability", "AVAILABILITY_FORMAT_VERSION",
     "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
-    "discover_installations",
+    "discover_installations", "DiscoveryCancelled",
     "SQLiteOwnedSlotLedger",
     "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot",
     "get_executor_inventory_schema",

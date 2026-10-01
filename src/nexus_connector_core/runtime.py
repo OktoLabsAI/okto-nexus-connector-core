@@ -2331,6 +2331,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         await self._lease_event(session, binding, "core.lease_revoked", {})
 
     async def _watch_lease(self, session: SessionKey, binding: _Session) -> None:
+        expired_event_pending = False
         try:
             while not binding.closed:
                 deadline = binding.context.lease_deadline_monotonic

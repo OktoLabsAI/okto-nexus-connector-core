@@ -18,6 +18,7 @@ import os
 import stat
 from pathlib import Path
 
+from .discovery_control import check_discovery_cancelled
 from .protocol import canonical_json
 
 __all__ = ["executable_build_identity", "pi_build_identity",
@@ -45,9 +46,11 @@ _READ_CHUNK = 1024 * 1024
 
 
 def _file_digest(path: Path) -> str:
+    check_discovery_cancelled()
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(_READ_CHUNK), b""):
+            check_discovery_cancelled()
             digest.update(chunk)
     return "sha256:" + digest.hexdigest()
 
@@ -56,6 +59,7 @@ def _file_digest_counted(path: Path, expected: int) -> str:
     """Digest while counting the bytes ACTUALLY read (C4/T07): a file
     growing between stat and read refuses instead of silently exceeding
     the budget."""
+    check_discovery_cancelled()
     digest = hashlib.sha256()
     read = 0
     with path.open("rb") as stream:
@@ -63,6 +67,7 @@ def _file_digest_counted(path: Path, expected: int) -> str:
         # One extra byte still detects growth, including after the exact
         # expected size has been consumed. No content or EOF check is skipped.
         while chunk := stream.read(min(_READ_CHUNK, expected - read + 1)):
+            check_discovery_cancelled()
             read += len(chunk)
             if read > expected:
                 raise ValueError(
@@ -104,6 +109,7 @@ def _iter_tree_files(directory: Path):
 
     def walk(current: Path, depth: int) -> None:
         nonlocal dirs_visited, names_seen
+        check_discovery_cancelled()
         if depth > _MAX_DEPTH:
             raise ValueError("pi package tree exceeds bounded depth")
         dirs_visited += 1
@@ -116,6 +122,7 @@ def _iter_tree_files(directory: Path):
             raise ValueError("unreadable directory in package") from exc
         try:
             for entry in iterator:
+                check_discovery_cancelled()
                 names_seen += 1
                 if names_seen > _MAX_MANIFEST_ENTRIES:
                     # C6/M01: refuse AT the first name beyond the budget
@@ -130,6 +137,7 @@ def _iter_tree_files(directory: Path):
         finally:
             iterator.close()
         for name in sorted(names):
+            check_discovery_cancelled()
             if len(collected) > _MAX_MANIFEST_ENTRIES:
                 raise ValueError("pi package manifest exceeds bounded size")
             path = current / name
@@ -201,6 +209,7 @@ def pi_build_identity(node: str | os.PathLike,
     def _add_tree(directory: Path, prefix: str) -> None:
         nonlocal total
         for current in _iter_tree_files(directory):
+            check_discovery_cancelled()
             relative = prefix + current.relative_to(directory).as_posix()
             total = _add_entry(entries, total, current, relative)
 
@@ -213,6 +222,7 @@ def pi_build_identity(node: str | os.PathLike,
     absent_relations: list[str] = []
     packages = 0
     while queue:
+        check_discovery_cancelled()
         package_dir, logical = queue.pop(0)
         packages += 1
         if packages > _MAX_DEPENDENCY_PACKAGES:
