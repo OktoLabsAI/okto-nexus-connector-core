@@ -140,3 +140,48 @@ def test_missing_http_capability_fails_without_leaking_resolver_error(tmp_path):
                                     http_templates=(template,))
 
     asyncio.run(run())
+
+
+@pytest.mark.parametrize("existing", [False, True])
+def test_codex_uses_only_explicitly_approved_provider_home(tmp_path, monkeypatch, existing):
+    async def run():
+        binary = tmp_path / ("codex.exe" if os.name == "nt" else "codex")
+        binary.write_bytes(b"test")
+        if os.name != "nt":
+            binary.chmod(0o755)
+        prepared = prepare_launch(LaunchIntent("ag", "ws", "codex_app_server"),
+                                  candidate("codex_app_server", binary, explicit=True), tmp_path)
+        home = tmp_path / "approved"
+        home.mkdir()
+        state = home / ".codex"
+        if existing:
+            state.mkdir()
+            (state / "config.toml").write_text("# Existing configuration\n")
+        monkeypatch.setenv("CODEX_HOME", str(tmp_path / "unapproved"))
+        with pytest.raises(CoreError, match="APPROVAL_REQUIRED"):
+            await child_environment(prepared, Resolver(), provider_home=home)
+        assert state.exists() is existing
+        env = await child_environment(prepared, Resolver(), provider_home=home, trusted_home=True)
+        assert env["CODEX_HOME"] == str(state.resolve())
+        assert state.is_dir()
+        if existing:
+            assert (state / "config.toml").read_text() == "# Existing configuration\n"
+        with pytest.raises(CoreError, match="BINDING_NOT_AUTHORIZED"):
+            await child_environment(prepared, Resolver(), provider_home=home, trusted_home=True,
+                                    public_overrides={"CODEX_HOME": str(tmp_path)})
+    asyncio.run(run())
+
+
+def test_codex_invalid_state_directory_fails_without_path_disclosure(tmp_path):
+    async def run():
+        binary = tmp_path / ("codex.exe" if os.name == "nt" else "codex")
+        binary.write_bytes(b"test")
+        if os.name != "nt":
+            binary.chmod(0o755)
+        prepared = prepare_launch(LaunchIntent("ag", "ws", "codex_app_server"),
+                                  candidate("codex_app_server", binary, explicit=True), tmp_path)
+        (tmp_path / ".codex").write_text("not a directory")
+        with pytest.raises(CoreError, match="WORKSPACE_UNAVAILABLE") as error:
+            await child_environment(prepared, Resolver(), provider_home=tmp_path, trusted_home=True)
+        assert str(tmp_path) not in str(error.value)
+    asyncio.run(run())

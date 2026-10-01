@@ -75,6 +75,15 @@ async def child_environment(
             raise CoreError("WORKSPACE_UNAVAILABLE", "environment")
         env["HOME"] = str(home.resolve(strict=True))
         env["USERPROFILE"] = env["HOME"]
+        if prepared.intent.adapter_id == "codex_app_server":
+            # Codex may resolve the Windows account home independently of HOME
+            # and USERPROFILE. Bind its state to the explicitly approved home.
+            codex_state = Path(env["HOME"]) / ".codex"
+            try:
+                codex_state.mkdir(mode=0o700, exist_ok=True)
+                env["CODEX_HOME"] = str(codex_state.resolve(strict=True))
+            except OSError:
+                raise CoreError("WORKSPACE_UNAVAILABLE", "environment") from None
     for name, value in (public_overrides or {}).items():
         _check_name(name)
         _check_value(value)

@@ -61,11 +61,14 @@ def test_factory_keeps_home_and_supplies_only_environment_reference_in_argv(adap
     argv=options.get('command') or (options['binary'],*options['argv'])
     assert item.capability_ref not in repr(argv) and 'protected-session-material' not in repr(argv)
     assert options['env'][item.bearer_env_name]=='protected-session-material'
-    assert not list(tmp_path.iterdir())
     if adapter=='codex_app_server':
+        assert [p.name for p in tmp_path.iterdir()] == ['.codex']
+        assert not list((tmp_path / '.codex').iterdir())
+        assert options['env']['CODEX_HOME'] == str((tmp_path / '.codex').resolve())
         entry=tomllib.loads(argv[-1])['mcp_servers']['nexus_session']
         assert entry['bearer_token_env_var']==item.bearer_env_name
     else:
+        assert not list(tmp_path.iterdir())
         assert argv[-3]=='--strict-mcp-config'
         entry=json.loads(argv[-1])['mcpServers']['nexus_session']
         assert entry['headers']['Authorization']=='Bearer ${'+item.bearer_env_name+'}'
