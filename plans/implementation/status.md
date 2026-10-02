@@ -1,3 +1,7 @@
+## Core 0.2.52.dev0 — exact maximum lease boundary
+
+Corrects floating-point subtraction drift that could reject a valid 120-second lease on Windows. Compare the absolute deadline with now plus the maximum instead; no tolerance or extra lease duration is granted. The regression rejects the immediately larger representable deadline before native open. Installed wheel verification: 63 runtime tests passed in a new Python 3.13 environment outside the checkout. See evidence/lease-boundary-052.json. Consumer pins and integrated tests remain pending.
+
 ## Hosted Windows qualification follow-up — 2026-10-02
 
 Run 36948182442 passed all three Linux jobs, but Windows exposed additional byte-sensitive native schema checkout and timing/ownership fixture defects. Native JSON now keeps LF. The crash fixture retains the owned process through the receipt boundary so garbage collection cannot close the Windows Job early; revocation waits for the observed stop within two seconds instead of assuming a 30 ms scheduler turn. Ten directed Windows tests passed locally. The intermittent native-action listener connection refusal test passed locally but remains unresolved pending hosted results; no release gate closes.

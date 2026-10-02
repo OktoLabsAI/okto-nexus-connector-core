@@ -2693,8 +2693,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         self._validate_lease_deadline(context)
         if (not _finite_timing(context.lease_deadline_monotonic +
                                self._lease_grace_seconds) or
-                context.lease_deadline_monotonic - self._clock.monotonic() >
-                self._max_lease_seconds):
+                context.lease_deadline_monotonic >
+                self._clock.monotonic() + self._max_lease_seconds):
             raise CoreError("LEASE_INVALID", "admission")
 
     @staticmethod

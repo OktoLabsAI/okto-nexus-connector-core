@@ -2015,6 +2015,27 @@ def test_revocation_cannot_be_undone_by_lease_renewal(tmp_path):
     asyncio.run(run())
 
 
+def test_exact_maximum_lease_uses_absolute_deadline_without_subtraction_drift(tmp_path):
+    async def run():
+        clock = FakeClock(100.002)
+        deadline = clock.monotonic() + 120.0
+        assert deadline - clock.monotonic() > 120.0  # deterministic FP regression
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock)
+        valid = replace(context(), lease_deadline_monotonic=deadline)
+        try:
+            prepared = await runtime.prepare(LaunchIntent('agent', 'ws', 'codex_app_server'), valid)
+            with pytest.raises(CoreError, match='LEASE_INVALID'):
+                await runtime.open(OpenOperation('too-far', 'session', 'epoch', prepared),
+                                   replace(valid, lease_deadline_monotonic=math.nextafter(deadline, math.inf)))
+            assert factory.open_count == 0
+            await runtime.open(OpenOperation('exact-max', 'session', 'epoch', prepared), valid)
+            assert factory.open_count == 1
+        finally:
+            await runtime.shutdown(ShutdownPolicy(1, 1))
+            journal.close()
+    asyncio.run(run())
+
+
 def test_open_rejects_lease_far_beyond_local_maximum(tmp_path):
     async def run():
         clock = FakeClock()
