@@ -364,7 +364,18 @@ def _discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
         if adapter_id == "pi_rpc" and pi_install_root is not None:
             candidates.extend(discover_pi_releases(
                 pi_install_root, pi_node, trusted_roots=trusted_roots))
-    return Inventory(tuple(candidates))
+    unique: dict[str, InstallationCandidate] = {}
+    for item in candidates:
+        check_discovery_cancelled()
+        ref = item.installation_ref or installation_ref(
+            item.adapter_id, item.executable, item.launch_script)
+        previous = unique.get(ref)
+        if previous is not None and previous != item:
+            # Do not pick one observation if an installation changed between
+            # the automatic and explicitly configured discovery paths.
+            raise CoreError("PROFILE_DRIFT", "discovery")
+        unique[ref] = item
+    return Inventory(tuple(unique.values()))
 
 
 def discover_installations(*, adapter_ids: tuple[str, ...] | None = None,

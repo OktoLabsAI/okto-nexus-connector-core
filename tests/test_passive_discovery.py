@@ -6,6 +6,8 @@ from nexus_connector_core.profiles import prepare_launch
 import json
 import os
 import pytest
+from dataclasses import replace
+from pathlib import Path
 
 from tests.regression.test_c11_audit import _LAB_BINARY, _binary_name
 
@@ -44,6 +46,37 @@ def test_visible_path_candidate_does_not_gain_launch_authority(tmp_path):
     assert row['state'] not in ('NOT_INSTALLED', 'READY_FOR_RUNTIME')
     with pytest.raises(CoreError, match='BINDING_NOT_AUTHORIZED'):
         prepare_launch(LaunchIntent('agent', 'workspace', 'claude_stream'), observed, tmp_path)
+
+
+@pytest.mark.parametrize('change', ['fingerprint', 'trust', 'version', 'build_identity'])
+def test_overlapping_discovery_refuses_conflicting_evidence(tmp_path, monkeypatch, change):
+    from nexus_connector_core import discovery
+    binary = tmp_path / _binary_name('pi')
+    binary.write_bytes(_LAB_BINARY)
+    binary.chmod(0o755)
+    item = discovery.candidate('pi_rpc', binary, explicit=True)
+    monkeypatch.setattr(discovery, 'discover_path', lambda *a, **k: (item,))
+    monkeypatch.setattr(discovery, 'discover_pi_releases',
+                        lambda *a, **k: (replace(item, **{change: 'changed'}),))
+    with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+        discover_installations(adapter_ids=('pi_rpc',), pi_install_root=tmp_path, pi_node=binary)
+
+
+def test_exact_duplicate_observation_keeps_distinct_installations(tmp_path, monkeypatch):
+    from nexus_connector_core import discovery
+    candidates = []
+    for name in ('first', 'second'):
+        binary = tmp_path / _binary_name(name)
+        binary.write_bytes(_LAB_BINARY)
+        binary.chmod(0o755)
+        candidates.append(discovery.candidate('pi_rpc', binary, explicit=True))
+    first, second = candidates
+    assert first.fingerprint == second.fingerprint
+    monkeypatch.setattr(discovery, 'discover_path', lambda *a, **k: (first, second))
+    monkeypatch.setattr(discovery, 'discover_pi_releases', lambda *a, **k: (first,))
+    found = discover_installations(adapter_ids=('pi_rpc',), pi_install_root=tmp_path,
+                                   pi_node=Path(first.executable))
+    assert found.candidates == (first, second)
 
 
 @pytest.mark.skipif(os.name != 'nt', reason='Windows package layouts')
@@ -85,5 +118,8 @@ def test_windows_npm_and_managed_pi_are_observed_without_running_shims(tmp_path,
             prepare_launch(LaunchIntent('agent', 'workspace', item.adapter_id), item, tmp_path)
     selected = discover_installations(path_env=path, trusted_roots=(npm, install, node)).candidates
     assert all(c.trust == 'selected' for c in selected)
+    combined = discover_installations(path_env=path, trusted_roots=(npm, install, node),
+                                      pi_install_root=install, pi_node=node).candidates
+    assert combined == selected
     (install / 'current-version').write_text('../1.2.3')
     assert not any(c.adapter_id == 'pi_rpc' for c in discover_installations(path_env=path).candidates)
