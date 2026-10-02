@@ -1,0 +1,10 @@
+{
+  "scope": "Test synchronization correction; Core runtime unchanged",
+  "hosted_run": 36950397170,
+  "result": "Five platform/Python jobs passed; Windows 3.12 failed W03 with 1102 passes and 77 skips",
+  "cause": "Cancellation after a fixed 200 ms can precede factory entry, so no late native handle exists to force-stop",
+  "reproduction": "Using unchanged installed Core 0.2.52, inject 300 ms in the existing-receipt lookup and retain the old 200 ms sleep: reproduces force waited for close cancellation assertion",
+  "fix": "Wait for factory entry before cancellation; cover 0 and 300 ms admission delays; retain force-stop and held close-barrier assertions",
+  "validation": "10 C7 audit tests passed on installed Core, Windows/Python 3.13; repository root only supplies test helpers",
+  "pending": "Hosted matrix rerun"
+}

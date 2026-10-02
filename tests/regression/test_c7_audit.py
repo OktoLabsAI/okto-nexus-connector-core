@@ -271,16 +271,20 @@ class _SlowCancelCloseNative:
         return ("STOPPED" if self.stopped else "RUNNING", "IDLE")
 
 
-def test_w03_force_does_not_wait_for_close_cancellation_to_finish(tmp_path):
+@pytest.mark.parametrize("pre_open_delay", [0.0, 0.3])
+def test_w03_force_does_not_wait_for_close_cancellation_to_finish(
+        tmp_path, monkeypatch, pre_open_delay):
     clock = FakeClock(100.0)
 
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
         native = _SlowCancelCloseNative()
+        factory_entered = asyncio.Event()
 
         class _Factory:
             async def open(self, prepared, session_id, auth, *,
                            stream_epoch):
+                factory_entered.set()
                 await asyncio.to_thread(native.start_gate.wait, 5)
                 return native
 
@@ -294,6 +298,13 @@ def test_w03_force_does_not_wait_for_close_cancellation_to_finish(tmp_path):
             native_factory=_Factory(), clock=clock,
             lease_grace_seconds=0.0, lease_poll_seconds=0.01,
             cleanup_budget_seconds=0.2)
+        existing = runtime._existing
+
+        async def delayed_existing(*args, **kwargs):
+            await asyncio.sleep(pre_open_delay)
+            return await existing(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "_existing", delayed_existing)
         try:
             auth = replace(context(),
                            lease_deadline_monotonic=clock.now + 60)
@@ -302,7 +313,9 @@ def test_w03_force_does_not_wait_for_close_cancellation_to_finish(tmp_path):
             opening = asyncio.create_task(runtime.open(
                 OpenOperation("open-op", "session", "epoch", prepared),
                 auth))
-            await asyncio.sleep(0.2)
+            # Cancellation follows actual factory entry, even when journal
+            # admission takes longer than the old fixed 200 ms sleep.
+            await asyncio.wait_for(factory_entered.wait(), timeout=5)
             opening.cancel()
             try:
                 await opening
