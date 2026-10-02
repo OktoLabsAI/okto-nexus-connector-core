@@ -98,7 +98,9 @@ def main() -> int:
     parser.add_argument('--wheel', type=Path, required=True)
     parser.add_argument('--report-dir', type=Path, required=True)
     args = parser.parse_args()
-    python, wheel, reports = args.python.resolve(), args.wheel.resolve(), args.report_dir.resolve()
+    # Unix venv interpreters are symlinks. Resolving the executable follows
+    # the link out of the venv and silently tests the base interpreter instead.
+    python, wheel, reports = args.python.absolute(), args.wheel.resolve(), args.report_dir.resolve()
     if not python.is_file() or not wheel.is_file():
         parser.error('The Python executable and Core wheel must exist.')
     reports.mkdir(parents=True, exist_ok=True)

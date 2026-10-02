@@ -1,7 +1,7 @@
 # Version and platform compatibility
 
-This project is `0.2.52.dev0`, an unpublished development build. Its API and
-contract bundle can still change. The current exact revision is
+This project is `0.2.53.dev0`, an unpublished development build. Its API and
+contract bundle can still change. The historical R3 revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with
 `VERSION_INCOMPATIBLE`; there is no implicit r1/r2 upgrade or fallback. The
@@ -13,9 +13,12 @@ Core version whose bundle first published this revision — it is NOT the
 producing package's version; a stable protocol revision
 intentionally keeps the introduced-in value across package releases.
 
-The independent R4 preview uses
-`nxl-1-agent-centric-http-only-2026-09-29-r4`. Its manifest is still
-`development-partial` and it must not enable production effects. See the
+The independent executable R4 contract uses
+`nxl-1-agent-centric-http-only-2026-09-29-r4`. Its manifest is `executable`
+after installed Core and consumer conformance. Hosts verify it through
+`verify_r4_bundle` and negotiate `R4_CONTRACT_REVISION`; historical R3 constants
+and resources remain unchanged. Contract promotion does not qualify providers
+or bypass host admission and authority checks. See the
 [R4 contract guide](nxl-r4-development.md). Native qualification statements
 below describe their recorded historical campaigns; they do not qualify the
 current R4 artifact or either application without a new acceptance run.

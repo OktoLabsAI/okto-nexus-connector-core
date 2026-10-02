@@ -217,7 +217,8 @@ for native decision hash domains and the remaining executable-bundle gate.
 
 | Public exports | Host responsibility and behavior |
 |---|---|
-| `R4_PREVIEW_REVISION`, `R4_BUNDLE_EXECUTABLE`, `verify_r4_development_bundle` | Inspect the verified independent bundle; the executable flag is currently false. |
+| `R4_CONTRACT_REVISION`, `R4_BUNDLE_EXECUTABLE`, `verify_r4_bundle` | Inspect the verified executable R4 bundle independently of historical R3. Executability does not grant host or native authority. |
+| `R4_PREVIEW_REVISION`, `verify_r4_development_bundle` | Compatibility aliases for the explicit R4 revision and verifier; preserved wire bytes and return shape. |
 | `decode_r4_frame`, `encode_r4_frame`, `r4_submit_intent_hash` | Strict closed schemas, bounded UTF-8 and independent JCS intent hashing. Preserve R3 history. |
 | `r4_close_operation` | Validate an R4 close frame and convert its reason and bounded drain/interrupt policy into `CloseOperation`. Apply it with the installed context; never discard policy fields. |
 | `R4ReconcileAttempt`, `R4ControlProjection`, `reduce_r4_reconcile_accepted` | Correlate a Server ACK with its connection and reconciliation attempt. Control readiness does not imply a session lease. |
