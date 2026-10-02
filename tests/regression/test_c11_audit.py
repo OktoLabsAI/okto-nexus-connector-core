@@ -50,8 +50,7 @@ def _make_copies(tmp_path, name, count=2, content=_LAB_BINARY):
 
 def _put_on_path(monkeypatch, roots):
     joined = os.pathsep.join(str(root) for root in roots)
-    monkeypatch.setenv("PATH", joined + os.pathsep +
-                       os.environ.get("PATH", ""))
+    monkeypatch.setenv("PATH", joined)
 
 
 def _runtime_for(tmp_path, roots):

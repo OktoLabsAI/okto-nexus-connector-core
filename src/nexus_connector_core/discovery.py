@@ -304,39 +304,32 @@ def resolve_windows_npm_shim(shim_path: str | Path) -> Path:
 
 def discover_path(adapter_id: str, *, path_env: str | None = None,
                   trusted_roots: tuple[Path, ...] = ()) -> tuple[InstallationCandidate, ...]:
-    """Return only candidates under trusted roots; never search current cwd."""
+    """Observe PATH installations without promoting their trust; never search cwd."""
     name = EXECUTABLE_NAMES.get(adapter_id)
     if name is None:
         raise CoreError("CAPABILITY_UNSUPPORTED", "discovery")
     suffixes = (".exe", ".com") if os.name == "nt" else ("",)
-    cwd = Path.cwd().resolve()
+    from .discovery_layouts import path_directories, windows_layout_targets
+    directories = tuple(path_directories(path_env if path_env is not None else os.environ.get("PATH", "")))
+    roots = tuple(root.resolve(strict=True) for root in trusted_roots)
     found: dict[str, InstallationCandidate] = {}
-    for entry in (path_env if path_env is not None else os.environ.get("PATH", "")).split(os.pathsep):
+    targets = ((directory / (name + suffix), None)
+               for directory in directories for suffix in suffixes)
+    from itertools import chain
+    for path, script in chain(targets, windows_layout_targets(adapter_id, directories)):
         check_discovery_cancelled()
-        if not entry:
-            continue
-        directory = Path(entry)
-        if not directory.is_absolute():
-            continue
         try:
-            directory = directory.resolve(strict=True)
-        except OSError:
+            # These constructors only read bytes. Never expose their temporary
+            # selected value until the actual caller-supplied roots are checked.
+            item = (candidate(adapter_id, path, explicit=True) if script is None else
+                    candidate_pi_node_cli(path, script, explicit=True))
+            paths = (Path(item.executable),) + ((Path(item.launch_script),) if item.launch_script else ())
+            trusted = all(any(target.is_relative_to(root) for root in roots) for target in paths)
+            item = replace(item, source="trusted_root" if trusted else "path",
+                           trust="selected" if trusted else "untrusted")
+        except (CoreError, OSError):
             continue
-        if directory == cwd:
-            continue
-        for suffix in suffixes:
-            path = directory / (name + suffix)
-            if not path.is_file():
-                continue
-            try:
-                item = candidate(adapter_id, path, trusted_roots=trusted_roots)
-            except (CoreError, OSError):
-                continue
-            # C11/A11-01 + alias policy: key by the installation ref -
-            # PATH duplicates/symlinks to the SAME canonical target are
-            # ONE installation; distinct targets stay distinct rows.
-            found[item.installation_ref
-                  or installation_ref(adapter_id, item.executable)] = item
+        found[item.installation_ref or installation_ref(adapter_id, item.executable)] = item
     return tuple(found.values())
 
 
