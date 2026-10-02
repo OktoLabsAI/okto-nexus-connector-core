@@ -309,14 +309,16 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
     if name is None:
         raise CoreError("CAPABILITY_UNSUPPORTED", "discovery")
     suffixes = (".exe", ".com") if os.name == "nt" else ("",)
-    from .discovery_layouts import path_directories, windows_layout_targets
+    from .discovery_layouts import path_directories, windows_layout_targets, posix_layout_targets
     directories = tuple(path_directories(path_env if path_env is not None else os.environ.get("PATH", "")))
     roots = tuple(root.resolve(strict=True) for root in trusted_roots)
     found: dict[str, InstallationCandidate] = {}
-    targets = ((directory / (name + suffix), None)
+    targets = ((directory / (name + suffix), None, None)
                for directory in directories for suffix in suffixes)
+    replaced_launchers = set()
     from itertools import chain
-    for path, script in chain(targets, windows_layout_targets(adapter_id, directories)):
+    windows = ((path, script, None) for path, script in windows_layout_targets(adapter_id, directories))
+    for path, script, launcher in chain(targets, windows, posix_layout_targets(adapter_id, directories)):
         check_discovery_cancelled()
         try:
             # These constructors only read bytes. Never expose their temporary
@@ -330,7 +332,11 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
         except (CoreError, OSError):
             continue
         found[item.installation_ref or installation_ref(adapter_id, item.executable)] = item
-    return tuple(found.values())
+        if launcher is not None:
+            replaced_launchers.add(str(launcher))
+    return tuple(item for item in found.values()
+                 if not (item.launch_script is None and item.architecture is None
+                         and item.executable in replaced_launchers))
 
 
 def _discover_installations(*, adapter_ids: tuple[str, ...] | None = None,

@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-This project is `0.2.55.dev0`, an unpublished development build. Its API and
+This project is `0.2.56.dev0`, an unpublished development build. Its API and
 contract bundle can still change. The historical R3 revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with
@@ -31,6 +31,13 @@ current R4 artifact or either application without a new acceptance run.
 | `claude_stream` managed | Registry lists win32, linux, darwin; selected local Claude 2.1.282 on Windows/x86_64 (exact fingerprint `sha256:fc0e3af0…484`) is **production-qualified** for managed conversation, events and interrupt (no steer vocabulary), and passed the full managed-factory path with a real turn. `control_request:can_use_tool/Write` is qualified (forged-kind refusal + real decline); a slow-consumer drain passed; AskUserQuestion/input, Linux/macOS and version drift remain unexercised. |
 | `claude_attach` external | Registry lists linux, darwin, freebsd | No; public attach lifecycle and real substrate qualification remain open. |
 | Core wheel/sdist | Identical local Windows/WSL2 hashes; isolated offline installs across Python 3.11–3.13 on both local OS environments | Partial packaging evidence only; not hosted CI, native Linux or real consumers. |
+
+Passive discovery also resolves known POSIX npm Codex symlinks to fixed native
+Linux/macOS package payloads, and Pi npm/managed layouts to explicit Node+CLI
+pairs. It reads package metadata and files only. Trust applies to the physical
+targets, not to the directory containing a launcher. Unknown scripts are not
+interpreted; an unresolved script remains an unprobed observation. This discovery
+support does not implement macOS process containment or qualify execution there.
 
 Registry platform membership is a code-path gate, **not** a capability grant.
 The conversation qualification set also includes the exact Windows Codex

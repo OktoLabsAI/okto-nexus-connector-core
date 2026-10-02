@@ -1,0 +1,15 @@
+{
+  "status": "PASS",
+  "core_version": "0.2.55.dev0",
+  "python": "3.12.13",
+  "scope": "Actual npm package layout, passive discovery only; no provider process or login",
+  "native_payload_selected": false,
+  "seconds": 0.004079045000253245,
+  "architecture": null,
+  "candidate_ref": "nexus-install-v1:1dbffbf4efea8bff0eb230767390578f608041cea5db9f9c51c853647ec885e2",
+  "fingerprint": "sha256:61b0194f3bb6534439c8d26a3ed57d0805f84b884588b761795323eeb92fcf70",
+  "archives": {
+    "openai-codex-0.159.0-linux-x64.tgz": "27a80e1904c7337fe65d94f881779ba7700f42a8a87f3d06352b543b0115df98",
+    "openai-codex-0.159.0.tgz": "3d4b2632edebabe1d8819ed35b1c9272cb24d49e1946b24f0074ad5c98bc36d8"
+  }
+}

@@ -592,8 +592,11 @@ def test_r07b_active_version_probe_must_refuse_before_observer_if_containment_un
 # R08 - the public discovery path composes the Pi release resolver
 # ------------------------------------------------------------------ #
 
-def test_r08_discovery_public_path_reuses_pi_layout_resolution(tmp_path):
+def test_r08_discovery_public_path_reuses_pi_layout_resolution(tmp_path, monkeypatch):
     from nexus_connector_core import DiscoveryRequest, LocalRuntimeCore
+
+    # This exact inventory belongs to the fixture, not the developer's PATH.
+    monkeypatch.setenv("PATH", str(tmp_path))
 
     async def run():
         install = tmp_path / "piroot"

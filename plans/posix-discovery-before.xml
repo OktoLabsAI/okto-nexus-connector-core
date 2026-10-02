@@ -1,0 +1,475 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="14" skipped="0" tests="15" time="1.537" timestamp="2026-10-02T09:04:33.500972-03:00" hostname="Alienwarem15"><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[nested-False-linux]" time="0.011"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'&#10;  &#10;  Skipping 93 identical leading characters in diff, use -v to show&#10;  - nai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519ac6f90&gt;
+platform = 'linux', arm = False, placement = 'nested'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'
+E         
+E         Skipping 93 identical leading characters in diff, use -v to show
+E         - nai/codex/node_modules/@openai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[nested-False-darwin]" time="0.007"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'&#10;  &#10;  Skipping 93 identical leading characters in diff, use -v to show&#10;  - nai/codex/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519ac7860&gt;
+platform = 'darwin', arm = False, placement = 'nested'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'
+E         
+E         Skipping 93 identical leading characters in diff, use -v to show
+E         - nai/codex/node_modules/@openai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[nested-True-linux]" time="0.007"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'&#10;  &#10;  Skipping 93 identical leading characters in diff, use -v to show&#10;  - nai/codex/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve2')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b19d90&gt;
+platform = 'linux', arm = True, placement = 'nested'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'
+E         
+E         Skipping 93 identical leading characters in diff, use -v to show
+E         - nai/codex/node_modules/@openai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[nested-True-darwin]" time="0.007"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'&#10;  &#10;  Skipping 93 identical leading characters in diff, use -v to show&#10;  - nai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve3')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b1a390&gt;
+platform = 'darwin', arm = True, placement = 'nested'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'
+E         
+E         Skipping 93 identical leading characters in diff, use -v to show
+E         - nai/codex/node_modules/@openai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[hoisted-False-linux]" time="0.008"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'&#10;  &#10;  Skipping 92 identical leading characters in diff, use -v to show&#10;  - enai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex&#10;  + enai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve4')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b1ac90&gt;
+platform = 'linux', arm = False, placement = 'hoisted'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'
+E         
+E         Skipping 92 identical leading characters in diff, use -v to show
+E         - enai/codex-linux-x64/vendor/x86_64-unknown-linux-musl/bin/codex
+E         + enai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[hoisted-False-darwin]" time="0.008"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'&#10;  &#10;  Skipping 92 identical leading characters in diff, use -v to show&#10;  - enai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex&#10;  + enai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve5')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b1b7a0&gt;
+platform = 'darwin', arm = False, placement = 'hoisted'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'
+E         
+E         Skipping 92 identical leading characters in diff, use -v to show
+E         - enai/codex-darwin-x64/vendor/x86_64-apple-darwin/bin/codex
+E         + enai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[hoisted-True-linux]" time="0.006"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'&#10;  &#10;  Skipping 92 identical leading characters in diff, use -v to show&#10;  - enai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex&#10;  + enai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve6')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b19f40&gt;
+platform = 'linux', arm = True, placement = 'hoisted'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'
+E         
+E         Skipping 92 identical leading characters in diff, use -v to show
+E         - enai/codex-linux-arm64/vendor/aarch64-unknown-linux-musl/bin/codex
+E         + enai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[hoisted-True-darwin]" time="0.007"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'&#10;  &#10;  Skipping 92 identical leading characters in diff, use -v to show&#10;  - enai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex&#10;  + enai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve7')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b1a690&gt;
+platform = 'darwin', arm = True, placement = 'hoisted'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'
+E         
+E         Skipping 92 identical leading characters in diff, use -v to show
+E         - enai/codex-darwin-arm64/vendor/aarch64-apple-darwin/bin/codex
+E         + enai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[bundled-False-linux]" time="0.007"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'&#10;  &#10;  Skipping 93 identical leading characters in diff, use -v to show&#10;  - nai/codex/vendor/x86_64-unknown-linux-musl/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve8')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b1bc80&gt;
+platform = 'linux', arm = False, placement = 'bundled'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'
+E         
+E         Skipping 93 identical leading characters in diff, use -v to show
+E         - nai/codex/vendor/x86_64-unknown-linux-musl/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[bundled-False-darwin]" time="0.008"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'&#10;  &#10;  Skipping 93 identical leading characters in diff, use -v to show&#10;  - nai/codex/vendor/x86_64-apple-darwin/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve9')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b52090&gt;
+platform = 'darwin', arm = False, placement = 'bundled'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'
+E         
+E         Skipping 93 identical leading characters in diff, use -v to show
+E         - nai/codex/vendor/x86_64-apple-darwin/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[bundled-True-linux]" time="0.007"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'&#10;  &#10;  Skipping 94 identical leading characters in diff, use -v to show&#10;  - nai/codex/vendor/aarch64-unknown-linux-musl/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve10')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b52870&gt;
+platform = 'linux', arm = True, placement = 'bundled'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...usl/bin/codex'
+E         
+E         Skipping 94 identical leading characters in diff, use -v to show
+E         - nai/codex/vendor/aarch64-unknown-linux-musl/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_npm_codex_symlink_resolves_native_payload[bundled-True-darwin]" time="0.007"><failure message="AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'&#10;  &#10;  Skipping 94 identical leading characters in diff, use -v to show&#10;  - nai/codex/vendor/aarch64-apple-darwin/bin/codex&#10;  + nai/codex/bin/codex.js)">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_npm_codex_symlink_resolve11')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b53170&gt;
+platform = 'darwin', arm = True, placement = 'bundled'
+
+    @pytest.mark.parametrize('platform', ['linux', 'darwin'])
+    @pytest.mark.parametrize('arm', [False, True])
+    @pytest.mark.parametrize('placement', ['nested', 'hoisted', 'bundled'])
+    def test_npm_codex_symlink_resolves_native_payload(tmp_path, monkeypatch, platform, arm, placement):
+        from nexus_connector_core import discovery_layouts
+        monkeypatch.setattr(discovery_layouts, 'sys', SimpleNamespace(platform=platform), raising=False)
+        no_process(monkeypatch)
+        commands = tmp_path / 'prefix' / 'bin'
+        commands.mkdir(parents=True)
+        modules = commands.parent / 'lib/node_modules'
+        root = package(modules / '@openai/codex', '@openai/codex')
+        script = root / 'bin/codex.js'
+        script.parent.mkdir()
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        (commands / 'codex').symlink_to(script)
+        triple = ('aarch64' if arm else 'x86_64') + ('-apple-darwin' if platform == 'darwin' else '-unknown-linux-musl')
+        name = '@openai/codex-' + platform + ('-arm64' if arm else '-x64')
+        native_root = (root if placement == 'bundled' else
+                       package((root / 'node_modules' if placement == 'nested' else modules) / name, '@openai/codex'))
+        target = binary(native_root / 'vendor' / triple / 'bin/codex', platform=platform, arm=arm)
+        found, = discover_installations(adapter_ids=('codex_app_server',), path_env=str(commands)).candidates
+&gt;       assert found.executable == str(target.resolve()) and found.launch_script is None
+E       AssertionError: assert ('/tmp/pytest-.../bin/codex.js' == '/tmp/pytest-...win/bin/codex'
+E         
+E         Skipping 94 identical leading characters in diff, use -v to show
+E         - nai/codex/vendor/aarch64-apple-darwin/bin/codex
+E         + nai/codex/bin/codex.js)
+
+tests/test_posix_discovery_layouts.py:62: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_pi_layout_preserves_distinct_node_pairs_and_explicit_overlap[False]" time="0.006"><failure message="AssertionError: assert {('/tmp/pytes...li.js', None)} == {('/tmp/pytes...ndle/cli.js')}&#10;  &#10;  Extra items in the left set:&#10;  ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/prefix/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js', None)&#10;  Extra items in the right set:&#10;  ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/node-a/node', '/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/prefix/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js')&#10;  ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/node-b/node', '/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/...&#10;  &#10;  ...Full output truncated (2 lines hidden), use '-vv' to show">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f8519b1ac60&gt;
+managed = False
+
+    @pytest.mark.parametrize('managed', [False, True])
+    def test_pi_layout_preserves_distinct_node_pairs_and_explicit_overlap(tmp_path, monkeypatch, managed):
+        no_process(monkeypatch)
+        commands = tmp_path / 'agent/bin'
+        commands.mkdir(parents=True)
+        if managed:
+            (commands / 'pi-launcher.js').write_text('throw new Error("never execute");')
+            modules = commands.parent / 'install/releases/1.2.3/node_modules'
+        else:
+            modules = tmp_path / 'prefix/lib/node_modules'
+        root = package(modules / '@earendil-works/pi-coding-agent', '@earendil-works/pi-coding-agent')
+        script = root / 'dist/bundle/cli.js'
+        script.parent.mkdir(parents=True)
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        if managed:
+            (commands.parent / 'install/current-version').write_text('1.2.3')
+            (commands / 'pi').write_text('#!/bin/sh\nexit 1\n')
+            (commands / 'pi').chmod(0o755)
+        else:
+            (commands / 'pi').symlink_to(script)
+        nodes = [binary(tmp_path / name / 'node') for name in ('node-a', 'node-b')]
+        path = os.pathsep.join(map(str, [commands, *(node.parent for node in nodes), commands]))
+        found = discover_installations(adapter_ids=('pi_rpc',), path_env=path).candidates
+&gt;       assert {(item.executable, item.launch_script) for item in found} == {(str(node), str(script)) for node in nodes}
+E       AssertionError: assert {('/tmp/pytes...li.js', None)} == {('/tmp/pytes...ndle/cli.js')}
+E         
+E         Extra items in the left set:
+E         ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/prefix/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js', None)
+E         Extra items in the right set:
+E         ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/node-a/node', '/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/prefix/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js')
+E         ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/node-b/node', '/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti0/...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_posix_discovery_layouts.py:96: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_pi_layout_preserves_distinct_node_pairs_and_explicit_overlap[True]" time="0.007"><failure message="AssertionError: assert {('/tmp/pytes...in/pi', None)} == {('/tmp/pytes...ndle/cli.js')}&#10;  &#10;  Extra items in the left set:&#10;  ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti1/agent/bin/pi', None)&#10;  Extra items in the right set:&#10;  ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti1/node-b/node', '/tmp/pytest-of-jpbraga/pytest-31/tes..._layout_preserves_disti1/agent/install/releases/1.2.3/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js')&#10;  ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti1/node-a/node', '/tmp/pytest-of-jpbraga/pytest-31/tes..._layout_preserves_disti1/agent/install/releases/1.2.3/node_modules/@ear...&#10;  &#10;  ...Full output truncated (2 lines hidden), use '-vv' to show">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti1')
+monkeypatch = &lt;_pytest.monkeypatch.MonkeyPatch object at 0x7f851a0a0680&gt;
+managed = True
+
+    @pytest.mark.parametrize('managed', [False, True])
+    def test_pi_layout_preserves_distinct_node_pairs_and_explicit_overlap(tmp_path, monkeypatch, managed):
+        no_process(monkeypatch)
+        commands = tmp_path / 'agent/bin'
+        commands.mkdir(parents=True)
+        if managed:
+            (commands / 'pi-launcher.js').write_text('throw new Error("never execute");')
+            modules = commands.parent / 'install/releases/1.2.3/node_modules'
+        else:
+            modules = tmp_path / 'prefix/lib/node_modules'
+        root = package(modules / '@earendil-works/pi-coding-agent', '@earendil-works/pi-coding-agent')
+        script = root / 'dist/bundle/cli.js'
+        script.parent.mkdir(parents=True)
+        script.write_text('#!/usr/bin/env node\nthrow new Error("never execute");')
+        script.chmod(0o755)
+        if managed:
+            (commands.parent / 'install/current-version').write_text('1.2.3')
+            (commands / 'pi').write_text('#!/bin/sh\nexit 1\n')
+            (commands / 'pi').chmod(0o755)
+        else:
+            (commands / 'pi').symlink_to(script)
+        nodes = [binary(tmp_path / name / 'node') for name in ('node-a', 'node-b')]
+        path = os.pathsep.join(map(str, [commands, *(node.parent for node in nodes), commands]))
+        found = discover_installations(adapter_ids=('pi_rpc',), path_env=path).candidates
+&gt;       assert {(item.executable, item.launch_script) for item in found} == {(str(node), str(script)) for node in nodes}
+E       AssertionError: assert {('/tmp/pytes...in/pi', None)} == {('/tmp/pytes...ndle/cli.js')}
+E         
+E         Extra items in the left set:
+E         ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti1/agent/bin/pi', None)
+E         Extra items in the right set:
+E         ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti1/node-b/node', '/tmp/pytest-of-jpbraga/pytest-31/tes..._layout_preserves_disti1/agent/install/releases/1.2.3/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js')
+E         ('/tmp/pytest-of-jpbraga/pytest-31/test_pi_layout_preserves_disti1/node-a/node', '/tmp/pytest-of-jpbraga/pytest-31/tes..._layout_preserves_disti1/agent/install/releases/1.2.3/node_modules/@ear...
+E         
+E         ...Full output truncated (2 lines hidden), use '-vv' to show
+
+tests/test_posix_discovery_layouts.py:96: AssertionError</failure></testcase><testcase classname="tests.test_posix_discovery_layouts" name="test_unknown_executable_wrapper_is_not_interpreted" time="0.004" /></testsuite></testsuites>

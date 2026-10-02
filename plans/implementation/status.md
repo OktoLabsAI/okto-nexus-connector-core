@@ -1,3 +1,19 @@
+## Core .56 POSIX discovery preparation — 2026-10-02
+
+See [DISCOVERY_056](../DISCOVERY_056.md) for passive physical-payload resolution,
+official npm before/after evidence and installed Windows/Linux campaigns.
+The initial Linux suite exposed two test-fixture issues; both original failures
+are retained and the focused reviewed checks pass. The reviewed complete Linux
+suite passed 1192 tests/24 skips; Windows passed 1121/95. Clean-wheel imports,
+contract resources and Core consumer smokes passed. Consumers still use .55; no release
+gate or independent-host acceptance is closed by this increment.
+
+Hosted .55 run 37000873878 completed five successful matrix cells but Windows
+Python 3.11 failed `test_retained_ledger_does_not_delay_other_resource_force`.
+That retained-obligation failure remains unresolved. Run 37001262922 was still
+queued/partially completed when checked; a successful Windows 3.12 cell alone
+does not qualify the matrix.
+
 ## Core .55 hosted reconciliation — 2026-10-02
 
 Core `beed295` fixes duplicate PATH/explicit Pi discovery, following the .54

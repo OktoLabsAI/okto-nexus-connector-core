@@ -1,8 +1,9 @@
-"""Passive Windows package layouts; no shell or JavaScript is interpreted."""
+"""Passive installed package layouts; no shell or JavaScript is interpreted."""
 import json
 import os
 from pathlib import Path
 import re
+import sys
 
 from .discovery_control import check_discovery_cancelled
 
@@ -87,3 +88,58 @@ def windows_layout_targets(adapter_id, directories):
                     script = package / 'dist' / 'bundle' / 'cli.js'
                     for node in nodes:
                         yield node, script
+
+
+def posix_layout_targets(adapter_id, directories):
+    """Map fixed npm symlink/managed layouts to payloads and their launcher.
+
+    No PATH shell text or package-controlled command is evaluated. A successful
+    physical candidate supersedes its non-native launcher in the final inventory.
+    """
+    if os.name == 'nt' or sys.platform not in ('linux', 'darwin'):
+        return
+    nodes = [directory / 'node' for directory in directories
+             if (directory / 'node').is_file()]
+    command_name = {'codex_app_server': 'codex', 'pi_rpc': 'pi'}.get(adapter_id)
+    if command_name is None:
+        return
+    for directory in directories:
+        check_discovery_cancelled()
+        launcher = directory / command_name
+        try:
+            resolved = launcher.resolve(strict=True)
+        except (OSError, RuntimeError):
+            continue
+        if adapter_id == 'codex_app_server':
+            if tuple(resolved.parts[-2:]) != ('bin', 'codex.js'):
+                continue
+            package = resolved.parent.parent
+            if not _package(package, '@openai/codex'):
+                continue
+            suffix = '-apple-darwin' if sys.platform == 'darwin' else '-unknown-linux-musl'
+            for arch, cpu in (('x64', 'x86_64'), ('arm64', 'aarch64')):
+                name = '@openai/codex-' + sys.platform + '-' + arch
+                for root in (package / 'node_modules' / name,
+                             package.parent.parent / name):
+                    if _package(root, name) or _package(root, '@openai/codex'):
+                        for folder in ('bin', 'codex'):
+                            yield root / 'vendor' / (cpu + suffix) / folder / 'codex', None, resolved
+                for folder in ('bin', 'codex'):
+                    yield package / 'vendor' / (cpu + suffix) / folder / 'codex', None, resolved
+        elif adapter_id == 'pi_rpc':
+            packages = []
+            if tuple(resolved.parts[-3:]) == ('dist', 'bundle', 'cli.js'):
+                packages.append(resolved.parents[2])
+            install = directory.parent / 'install'
+            if directory.name == 'bin' and (directory / 'pi-launcher.js').is_file():
+                try:
+                    version = _text(install / 'current-version', 160).strip()
+                    if version not in ('.', '..') and re.fullmatch(r'[0-9A-Za-z._+-]+', version):
+                        packages.append(install / 'releases' / version / 'node_modules' /
+                                        '@earendil-works' / 'pi-coding-agent')
+                except (OSError, ValueError):
+                    pass
+            for package in packages:
+                if _package(package, '@earendil-works/pi-coding-agent'):
+                    for node in nodes:
+                        yield node, package / 'dist' / 'bundle' / 'cli.js', resolved

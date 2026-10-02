@@ -150,14 +150,27 @@ def test_pending_effects_bound_admission_after_clients_time_out(monkeypatch):
     asyncio.run(run())
 
 
-def test_idle_client_is_closed_without_a_domain_effect():
+def test_idle_client_is_closed_without_a_domain_effect(monkeypatch):
     async def run():
         service, backend = _service()
+        accepted = asyncio.Event()
+        original_accept = service._accept
+
+        def accept(reader, writer):
+            original_accept(reader, writer)
+            assert writer in service._writers
+            accepted.set()
+
+        monkeypatch.setattr(service, "_accept", accept)
         port = await service.start()
         reader, writer = await asyncio.open_connection("127.0.0.1", port)
+        # A client-side TCP handshake does not prove server-side admission.
+        # Exercise shutdown of an owned idle socket, not a queued handshake.
+        await asyncio.wait_for(accepted.wait(), 2)
         assert await service.close(timeout_seconds=2)
-        assert await reader.read() == b""
+        assert await asyncio.wait_for(reader.read(), 2) == b""
         assert not backend.calls
+        assert not service._handlers and not service._writers
         writer.close()
         await writer.wait_closed()
     asyncio.run(run())
