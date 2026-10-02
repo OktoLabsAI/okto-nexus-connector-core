@@ -12,6 +12,12 @@ hosted-status guidance are corrected; the historical entries below retain their
 original scope and do not override this current status. Full green hosted
 qualification and release gates remain open.
 
+The public-documentation correction passed all three checks against the installed
+.55 wheel on Windows Python 3.13.1 and WSL Linux Python 3.12.13. Evidence:
+`evidence/docs-055-installed.xml`, `evidence/docs-055-linux-installed.xml` and
+`evidence/hosted-055-terminal.json`. These checks do not replace the pending
+hosted rebuild/offline-install qualification after documentation correction.
+
 ## Core 0.2.52.dev0 — exact maximum lease boundary
 
 Corrects floating-point subtraction drift that could reject a valid 120-second lease on Windows. Compare the absolute deadline with now plus the maximum instead; no tolerance or extra lease duration is granted. The regression rejects the immediately larger representable deadline before native open. Installed wheel verification: 63 runtime tests passed in a new Python 3.13 environment outside the checkout. See evidence/lease-boundary-052.json. Consumer pins and integrated tests remain pending.
