@@ -1,0 +1,32 @@
+{
+  "timestamp": "2026-10-02T15:01:32.626417+00:00",
+  "script_sha256": "f09fae953c9b2e7c1e58a2a48691dac0f3a5c19d7b257644c98158406dc70c60",
+  "native_macos_tested": false,
+  "containment_qualified": false,
+  "runs": [
+    {
+      "command": [
+        "python",
+        "-I",
+        "tests/test_macos_launchd_probe.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "test_exact_abi_returns_both_ids (__main__.AbiTests.test_exact_abi_returns_both_ids) ... ok\ntest_job_is_one_shot_and_only_runs_isolated_probe (__main__.AbiTests.test_job_is_one_shot_and_only_runs_isolated_probe) ... ok\ntest_missing_coalition_refuses_membership (__main__.AbiTests.test_missing_coalition_refuses_membership) ... ok\ntest_non_mac_refuses_before_job_or_fixture (__main__.AbiTests.test_non_mac_refuses_before_job_or_fixture) ... ok\ntest_partial_or_future_abi_refuses_membership (__main__.AbiTests.test_partial_or_future_abi_refuses_membership) ... ok\ntest_fixed_fixture_native_pipe_handoff_and_descriptor_hygiene (__main__.PipeTests.test_fixed_fixture_native_pipe_handoff_and_descriptor_hygiene) ... skipped 'Unix descriptor handoff required'\ntest_fragmented_control_metadata_is_reassembled (__main__.PipeTests.test_fragmented_control_metadata_is_reassembled) ... skipped 'Unix descriptor handoff required'\ntest_rejected_handoff_closes_received_fds (__main__.PipeTests.test_rejected_handoff_closes_received_fds) ... skipped 'Unix descriptor handoff required'\n\n----------------------------------------------------------------------\nRan 8 tests in 0.644s\n\nOK (skipped=3)\n"
+    },
+    {
+      "command": [
+        "wsl",
+        "--",
+        "/tmp/nexus-load-diagnosis-2162908-py312/bin/python",
+        "-I",
+        "/mnt/d/Projetos/Techridy/okto-nexus-connector-core/tests/test_macos_launchd_probe.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": "test_exact_abi_returns_both_ids (__main__.AbiTests.test_exact_abi_returns_both_ids) ... ok\ntest_job_is_one_shot_and_only_runs_isolated_probe (__main__.AbiTests.test_job_is_one_shot_and_only_runs_isolated_probe) ... ok\ntest_missing_coalition_refuses_membership (__main__.AbiTests.test_missing_coalition_refuses_membership) ... ok\ntest_non_mac_refuses_before_job_or_fixture (__main__.AbiTests.test_non_mac_refuses_before_job_or_fixture) ... ok\ntest_partial_or_future_abi_refuses_membership (__main__.AbiTests.test_partial_or_future_abi_refuses_membership) ... ok\ntest_fixed_fixture_native_pipe_handoff_and_descriptor_hygiene (__main__.PipeTests.test_fixed_fixture_native_pipe_handoff_and_descriptor_hygiene) ... ok\ntest_fragmented_control_metadata_is_reassembled (__main__.PipeTests.test_fragmented_control_metadata_is_reassembled) ... ok\ntest_rejected_handoff_closes_received_fds (__main__.PipeTests.test_rejected_handoff_closes_received_fds) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 0.182s\n\nOK\n"
+    }
+  ]
+}

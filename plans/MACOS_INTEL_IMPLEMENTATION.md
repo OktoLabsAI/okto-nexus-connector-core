@@ -84,6 +84,50 @@ The headers explain the indices; they do not prove that comparing both IDs is
 the correct ownership guarantee. These sources were reviewed on 2026-10-02;
 the report for `1975e88` remains unchanged and still describes its original code.
 
+## Next native experiment: launchd and pipe transfer
+
+The next launchd/pipe experiment is now available separately; use the commands
+below before repeating the original scenarios. It does not change production
+preflight or provider support.
+
+```sh
+git pull --ff-only origin feature/v0.2.0
+python3 -I tools/macos_launchd_probe.py --run-native --domain user --output macos-launchd-user.json
+python3 -I tools/macos_launchd_probe.py --run-native --domain gui --output macos-launchd-gui.json
+```
+
+Run in the Core checkout on the same Intel Mac. Record whether the shell is a
+local terminal, SSH session or LaunchAgent context. Both JSON reports matter,
+including failures: user/gui domain accessibility is part of the observation.
+The program needs only Python's standard library, no package install or sudo.
+It creates three unique temporary launchd jobs per invocation with generated
+plists, `RunAtLoad=true`, `KeepAlive=false` and `launchctl bootstrap`, then uses
+`bootout` and a follow-up query to inspect removal. It runs fixed Python fixtures
+only, not provider binaries, credentials or workspace code.
+
+The job transfers three native pipe descriptors over AF_UNIX `SCM_RIGHTS`.
+The caller verifies stdin/stdout round trip, separate stderr, child/grandchild
+descriptor hygiene and non-inheritable received descriptors. The guardian checks
+the exact 40-byte coalition ABI and refuses either coalition type shared with
+the caller or PID 1. An independently killable synthetic owner permits three
+shutdown experiments: explicit cancel, owner SIGKILL while the observer keeps
+the control socket open, and control-socket EOF. kqueue registration brackets
+owner birth checks before native launch.
+
+All native fixtures have alarms. The guardian reaps its fixed direct child; the
+fixture reaps its own short-lived grandchild before acknowledging the round trip.
+This experiment does **not** yet implement arbitrary coalition census, escaped
+orphan cleanup, SIGSTOP/fork race handling, production Popen integration or slot
+retention. The observer removes the job labels; autonomous label removal after
+the entire observer/daemon crashes remains a separate acceptance item. Reports
+retain `tree_stop_proven=false` and `containment_qualified=false` even on success.
+
+Portable validation is in
+`implementation/evidence/macos-launchd-probe-portable.json`: eight unittest cases,
+five passes/three Unix-only skips on Windows and eight passes on WSL Python 3.12,
+including actual fixture pipe transfer. Native launchd, coalition and kqueue
+behavior remain unexecuted here. The Windows refusal JSON is retained separately.
+
 ## Original primitive probe (historical first step)
 
 From an updated `okto-nexus-connector-core` checkout on `feature/v0.2.0`:
