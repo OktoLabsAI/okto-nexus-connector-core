@@ -41,8 +41,9 @@ time. No provider ran and `containment_qualified` remains false.
    It matches the pair of resource/jetsam IDs, accepts any positive ABI response
    length, and tests the known orphan's survival after a bounded kill loop.
    These are diagnostic observations, not a complete production stop proof.
-   Confirm the flavor-20 ABI and coalition type against Apple's headers; do not
-   infer which of the two reported coalition IDs establishes ownership.
+   The header review below confirms flavor 20's layout and indices. Establish
+   which coalition membership is sufficient for ownership under all supported
+   native scenarios before selecting a production tree key.
 2. Prototype a unique per-session launchd guardian job using a generated plist,
    `KeepAlive=false`, and `launchctl bootstrap`. Test user/gui domains including
    SSH and LaunchAgent ownership. Refuse caller/shared/launchd coalitions before
@@ -68,6 +69,20 @@ to external launchd/XPC services outside the runtime coalition. This report does
 not authorize weakening ownership or establish that two empty snapshots prove
 termination under every race. Apple Silicon, other macOS versions, hosted CI,
 provider qualification and independent-host acceptance remain uncovered.
+
+### ABI review for the next prototype
+
+Apple's [private process header](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/sys/proc_info_private.h)
+defines flavor 20 as a structure containing the coalition-ID array and three
+reserved 64-bit fields. Its [Mach coalition header](https://github.com/apple-oss-distributions/xnu/blob/main/osfmk/mach/coalition.h)
+defines two types: resource at index 0 and jetsam at index 1. Thus the currently
+documented structure is 40 bytes. The original probe allocates 64 bytes and
+accepts any positive response length. A production implementation must validate
+the expected response length, rather than treating a partial read as membership.
+This is a private ABI dependency that needs explicit native version coverage.
+The headers explain the indices; they do not prove that comparing both IDs is
+the correct ownership guarantee. These sources were reviewed on 2026-10-02;
+the report for `1975e88` remains unchanged and still describes its original code.
 
 ## Original primitive probe (historical first step)
 
