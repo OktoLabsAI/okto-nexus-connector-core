@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "platform": "darwin",
+  "machine": "x86_64",
+  "python": "3.12.4",
+  "macos": "26.4.1",
+  "script_sha256": "f09fae953c9b2e7c1e58a2a48691dac0f3a5c19d7b257644c98158406dc70c60",
+  "containment_qualified": false,
+  "provider_execution": false,
+  "tree_stop_proven": false,
+  "scenarios": [
+    {
+      "domain": "user/501",
+      "mode": "cancel",
+      "label": "ai.oktolabs.nexus-pipes-probe.24479.2e6b6c0899b0",
+      "containment_qualified": false,
+      "bootstrap": {
+        "returncode": 5,
+        "stderr": "Bootstrap failed: 5: Input/output error\nTry re-running the command as root for richer errors.\n"
+      },
+      "status": "FAILED",
+      "error": "RuntimeError: launchctl bootstrap refused the requested domain",
+      "bootout_returncode": 3,
+      "post_bootout_print": {
+        "returncode": 113,
+        "stderr": "Bad request.\nCould not find service \"ai.oktolabs.nexus-pipes-probe.24479.2e6b6c0899b0\" in domain for uid: 501\n"
+      },
+      "label_left_registered": null
+    },
+    {
+      "domain": "user/501",
+      "mode": "owner_exit",
+      "label": "ai.oktolabs.nexus-pipes-probe.24479.ad385b748b6b",
+      "containment_qualified": false,
+      "bootstrap": {
+        "returncode": 5,
+        "stderr": "Bootstrap failed: 5: Input/output error\nTry re-running the command as root for richer errors.\n"
+      },
+      "status": "FAILED",
+      "error": "RuntimeError: launchctl bootstrap refused the requested domain",
+      "bootout_returncode": 3,
+      "post_bootout_print": {
+        "returncode": 113,
+        "stderr": "Bad request.\nCould not find service \"ai.oktolabs.nexus-pipes-probe.24479.ad385b748b6b\" in domain for uid: 501\n"
+      },
+      "label_left_registered": null
+    },
+    {
+      "domain": "user/501",
+      "mode": "control_eof",
+      "label": "ai.oktolabs.nexus-pipes-probe.24479.0e2a7419e364",
+      "containment_qualified": false,
+      "bootstrap": {
+        "returncode": 5,
+        "stderr": "Bootstrap failed: 5: Input/output error\nTry re-running the command as root for richer errors.\n"
+      },
+      "status": "FAILED",
+      "error": "RuntimeError: launchctl bootstrap refused the requested domain",
+      "bootout_returncode": 3,
+      "post_bootout_print": {
+        "returncode": 113,
+        "stderr": "Bad request.\nCould not find service \"ai.oktolabs.nexus-pipes-probe.24479.0e2a7419e364\" in domain for uid: 501\n"
+      },
+      "label_left_registered": null
+    }
+  ],
+  "status": "FAILED"
+}
