@@ -244,6 +244,22 @@ This option requires an explicit close policy and is not a wire payload field.
 
 ## Durable R4 receipt bindings
 
+The public functions are `prepare_r4_receipt_binding`,
+`validate_r4_receipt_binding` and `project_r4_bound_receipt`.
+
 `prepare_r4_receipt_binding(frame, context, prepared=..., stream_epoch=..., applied_operation=...)` verifies the dispatched semantic and returns a schema-1, non-secret record associating its R4 hash with the exact Core hash. Supply prepared launch/stream for open and the typed native decision for approval/input. The trusted host must commit this record before calling the runtime. It contains no prompt, response, native request, executable path, environment or credential.
 
 After restart, read `Journal.get_receipt(OperationKey(...))` and call `project_r4_bound_receipt(binding, receipt, key=key, receipt_revision=...)`. This validates the stored digest, namespace, operation/session IDs and Core hash, and preserves the original source connection. `validate_r4_receipt_binding` returns a detached checked record for storage readers. The digest detects corruption, not hostile forgery: these are trusted local records, not network authority. No API creates a receipt from absence, renews a lease, restores a native handle or authorizes replay. Missing or legacy associations remain unresolved.
+
+## Resource release and passive discovery cancellation
+
+`OwnedSlotState` records the historical session reservation and release fact;
+it never grants authority over a live process. `project_r4_resource_release`
+requires matching receipt binding, claimed session, released owned slot and
+opening receipt before projecting an EXITED resource proof. It rejects mismatched
+scope and unresolved opening outcomes. `r4_resource_release_digest` computes the
+scoped proof digest; a digest alone is not evidence that a process stopped.
+
+`DiscoveryCancelled` reports that the host stopped passive observation before
+receiving an inventory. Hosts should retain shutdown ownership and distinguish
+cancellation from an empty successful inventory; it does not authorize a launch.

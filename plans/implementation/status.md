@@ -1,3 +1,7 @@
+# CI documentation and checkout correction — 2026-10-01
+
+Hosted run 36868353381 failed Windows R3 byte checks after CRLF checkout conversion and Linux public-documentation checks. The R3 JSON bundle now explicitly uses LF, as the R4 bundle already did; no contract bytes or protocol semantics changed. Public API/compatibility docs now cover the current 0.2.51.dev0 exports. Local validation: 3 public-doc tests passed and contracts/generate.py --check passed. Hosted re-execution and the isolated Pi optional-dependency probe timeout remain unverified; this does not close release qualification.
+
 ## September 30, 2026 — Owned late close completion
 
 Core 0.2.34.dev0 adds explicit retained completion observation for policy close. Installed focused regression: 78 passed. Physical deadlines are unchanged; storage errors propagate. See evidence/late-close-owner-20260930.md. Full acceptance remains open.
