@@ -1,1 +1,1 @@
-"""Independent NXL R4 development bundle."""
+"""Independent executable NXL R4 contract bundle."""

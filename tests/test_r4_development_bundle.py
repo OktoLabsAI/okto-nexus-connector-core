@@ -8,9 +8,9 @@ import json
 import pytest
 
 from nexus_connector_core import (
-    CONTRACT_REVISION, R4_BUNDLE_EXECUTABLE, R4_PREVIEW_REVISION,
+    CONTRACT_REVISION, R4_BUNDLE_EXECUTABLE, R4_PREVIEW_REVISION, R4_CONTRACT_REVISION,
     decode_r4_frame, encode_r4_frame, r4_submit_intent_hash,
-    verify_r4_development_bundle,
+    verify_r4_development_bundle, verify_r4_bundle,
     SNAPSHOT_FORMAT_VERSION,
 )
 from nexus_connector_core.frame_codec import decode_frame
@@ -41,11 +41,12 @@ def open_frame() -> dict:
     return frame
 
 
-def test_partial_bundle_is_integral_but_not_executable():
+def test_executable_bundle_preserves_historical_revision_and_preview_alias():
     info = verify_r4_development_bundle()
-    assert info["revision"] == R4_PREVIEW_REVISION
-    assert info["status"] == "development-partial"
-    assert info["executable"] is R4_BUNDLE_EXECUTABLE is False
+    assert info == verify_r4_bundle()
+    assert info["revision"] == R4_PREVIEW_REVISION == R4_CONTRACT_REVISION
+    assert info["status"] == "executable"
+    assert info["executable"] is R4_BUNDLE_EXECUTABLE is True
     assert CONTRACT_REVISION.endswith("-r3")
     assert "operation.submit" in info["supported_frames"]
     assert "binding.attach" in info["supported_frames"]

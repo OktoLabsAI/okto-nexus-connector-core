@@ -1,8 +1,7 @@
-"""Strict, effect-free codec for the independent NXL R4 development bundle.
+"""Strict, effect-free codec for the independent executable NXL R4 bundle.
 
-The R3 codec and its historical hashes are untouched. This module remains
-development-partial until every R4 frame/action and reducer is implemented;
-hosts must not advertise it as a negotiated executable revision yet.
+The R3 codec and its historical hashes are untouched. Contract conformance
+does not qualify a provider or automatically enable execution in a host.
 """
 
 from __future__ import annotations
@@ -19,8 +18,10 @@ from .frame_codec import MAX_FRAME_BYTES, _preflight_encode
 from .models import CoreError
 from .protocol import canonical_json, strict_json
 
-R4_PREVIEW_REVISION = "nxl-1-agent-centric-http-only-2026-09-29-r4"
-R4_BUNDLE_EXECUTABLE = False
+R4_CONTRACT_REVISION = "nxl-1-agent-centric-http-only-2026-09-29-r4"
+# Compatibility name used by development consumers; the wire bytes are stable.
+R4_PREVIEW_REVISION = R4_CONTRACT_REVISION
+R4_BUNDLE_EXECUTABLE = True
 MAX_OPERATION_PAYLOAD_BYTES = 65536
 MAX_JSON_DEPTH = 64
 
@@ -34,7 +35,8 @@ def _resources() -> tuple[Draft202012Validator, dict[str, Any], str]:
     inventory_bytes = folder.joinpath("inventory.schema.json").read_bytes()
     if (manifest.get("revision") != R4_PREVIEW_REVISION or
             manifest.get("protocol_major") != 1 or
-            manifest.get("status") != "development-partial" or
+            manifest.get("status") != "executable" or
+            manifest.get("unsupported_actions") != [] or
             manifest.get("files") != {"frame.schema.json":
                 "sha256:" + hashlib.sha256(schema_bytes).hexdigest(),
                 "inventory.schema.json":
@@ -46,13 +48,18 @@ def _resources() -> tuple[Draft202012Validator, dict[str, Any], str]:
             "sha256:" + hashlib.sha256(manifest_bytes).hexdigest())
 
 
-def verify_r4_development_bundle() -> dict[str, Any]:
+def verify_r4_bundle() -> dict[str, Any]:
     """Return verified manifest facts; never a claim of runtime readiness."""
     _, manifest, digest = _resources()
     return {"manifest_sha256": digest, "revision": manifest["revision"],
             "status": manifest["status"],
             "supported_frames": tuple(manifest["supported_frames"]),
             "executable": R4_BUNDLE_EXECUTABLE}
+
+
+def verify_r4_development_bundle() -> dict[str, Any]:
+    """Compatibility alias for consumers of the development bundle API."""
+    return verify_r4_bundle()
 
 
 def _check_depth(value: Any) -> None:

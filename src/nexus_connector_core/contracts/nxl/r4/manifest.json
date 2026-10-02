@@ -6,7 +6,7 @@
   "management_revision": "nexus-connections-2026-09-29-r4",
   "protocol_major": 1,
   "revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
-  "status": "development-partial",
+  "status": "executable",
   "supported_frames": [
     "hello",
     "welcome",

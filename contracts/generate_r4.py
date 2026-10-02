@@ -407,7 +407,7 @@ def generated_files() -> dict[str, bytes]:
     manifest = {
         "revision": REVISION, "protocol_major": 1,
         "management_revision": MANAGEMENT,
-        "status": "development-partial",
+        "status": "executable",
         "supported_frames": [item["title"] for item in build_schema()["oneOf"]],
         "unsupported_actions": [],
         "files": {"frame.schema.json":
@@ -416,7 +416,7 @@ def generated_files() -> dict[str, bytes]:
                   "sha256:" + hashlib.sha256(inventory_bytes).hexdigest()},
     }
     return {
-        "__init__.py": b'"""Independent NXL R4 development bundle."""\n',
+        "__init__.py": b'"""Independent executable NXL R4 contract bundle."""\n',
         "frame.schema.json": schema_bytes,
         "inventory.schema.json": inventory_bytes,
         "manifest.json": (json.dumps(manifest, sort_keys=True, ensure_ascii=False,
