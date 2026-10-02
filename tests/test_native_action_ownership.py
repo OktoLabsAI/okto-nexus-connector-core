@@ -45,8 +45,26 @@ def test_observation_timeout_preserves_mutation_and_identity(monkeypatch):
                                     retry_safe=False, operation_id="original-id")
             assert service.pending_count == 1 and not backend.cancelled
             assert await service.close(timeout_seconds=.01) is False
-            with pytest.raises((ConnectionError, OSError)):
-                await asyncio.open_connection("127.0.0.1", port)
+            try:
+                reader, writer = await asyncio.open_connection("127.0.0.1", port)
+            except (ConnectionError, OSError):
+                pass
+            else:
+                # Windows may complete a queued TCP handshake after close.
+                # The application must reject it without admitting an effect.
+                try:
+                    writer.write(json.dumps(claim() | {"operation_id": "late-id"}).encode() + b"\n")
+                    await writer.drain()
+                    assert await asyncio.wait_for(reader.read(), 2) == b""
+                except (ConnectionError, OSError):
+                    pass
+                finally:
+                    writer.close()
+                    try:
+                        await writer.wait_closed()
+                    except (ConnectionError, OSError):
+                        pass
+                assert backend.calls == ['original-id']
             assert service.pending_count == 1
             backend.release.set()
             assert await service.close(timeout_seconds=2) is True

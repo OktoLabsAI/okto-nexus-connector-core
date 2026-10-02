@@ -85,6 +85,9 @@ def test_rc_07_02_thousand_cycles_release_adapters_in_batches(tmp_path):
             prepared = await runtime.prepare(
                 LaunchIntent("agent", "ws", "codex_app_server"), authority)
             for cycle in range(1000):
+                # Each new session receives fresh fixture authority; the load
+                # campaign can exceed the original 60-second lease on CI.
+                authority = _context()
                 await runtime.open(OpenOperation(
                     f"open-{cycle}", f"session-{cycle}", f"epoch-{cycle}",
                     prepared), authority)
