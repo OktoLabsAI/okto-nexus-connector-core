@@ -7,7 +7,69 @@ It does not accept a weaker process ownership contract, qualify Apple Silicon,
 or replace the later user-operated independent-host acceptance. CI remains
 deferred at the user's request.
 
-## First native evidence
+## Native scenario evidence received — 2026-10-02
+
+Core issue #1, updated at `2026-10-02T14:09:23Z`, now contains a user-operated
+Intel Mac report. The exact JSON and issue snapshot are retained under
+`implementation/evidence/macos-intel-scenarios-reported-20261002.json` and
+`implementation/evidence/macos-intel-issue-1-20261002.json`, with provenance in
+`implementation/evidence/macos-intel-scenarios-source-20261002.json`.
+The extended script hash is
+`a318878f108c2c1099cf40ed748420df65054109d3cef1cb5b82ab85235f0c1b`.
+The user subsequently published `1975e88`, incorporated by fast-forward. Its
+Git blob SHA-256 exactly matches the reported script hash, and the committed
+report is structurally identical to the issue JSON. Windows checkout CRLF bytes
+have a different hash; provenance was checked against the Git blob. Syntax was
+checked locally; the native scenarios were run by the user on the Mac.
+
+The report disproves parent-based tracking: fast double-fork plus `setsid`
+escaped both event-driven tracking and roughly 2 ms polling in 24/24 runs.
+Do not implement that tracker as an ownership guarantee. Dedicated launchd job
+coalition membership found 10/10 escaped orphans and the coalition kill pass
+left zero alive. Removing the launchd job alone left all ten alive. Final probe
+cleanup reports no surviving fixtures or registered probe labels.
+
+Owner `NOTE_EXIT` still arrived when an inherited pipe writer prevented EOF.
+Use owner birth verification and kqueue exit registration as the primary death
+signal; a launchd guardian already has PID 1 as parent, so reparenting is not a
+death signal. The reported 1.5 s cleanup delay was deliberate probe collection
+time. No provider ran and `containment_qualified` remains false.
+
+### Revised implementation sequence
+
+1. The exact extended probe is incorporated and its coalition scenario reviewed.
+   It matches the pair of resource/jetsam IDs, accepts any positive ABI response
+   length, and tests the known orphan's survival after a bounded kill loop.
+   These are diagnostic observations, not a complete production stop proof.
+   Confirm the flavor-20 ABI and coalition type against Apple's headers; do not
+   infer which of the two reported coalition IDs establishes ownership.
+2. Prototype a unique per-session launchd guardian job using a generated plist,
+   `KeepAlive=false`, and `launchctl bootstrap`. Test user/gui domains including
+   SSH and LaunchAgent ownership. Refuse caller/shared/launchd coalitions before
+   starting a provider. Never treat `launchctl remove` as a stop proof.
+3. Validate native stdin/stdout/stderr transfer over AF_UNIX `SCM_RIGHTS`, owner
+   death including leaked liveness descriptors, and cleanup of job labels on
+   normal stop, crash and failed startup.
+4. Implement bounded coalition census with birth and coalition revalidation
+   before signaling, excluding the guardian itself. Incomplete scans, permission
+   failures and overflow must not count as an empty tree. Validate SIGSTOP/fork
+   races and the proposed two-empty-census stop condition before emitting `D`.
+   The measured verify/signal window does not eliminate PID reuse races.
+5. Keep production preflight unsupported until ownership is qualified. Passive
+   preflight must execute no provider wrapper; successful ABI checks alone do
+   not qualify containment. Keep process-count limits observability-only.
+6. Run at least 100 fast double-fork/setsid cases with zero leaks, owner SIGKILL,
+   cancellation escalation, descriptor hygiene, shared-coalition refusal,
+   64-child census/overflow, and 32-slot retention until proven stop. Then run
+   provider and integrated acceptance separately.
+
+An explicit contract decision and native evidence remain necessary for requests
+to external launchd/XPC services outside the runtime coalition. This report does
+not authorize weakening ownership or establish that two empty snapshots prove
+termination under every race. Apple Silicon, other macOS versions, hosted CI,
+provider qualification and independent-host acceptance remain uncovered.
+
+## Original primitive probe (historical first step)
 
 From an updated `okto-nexus-connector-core` checkout on `feature/v0.2.0`:
 
@@ -31,8 +93,8 @@ report `containment_qualified: false`; production preflight remains unchanged.
 
 Local verification: syntax and 136-byte ABI layout/start-time offset checked on
 Windows Python 3.13.1; the non-Mac refusal report is retained in
-`implementation/evidence/macos-probe-windows-refusal.json`. No native Mac result
-exists yet.
+`implementation/evidence/macos-probe-windows-refusal.json`. Native scenario
+results have subsequently arrived as recorded above.
 
 ## Implementation acceptance still required
 

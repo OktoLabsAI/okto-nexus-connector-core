@@ -1,0 +1,267 @@
+{
+  "schema_version": 1,
+  "platform": "darwin",
+  "machine": "x86_64",
+  "python": "3.12.4",
+  "macos": "26.4.1",
+  "script_sha256": "a318878f108c2c1099cf40ed748420df65054109d3cef1cb5b82ab85235f0c1b",
+  "containment_qualified": false,
+  "provider_execution": false,
+  "status": "SCENARIOS_OBSERVED",
+  "checks": {
+    "self_identity": {
+      "pid": 10144,
+      "ppid": 10141,
+      "pgid": 10141,
+      "birth": [
+        1790950055,
+        392592
+      ],
+      "abi_size": 136
+    },
+    "child_identity": {
+      "pid": 10145,
+      "ppid": 10144,
+      "pgid": 10145,
+      "birth": [
+        1790950055,
+        485848
+      ],
+      "abi_size": 136
+    },
+    "boot_identity_sha256": "74d886e70742fda86c4537cd3a38b876bfe818ced2d60812f0e4b88abe370900",
+    "events": [
+      {
+        "ident": 10145,
+        "filter": -5,
+        "flags": 37,
+        "fflags": 1073741824,
+        "data": 0
+      },
+      {
+        "ident": 10145,
+        "filter": -5,
+        "flags": 32821,
+        "fflags": 2147483648,
+        "data": 0
+      }
+    ],
+    "private_process_group": true,
+    "fixture_reaped": true
+  },
+  "scenarios": {
+    "setsid_escape": {
+      "status": "OBSERVED",
+      "escaped_pid_left_group": true,
+      "escaped_pgid_equals_own_pid": true,
+      "tracker_admitted_escaped": true,
+      "tracker_admit_latency_ms": 5.25,
+      "tracker_errors": [],
+      "scans": 2,
+      "survives_killpg_of_leader_group": true,
+      "escaped_reparented_to_pid": 1,
+      "tracker_kill": {
+        "empty": true,
+        "rounds": 2,
+        "signalled": 1,
+        "seconds": 0.0085
+      },
+      "kqueue_exit_event_for_non_child": true,
+      "escaped_dead_after_tracker_kill": true
+    },
+    "orphan_race": {
+      "status": "OBSERVED",
+      "combos": {
+        "setsid=0,mid_exit_delay=0.0,tracker=event": {
+          "runs": 12,
+          "tracked": 0,
+          "survived_killpg": 0,
+          "leaked_after_full_kill": 0,
+          "missing_report": 0
+        },
+        "setsid=0,mid_exit_delay=0.0,tracker=poll": {
+          "runs": 12,
+          "tracked": 0,
+          "survived_killpg": 0,
+          "leaked_after_full_kill": 0,
+          "missing_report": 0
+        },
+        "setsid=0,mid_exit_delay=0.02,tracker=event": {
+          "runs": 12,
+          "tracked": 12,
+          "survived_killpg": 0,
+          "leaked_after_full_kill": 0,
+          "missing_report": 0
+        },
+        "setsid=0,mid_exit_delay=0.02,tracker=poll": {
+          "runs": 12,
+          "tracked": 12,
+          "survived_killpg": 0,
+          "leaked_after_full_kill": 0,
+          "missing_report": 0
+        },
+        "setsid=1,mid_exit_delay=0.0,tracker=event": {
+          "runs": 12,
+          "tracked": 0,
+          "survived_killpg": 12,
+          "leaked_after_full_kill": 12,
+          "missing_report": 0
+        },
+        "setsid=1,mid_exit_delay=0.0,tracker=poll": {
+          "runs": 12,
+          "tracked": 0,
+          "survived_killpg": 12,
+          "leaked_after_full_kill": 12,
+          "missing_report": 0
+        },
+        "setsid=1,mid_exit_delay=0.02,tracker=event": {
+          "runs": 12,
+          "tracked": 12,
+          "survived_killpg": 12,
+          "leaked_after_full_kill": 0,
+          "missing_report": 0
+        },
+        "setsid=1,mid_exit_delay=0.02,tracker=poll": {
+          "runs": 12,
+          "tracked": 12,
+          "survived_killpg": 12,
+          "leaked_after_full_kill": 0,
+          "missing_report": 0
+        }
+      },
+      "total_runs": 96,
+      "total_leaks": 24
+    },
+    "owner_death": {
+      "status": "OBSERVED",
+      "correct_fd_hygiene": {
+        "latency_ms_after_owner_sigkill": {
+          "signal_pipe_eof": 1.2,
+          "signal_kqueue_owner_exit": 1.4,
+          "signal_ppid_1": 1.6,
+          "killpg_issued": 1501.4,
+          "cleaned": 1502.4
+        },
+        "pipe_eof_delivered": true,
+        "kqueue_owner_exit_delivered": true,
+        "guardian_saw_ppid_1": true,
+        "guardian_cleaned_native": true,
+        "native_dead": true
+      },
+      "negative_control_native_inherits_pipe_end": {
+        "latency_ms_after_owner_sigkill": {
+          "signal_kqueue_owner_exit": 1.4,
+          "signal_ppid_1": 1.6,
+          "killpg_issued": 1609.9,
+          "cleaned": 1611.5
+        },
+        "pipe_eof_delivered": false,
+        "kqueue_owner_exit_delivered": true,
+        "guardian_saw_ppid_1": true,
+        "guardian_cleaned_native": true,
+        "native_dead": true
+      }
+    },
+    "fd_inheritance": {
+      "status": "OBSERVED",
+      "parent_open_extra_descriptors": 6,
+      "leader_inherited_fds": [],
+      "grandchild_inherited_fds": [],
+      "clean": true
+    },
+    "cancel": {
+      "status": "OBSERVED",
+      "sigterm_ignored_leader_still_alive": true,
+      "sigkill_stop_seconds": 0.0038,
+      "kill_all": {
+        "empty": true,
+        "rounds": 1,
+        "signalled": 0,
+        "seconds": 0.005
+      },
+      "default_sigterm_stop_seconds": 0.004,
+      "default_sigterm_returncode": -15
+    },
+    "census": {
+      "status": "OBSERVED",
+      "requested_children": 64,
+      "tracker_members": 65,
+      "tracker_matches_expected": true,
+      "process_group_census": 65,
+      "census_limit": 16,
+      "overflow_reported": true,
+      "host_process_count": 494,
+      "full_scan_ms_median": 2.93,
+      "full_scan_ms_max": 3.13,
+      "kill_all": {
+        "empty": true,
+        "rounds": 1,
+        "signalled": 0,
+        "seconds": 0.0028
+      }
+    },
+    "pid_space": {
+      "status": "OBSERVED",
+      "spawned": 80,
+      "monotonic_increasing": true,
+      "wrapped": false,
+      "delta_min": 1,
+      "delta_median": 1,
+      "delta_max": 1,
+      "verify_then_signal_window_us_median": 4.7,
+      "verify_then_signal_window_us_p99": 6.3,
+      "spawn_rate_per_second": 296.8,
+      "seconds_to_wrap_pid_space_at_that_rate": 337.0
+    },
+    "coalition": {
+      "status": "OBSERVED",
+      "iterations": 10,
+      "runs": 10,
+      "coalition_differs_from_caller": 10,
+      "escaped_in_job_coalition": 10,
+      "escaped_reparented_to_launchd": 10,
+      "survives_launchctl_remove": 10,
+      "found_by_coalition_census": 10,
+      "leaked_after_coalition_kill": 0,
+      "job_never_started": 0,
+      "caller_coalition": [
+        1613,
+        1614
+      ],
+      "launchd_labels_left_registered": [],
+      "coalition_census_ms_median": 6.96,
+      "coalition_kill_ms_median": 23.43,
+      "same_scenario_without_coalitions": "see orphan_race setsid=1,mid_exit_delay=0.0"
+    },
+    "cleanup": {
+      "force_killed_after_scenarios": [
+        10296,
+        10299,
+        10302,
+        10305,
+        10308,
+        10311,
+        10314,
+        10317,
+        10320,
+        10323,
+        10326,
+        10329,
+        10332,
+        10335,
+        10338,
+        10341,
+        10344,
+        10347,
+        10350,
+        10353,
+        10356,
+        10359,
+        10362,
+        10365
+      ],
+      "still_alive": []
+    },
+    "wall_seconds": 25.5
+  }
+}

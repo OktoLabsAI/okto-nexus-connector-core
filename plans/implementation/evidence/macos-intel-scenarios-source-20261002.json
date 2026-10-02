@@ -1,0 +1,11 @@
+{
+  "source_url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/issues/1",
+  "issue_updated_at": "2026-10-02T14:09:23Z",
+  "provenance": "User-operated Mac run reported in issue; not executed by this agent",
+  "script_available_in_fetched_branch": true,
+  "script_sha256": "a318878f108c2c1099cf40ed748420df65054109d3cef1cb5b82ab85235f0c1b",
+  "containment_qualified": false,
+  "source_commit": "1975e88",
+  "git_blob_sha256_matches_report": true,
+  "committed_report_matches_issue": true
+}
