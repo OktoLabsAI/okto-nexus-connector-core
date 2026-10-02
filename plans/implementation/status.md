@@ -1,3 +1,7 @@
+## Hosted Windows qualification follow-up — 2026-10-02
+
+Run 36948182442 passed all three Linux jobs, but Windows exposed additional byte-sensitive native schema checkout and timing/ownership fixture defects. Native JSON now keeps LF. The crash fixture retains the owned process through the receipt boundary so garbage collection cannot close the Windows Job early; revocation waits for the observed stop within two seconds instead of assuming a 30 ms scheduler turn. Ten directed Windows tests passed locally. The intermittent native-action listener connection refusal test passed locally but remains unresolved pending hosted results; no release gate closes.
+
 # CI documentation and checkout correction — 2026-10-01
 
 Hosted run 36868353381 failed Windows R3 byte checks after CRLF checkout conversion and Linux public-documentation checks. The R3 JSON bundle now explicitly uses LF, as the R4 bundle already did; no contract bytes or protocol semantics changed. Public API/compatibility docs now cover the current 0.2.51.dev0 exports. Local validation: 3 public-doc tests passed and contracts/generate.py --check passed. Hosted re-execution and the isolated Pi optional-dependency probe timeout remain unverified; this does not close release qualification.

@@ -2006,7 +2006,9 @@ def test_revocation_cannot_be_undone_by_lease_renewal(tmp_path):
                                  lease_deadline_monotonic=160),
                 expected_connection_generation=3)
         clock.advance(1.1)
-        await asyncio.sleep(0.03)
+        deadline = asyncio.get_running_loop().time() + 2
+        while not factory.native.stopped and asyncio.get_running_loop().time() < deadline:
+            await asyncio.sleep(0.01)
         assert factory.native.stopped
         journal.close()
 
