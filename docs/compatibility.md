@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-This project is `0.2.53.dev0`, an unpublished development build. Its API and
+This project is `0.2.55.dev0`, an unpublished development build. Its API and
 contract bundle can still change. The historical R3 revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with
@@ -25,7 +25,7 @@ current R4 artifact or either application without a new acceptance run.
 
 | Surface | Declared or observed | Qualified for production? |
 | --- | --- | --- |
-| Python | `>=3.11` package metadata; CI defines 3.11–3.13 on Windows 2022 and Ubuntu 24.04 | No; hosted matrix has not run. Local Windows/WSL2 × Python 3.11–3.13 tests and offline artifact installs are partial evidence. |
+| Python | `>=3.11` package metadata; CI runs 3.11–3.13 on Windows 2022 and Ubuntu 24.04 | No production qualification. At `beed295`, all six hosted cells reached tests: each Windows cell had 1120 passes/77 skips, each Linux cell 1174 passes/23 skips. Each also failed the same stale documentation-version assertion, so build/install steps did not run. |
 | `codex_app_server` managed | Registry lists win32, linux, darwin; selected local Codex 0.157.0 on Windows/x86_64 is **production-qualified** (exact fingerprint `sha256:ed1c7b36…b1f`) for managed conversation, events, steer and interrupt by the recorded real campaigns, and passed the full managed-factory path (prepare → open → real turn → terminal-correlated receipt → bounded shutdown). `item/commandExecution/requestApproval` is qualified (real decline + tardy refusal); other request shapes, `thread/resume`, Linux/macOS and version drift remain unqualified. |
 | `pi_rpc` managed | Registry lists win32, linux, darwin; the selected local Pi 0.87.1 Node+CLI pair on Windows/x86_64 is **production-qualified** (composite fingerprint binding both files) for managed conversation, events, queued ID-less steer and abort, and passed the full managed-factory path with a real turn. | No tools/extensions (no real `extension_ui_request` traffic), no automatic-retry semantics, Linux provider behavior, version drift or sustained load; the work bridge stays unqualified. |
 | `claude_stream` managed | Registry lists win32, linux, darwin; selected local Claude 2.1.282 on Windows/x86_64 (exact fingerprint `sha256:fc0e3af0…484`) is **production-qualified** for managed conversation, events and interrupt (no steer vocabulary), and passed the full managed-factory path with a real turn. `control_request:can_use_tool/Write` is qualified (forged-kind refusal + real decline); a slow-consumer drain passed; AskUserQuestion/input, Linux/macOS and version drift remain unexercised. |
@@ -33,9 +33,11 @@ current R4 artifact or either application without a new acceptance run.
 | Core wheel/sdist | Identical local Windows/WSL2 hashes; isolated offline installs across Python 3.11–3.13 on both local OS environments | Partial packaging evidence only; not hosted CI, native Linux or real consumers. |
 
 Registry platform membership is a code-path gate, **not** a capability grant.
-The effective exact-build qualification sets contain exactly the three
-Windows builds recorded above (conversation and controls; Claude
-interrupt-only). Any drift — version, platform, architecture or file bytes,
+The conversation qualification set also includes the exact Windows Codex
+0.159.0 build recorded in the [September 30 campaign](../plans/implementation/evidence/codex-0159-qualification.md),
+in addition to the three historical builds above. Qualification remains scoped
+per operation (Claude has interrupt but no steer vocabulary). Any drift —
+version, platform, architecture or file bytes,
 and for Pi any change to the bound Node executable or CLI JavaScript —
 loses the grant entirely. A version string or synthetic peer does not
 qualify a provider. Unsupported adapter/platform selection fails closed.

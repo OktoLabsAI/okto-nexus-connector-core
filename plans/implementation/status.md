@@ -1,3 +1,17 @@
+## Core .55 hosted reconciliation — 2026-10-02
+
+Core `beed295` fixes duplicate PATH/explicit Pi discovery, following the .54
+passive Windows layout correction. See `../DISCOVERY_054.md` and
+`../DISCOVERY_055.md` for installed evidence. Hosted run
+https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262
+completed all six Windows/Linux Python 3.11–3.13 test cells: each Windows cell
+recorded 1120 passed/77 skipped and each Linux cell 1174 passed/23 skipped.
+All six failed only the public documentation version assertion (.53 vs .55);
+artifact build and offline installation steps were skipped. Public version and
+hosted-status guidance are corrected; the historical entries below retain their
+original scope and do not override this current status. Full green hosted
+qualification and release gates remain open.
+
 ## Core 0.2.52.dev0 — exact maximum lease boundary
 
 Corrects floating-point subtraction drift that could reject a valid 120-second lease on Windows. Compare the absolute deadline with now plus the maximum instead; no tolerance or extra lease duration is granted. The regression rejects the immediately larger representable deadline before native open. Installed wheel verification: 63 runtime tests passed in a new Python 3.13 environment outside the checkout. See evidence/lease-boundary-052.json. Consumer pins and integrated tests remain pending.
