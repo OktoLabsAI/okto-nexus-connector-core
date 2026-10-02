@@ -1,0 +1,12 @@
+{
+  "schema_version": 1,
+  "platform": "win32",
+  "machine": "AMD64",
+  "python": "3.13.1",
+  "macos": "",
+  "script_sha256": "2dc7b3f7198d0f0d81dafea12ddc57e0c9354176db656274f5a27b0c35db5cbe",
+  "containment_qualified": false,
+  "provider_execution": false,
+  "status": "UNSUPPORTED_TEST_HOST",
+  "reason": "Run on native macOS"
+}
