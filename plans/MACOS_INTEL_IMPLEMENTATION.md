@@ -84,10 +84,46 @@ The headers explain the indices; they do not prove that comparing both IDs is
 the correct ownership guarantee. These sources were reviewed on 2026-10-02;
 the report for `1975e88` remains unchanged and still describes its original code.
 
-## Next native experiment: launchd and pipe transfer
+## Native launchd and pipe results received — 2026-10-02
 
-The next launchd/pipe experiment is now available separately; use the commands
-below before repeating the original scenarios. It does not change production
+Commit `f5d552e` retains both native reports in `implementation/evidence/`:
+`macos-launchd-intel-26.4.1-gui.json` and
+`macos-launchd-intel-26.4.1-user-bootstrap-failure.json`. Both script hashes match
+the published Git blob from `7a84ff9` exactly:
+`f09fae953c9b2e7c1e58a2a48691dac0f3a5c19d7b257644c98158406dc70c60`.
+
+On the user's Intel macOS 26.4.1/Python 3.12.4 host, gui/501 completed all three
+scenarios (cancel, owner exit and control EOF). Each job had distinct resource
+and jetsam coalition IDs, a 40-byte ABI result, successful native pipe handoff,
+clean child/grandchild descriptors and non-inheritable received descriptors.
+All fixed native children were reaped. Recorded guardian cleanup times were
+23.656–29.889 ms; observer end-to-end cleanup was 41.839–119.042 ms. All three
+bootouts succeeded and subsequent queries showed no registered job labels.
+
+In user/501, all three bootstraps returned 5 (Input/output error). No native
+fixture was launched; bootout returned 3, and the report conservatively leaves
+label_left_registered null. The error's cause is not established. The issue
+reports two further successful gui repetitions, but only one gui run is retained
+in this commit; do not count unretained repetitions as additional report rows.
+
+This qualifies these synthetic primitives in the observed GUI domain, not
+production containment. Both reports explicitly retain provider_execution=false,
+tree_stop_proven=false and containment_qualified=false. Progress can continue on
+the coalition census/stop-proof design using the verified GUI-domain handoff.
+Headless/user-domain operation remains unverified; future domain selection and
+doctor output must expose the usable domain and GUI-session requirement without
+silently claiming headless support. An active bootstrap probe is distinct from
+passive preflight and must not be performed by discovery.
+
+The next implementation work remains arbitrary escaped-descendant census and
+stop proof, fork/PID races, autonomous job lifecycle, slot retention and native
+provider integration. Production macOS preflight stays unsupported until those
+guarantees are implemented and qualified. No package version changed here.
+
+## Reproducing the launchd and pipe experiment
+
+The launchd/pipe experiment is available separately; the commands below reproduce
+the newly retained results. It does not change production
 preflight or provider support.
 
 ```sh
