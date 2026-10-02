@@ -1,0 +1,32 @@
+
+X feature/v0.2.0 Core CI · 37001262922
+Triggered via push about 1 hour ago
+
+JOBS
+X ubuntu-24.04 / Python 3.13 in 1h10m17s (ID 110819255463)
+✓ windows-2022 / Python 3.12 in 7m6s (ID 110819255594)
+X ubuntu-24.04 / Python 3.11 in 1h8m3s (ID 110819255598)
+X ubuntu-24.04 / Python 3.12 in 1h8m7s (ID 110819255612)
+X windows-2022 / Python 3.11 in 1h7m29s (ID 110819255624)
+X windows-2022 / Python 3.13 in 44m36s (ID 110819255636)
+- Runtime dependency SBOM in 0s (ID 110840751518)
+
+ANNOTATIONS
+X The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings
+ubuntu-24.04 / Python 3.13: .github#1
+
+X The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings
+ubuntu-24.04 / Python 3.11: .github#1
+
+X The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings
+ubuntu-24.04 / Python 3.12: .github#1
+
+X The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings
+windows-2022 / Python 3.11: .github#1
+
+X The job was not started because recent account payments have failed or your spending limit needs to be increased. Please check the 'Billing & plans' section in your settings
+windows-2022 / Python 3.13: .github#1
+
+
+To see what failed, try: gh run view 37001262922 --log-failed
+View this run on GitHub: https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/37001262922

@@ -7,6 +7,8 @@ import threading
 import time
 from dataclasses import replace
 
+import pytest
+
 from nexus_connector_core import (
     CoreError, LaunchIntent, OpenOperation, SessionKey, ShutdownPolicy,
     create_runtime,
@@ -28,6 +30,7 @@ def _runtime(tmp_path, ledger_gate):
     class _Factory:
         async def open(self, prepared, session_id, auth, *,
                        stream_epoch):
+            native.open_entered.set()
             await asyncio.to_thread(native.start_gate.wait, 5)
             return native
 
@@ -50,12 +53,10 @@ async def _reach_stopped(runtime, native, ledger):
         LaunchIntent("agent", "ws", "codex_app_server"), auth)
     opening = asyncio.create_task(runtime.open(
         OpenOperation("open-op", "session", "epoch", prepared), auth))
-    await asyncio.sleep(0.2)
+    await asyncio.wait_for(native.open_entered.wait(), 3)
     opening.cancel()
-    try:
+    with pytest.raises(asyncio.CancelledError):
         await opening
-    except BaseException:
-        pass
     native.start_gate.set()
     key = SessionKey("srv", "exe", "session")
     deadline = time.monotonic() + 3
@@ -229,12 +230,22 @@ def test_ack_lost_after_commit_closes_same_obligation(tmp_path):
     asyncio.run(run())
 
 
-def test_retained_ledger_does_not_delay_other_resource_force(tmp_path):
+@pytest.mark.parametrize("admission_delay", [0, 0.35])
+def test_retained_ledger_does_not_delay_other_resource_force(tmp_path, admission_delay):
     """A blocked durable obligation for one stopped resource never
     delays containment of ANOTHER live resource."""
     async def run():
         gate = threading.Event()
         runtime, journal, ledger, native = _runtime(tmp_path, gate)
+        # Slow durable receipt lookup may precede native-factory admission.
+        # It must not move cancellation to a different lifecycle boundary.
+        original_existing = runtime._existing
+
+        async def delayed_existing(*args):
+            await asyncio.sleep(admission_delay)
+            return await original_existing(*args)
+
+        runtime._existing = delayed_existing
         live = _StoppableNative()
         live.native_id = "native-live"
 

@@ -1,3 +1,15 @@
+## C10 admission synchronization and hosted infrastructure — 2026-10-02
+
+The C10 release-obligation setup failure is reproduced by a delayed receipt
+lookup before native admission. Both setup helpers now observe native-factory
+entry before cancellation; their ownership/containment assertions remain.
+Eight installed cases passed on Windows Python 3.11/3.13 and WSL Linux Python
+3.12 with unchanged Core .56 package bytes. See [reproduction and evidence](evidence/c10-admission-review.md).
+
+Run 37001262922 is terminal: Windows Python 3.12 passed, but GitHub refused to
+start five other jobs due to account payment/spending-limit restrictions.
+This supersedes the queued status below; hosted qualification is still open.
+
 ## Core .56 POSIX discovery preparation — 2026-10-02
 
 See [DISCOVERY_056](../DISCOVERY_056.md) for passive physical-payload resolution,
