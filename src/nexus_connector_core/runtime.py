@@ -1805,7 +1805,9 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         self._late_handles.setdefault(session, _LateHandleRecord(
             native, attempt))
         try:
-            if self._sessions.get(session) is not None:
+            existing = self._sessions.get(session)
+            if (existing is not None and not existing.closed
+                    and not existing.closing):
                 # A live binding owns this scope now; never fight it.
                 self._opening.pop(session, None)
                 self._late_handles.pop(session, None)

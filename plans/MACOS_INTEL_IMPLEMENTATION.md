@@ -1,5 +1,63 @@
 # Native macOS Intel implementation and manual validation
 
+## Production backend implemented and natively accepted — 2026-10-02
+
+The sequence below was executed on the authorized Intel host. Core
+0.2.57.dev0 ships the darwin owned-process backend
+(`src/nexus_connector_core/native/process/`): `macos_abi.py` (private ABI
+helpers: 176-byte `proc_bsdinfo` birth/state, exact 40-byte coalition
+flavor, `proc_listallpids`, boot-session identity),
+`macos_process_guardian.py` (the launchd guardian and its ownership
+contract) and `macos_process.py` (the observer-side `Popen`-compatible
+handle with SCM_RIGHTS handoff and CPython-identical stream wrapping).
+Passive darwin preflight (`coalition_abi`, `proc_identity`, `kqueue`,
+`launchctl`, `session_domain`) replaced the blanket refusal, exposing the
+GUI-session requirement without claiming headless support.
+
+Ownership decisions implemented, resolving the plan's open design
+questions as follows:
+
+- **Tree key**: membership in the guardian job's coalition *pair* (both
+  resource and jetsam ids must match). Refusal before any provider launch
+  when the guardian's pair shares either type with the caller or PID 1.
+- **Signalling authority**: census membership plus birth revalidation plus
+  coalition revalidation, then a `SIGSTOP` interlock (a stopped member
+  cannot fork, exec or exit on its own), then a final identity re-read,
+  then SIGKILL, then a post-signal birth re-read. The residual
+  microsecond read-to-signal race cannot be eliminated without a pidfd
+  analogue; the post-signal re-read *detects* a recycled victim (proof
+  refused, `suspect` reported) instead of fabricating success.
+- **Stop proof**: two consecutive *complete* empty censuses. Enumeration
+  failures, unreadable PIDs and non-empty passes reset the count; there is
+  no deadline — an unkillable member keeps the guardian alive holding
+  ownership (Linux-guardian parity).
+- **Foreign processes**: other-uid PIDs are EPERM and skipped (the exact
+  semantics of the qualified probe evidence), except a PID previously seen
+  as a member with unconfirmed death: kqueue `NOTE_EXIT` watchers confirm
+  member deaths, separating recycled PIDs (skipped, counted) from a real
+  setuid transitioned member (blocks the proof forever). The fork-then-
+  instant-setuid-exec window remains a documented residual limit.
+- **Owner death**: kqueue `NOTE_EXIT` registered between birth checks;
+  SIGTERM/SIGINT are ignored by the guardian (bootout is registration
+  cleanup, never stop evidence) but restored to defaults across the native
+  spawn so graceful termination remains deliverable.
+
+Acceptance item 6 executed by `tools/macos_native_acceptance.py`
+(retained with matching script hash): **PASS** — 100/100 fast
+double-fork/setsid cases with zero leaks, zero census misses and zero
+label leaks (avg 0.40 s/case); owner SIGKILL 3/3 drained; cancellation
+escalation (TERM ignored → SIGKILL, proof D); descriptor hygiene at both
+fixture levels; shared-coalition refusal before spawn; 64-child census
+with overflow; 32-slot retention with release-after-proof; PID churn;
+SIGSTOP races; normal-exit drainage with exit-code propagation. The host
+suite moved from 132 darwin baseline failures to 1205 passed/42 skipped
+(one documented deselect; root cause and a related genuine
+`_contain_late_open` fix are recorded in the evidence). Qualification
+scope: this Intel host, GUI login domain, synthetic fixtures. Providers,
+Connector IPC, Nexus UI, headless/SSH, Apple Silicon, other macOS versions
+and hosted CI remain open, as does autonomous label removal after an
+observer crash.
+
 On 2026-10-02 the user authorized development here and offered to update and
 run the code on the same Intel/x86_64 Mac as Connector issue #1: macOS 26.4.1,
 Python 3.12.4. This resolves the initial target question for an Intel prototype.

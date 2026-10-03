@@ -97,7 +97,7 @@ from .provider_discovery import discover_provider_home
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.2.56.dev0"
+__version__ = "0.2.57.dev0"
 
 __all__ = [
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
