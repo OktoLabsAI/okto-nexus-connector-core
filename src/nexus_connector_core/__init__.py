@@ -93,6 +93,7 @@ from .executor_inventory import (
     verify_executor_inventory_snapshot,
 )
 from .discovery import discover_installations
+from .provider_discovery import discover_provider_home
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 

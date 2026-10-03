@@ -381,6 +381,16 @@ class CopiedAdapterSession:
             outcome_fn = getattr(self._connector, "delivery_outcome", None)
             phase = native.delivery_phase or (phase_fn(native) if phase_fn else None)
             outcome = native.delivery_outcome or (outcome_fn(native) if outcome_fn else None)
+            # Claude and Pi process one submitted turn at a time. Text frames
+            # carry no operation ID; bind them before redaction splits off
+            # a terminal tail, otherwise the host drops the entire prefix.
+            if native.harness_kind in {"claude_code", "pi"} and native.kind == "output_delta":
+                active = self._active_operation_id
+                if (active is None or native.operation_id not in (None, active) or
+                        (native.harness_kind == "pi" and not self._pi_started_for_active)):
+                    raise CoreError("EVENT_OPERATION_MISMATCH", "native_pump",
+                                    possible_effect=True)
+                native = replace(native, operation_id=active)
             if (native.harness_kind == "pi" and native.native_event == "agent_start" and
                     phase == "started" and self._active_operation_id is not None):
                 self._pi_started_for_active = True

@@ -180,6 +180,28 @@ def test_codex_version_observation_accepts_only_narrow_cli_output(monkeypatch):
     assert invalid["native_version"] is None
 
 
+@pytest.mark.parametrize("version", ["0.159.0-alpha.12.1", "0.159.3", "0.159.0-rc.1+build.42"])
+def test_codex_prerelease_identity_matches_probe_and_handshake(monkeypatch, version):
+    monkeypatch.setattr(compatibility, "_version_output",
+                        lambda *args, **kwargs: f"codex-cli {version}\n".encode())
+    probe = compatibility.codex_version_observation(("codex", "--version"), cwd="/", env={})
+    handshake = compatibility.codex_initialize_observation(
+        {"userAgent": f"nexus/{version} (Windows)"}, client_name="nexus")
+    assert probe["native_version"] == handshake["native_version"] == version
+    assert not probe["capabilities_verified"]
+    assert not handshake["capabilities_verified"]
+    assert probe["compatible_native_requests"] == []
+
+
+@pytest.mark.parametrize("version", ["0.159.0-", "0.159.0-alpha..1", "0.159.0+", "0.159.0/alpha"])
+def test_codex_malformed_version_cannot_fall_back_to_stable(monkeypatch, version):
+    monkeypatch.setattr(compatibility, "_version_output",
+                        lambda *args, **kwargs: f"codex-cli {version}\n".encode())
+    assert compatibility.codex_version_observation(("codex", "--version"), cwd="/", env={})["native_version"] is None
+    assert compatibility.codex_initialize_observation(
+        {"userAgent": f"nexus/{version} (Windows)"}, client_name="nexus")["native_version"] is None
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows wrapper policy")
 def test_codex_command_wrapper_is_not_a_native_candidate(tmp_path):
     wrapper = tmp_path / "codex.cmd"

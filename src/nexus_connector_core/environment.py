@@ -75,10 +75,22 @@ async def child_environment(
             raise CoreError("WORKSPACE_UNAVAILABLE", "environment")
         env["HOME"] = str(home.resolve(strict=True))
         env["USERPROFILE"] = env["HOME"]
+        if prepared.intent.adapter_id == "pi_rpc":
+            # The approved Pi provider directory contains settings/auth directly;
+            # HOME alone would make Pi append .pi/agent a second time.
+            env["PI_CODING_AGENT_DIR"] = env["HOME"]
+        if prepared.intent.adapter_id == "claude_stream":
+            # Preserve legacy user-home configurations as well as exact state dirs.
+            claude_state = home / '.claude' if (home / '.claude').is_dir() else home
+            env["CLAUDE_CONFIG_DIR"] = str(claude_state.resolve(strict=True))
         if prepared.intent.adapter_id == "codex_app_server":
             # Codex may resolve the Windows account home independently of HOME
             # and USERPROFILE. Bind its state to the explicitly approved home.
-            codex_state = Path(env["HOME"]) / ".codex"
+            from .provider_discovery import discover_provider_home
+            direct_state = (home.name == '.codex' or (home / 'auth.json').is_file() or
+                            (home / 'config.toml').is_file() or
+                            str(home.resolve(strict=True)) == discover_provider_home('codex_app_server'))
+            codex_state = home if direct_state else home / ".codex"
             try:
                 codex_state.mkdir(mode=0o700, exist_ok=True)
                 env["CODEX_HOME"] = str(codex_state.resolve(strict=True))

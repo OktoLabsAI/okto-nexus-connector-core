@@ -1083,6 +1083,11 @@ class PiRpcConnector:
             with self._session_lock:
                 self._awaiting_settle_generation = None
         kind = _EVENT_KIND_BY_TYPE.get(native_type, _DEFAULT_EVENT_KIND)
+        if native_type == "message_update":
+            delta = msg.get("assistantMessageEvent")
+            # Thinking/tool deltas are not the assistant's reply text.
+            if not isinstance(delta, dict) or delta.get("type") != "text_delta":
+                kind = "tool_activity"
         self._push_event(kind, native_type, msg)
 
     def _on_unmatched_response(self, msg: dict[str, Any]) -> None:

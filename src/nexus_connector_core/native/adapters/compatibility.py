@@ -36,6 +36,10 @@ QUALIFIED_CONTROL_BUILDS: set[tuple[str, str, str, str, str]] = set()
 # promise that every model task succeeds, not resume/deduplication, not the
 # Pi work bridge, and not native approval traffic.
 _QUALIFIED_PRODUCTION_BUILDS = {
+    # 2026-10-03: real Windows handshake, turn, targeted steer and interrupt.
+    # See plans/implementation/evidence/codex-alpha-20261003.md.
+    ("codex", "0.159.0-alpha.12.1", "win32", "x86_64",
+     "sha256:1722907aa64401bcc9b34467ef5c2af43f6aef9a5045ef04d11d19dfae4589fb"),
     # 2026-09-30 Windows real turn, steer and interrupt campaign.
     # Scope: conversation and controls only; no native approval grant.
     ("codex", "0.159.0", "win32", "x86_64",
@@ -87,6 +91,8 @@ def qualified_build(kind, version, platform, architecture, fingerprint,
 #: approves the *local binding* separately; this set never authorizes a
 #: path, only conserves qualification of identical bytes.
 QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
+    ("codex", "0.159.0-alpha.12.1", "win32", "x86_64",
+     "sha256:ae7e2bc6f390e2c8bb2258d0665c7c02e189bc2b414283b1e588a56ef20621a6"),
     ("codex", "0.159.0", "win32", "x86_64",
      "sha256:ac0413e2cd18e80561c8e1e50511f7e05465630dc16bf60656e04d7fff2e994c"),
     # Portable content digests of the same three authorized builds above
@@ -202,11 +208,18 @@ def pi_version_observation(command, *, cwd, env):
         "native_request_basis": "unverified", **control_observation("pi", version)}
 
 
+# Preserve prerelease/build identifiers: an alpha must never inherit a stable
+# build's exact qualification or native request contracts.
+_CODEX_VERSION = (r"\d{1,4}\.\d{1,4}\.\d{1,4}"
+                  r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+                  r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
+
+
 def codex_version_observation(command, *, cwd, env):
     """Observe only the selected CLI's version; do not qualify app-server."""
     output = _version_output(command, cwd=cwd, env=env)
     match = re.fullmatch(
-        rb"codex-cli (\d{1,4}\.\d{1,4}\.\d{1,4})\r?\n?", output,
+        (r"codex-cli (" + _CODEX_VERSION + r")\r?\n?").encode("ascii"), output,
     ) if len(output) <= 1024 else None
     version = match.group(1).decode("ascii") if match else None
     contracts = CODEX_NATIVE_REQUEST_CONTRACTS.get(version, ())
@@ -257,7 +270,7 @@ def codex_initialize_observation(result, *, client_name):
     """Retain only the CLI version from this client's user-agent prefix."""
     user_agent = result.get("userAgent") if isinstance(result, dict) else None
     prefix = client_name + "/"
-    match = (re.match(r"^(\d{1,4}\.\d{1,4}\.\d{1,4})(?: |$)",
+    match = (re.match(r"^(" + _CODEX_VERSION + r")(?: |$)",
                       user_agent[len(prefix):])
              if isinstance(user_agent, str) and len(user_agent) <= 1024
              and user_agent.startswith(prefix) else None)

@@ -1069,6 +1069,9 @@ class ClaudeCodeStreamConnector:
             native_event=native_event,
             occurred_at=utc_now_iso(),
             payload=payload,
+            # The assistant message repeats the complete streamed text.
+            # Preserve replacement semantics through redaction and NXL.
+            output_snapshot=kind == "output_delta" and native_event == "assistant",
         )
         # Append and nonblocking fanout share one ordering lock. Overflow
         # stops the owned process; every affected reader observes an explicit gap.

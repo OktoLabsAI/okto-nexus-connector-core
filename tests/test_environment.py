@@ -61,6 +61,31 @@ def test_provider_home_needs_explicit_trust(tmp_path):
     asyncio.run(run())
 
 
+def test_pi_configuration_directory_is_explicit_and_not_inherited(tmp_path, monkeypatch):
+    async def run():
+        binary = tmp_path / ("pi.exe" if os.name == "nt" else "pi")
+        binary.write_bytes(b"test")
+        if os.name != "nt":
+            binary.chmod(0o755)
+        prepared = prepare_launch(LaunchIntent("ag", "ws", "pi_rpc"),
+                                  candidate("pi_rpc", binary, explicit=True), tmp_path)
+        home = tmp_path / "approved-agent-dir"
+        home.mkdir()
+        (home / "settings.json").write_text('{"defaultProvider":"test"}')
+        monkeypatch.setenv("PI_CODING_AGENT_DIR", str(tmp_path / "unapproved"))
+        assert "PI_CODING_AGENT_DIR" not in await child_environment(prepared, Resolver())
+        with pytest.raises(CoreError, match="APPROVAL_REQUIRED"):
+            await child_environment(prepared, Resolver(), provider_home=home)
+        env = await child_environment(prepared, Resolver(), provider_home=home, trusted_home=True)
+        assert env["PI_CODING_AGENT_DIR"] == str(home.resolve())
+        assert (home / "settings.json").read_text() == '{"defaultProvider":"test"}'
+        assert not (home / ".pi").exists()
+        with pytest.raises(CoreError, match="BINDING_NOT_AUTHORIZED"):
+            await child_environment(prepared, Resolver(), provider_home=home, trusted_home=True,
+                                    public_overrides={"PI_CODING_AGENT_DIR": str(tmp_path)})
+    asyncio.run(run())
+
+
 def test_http_template_capability_is_resolved_only_from_approved_local_ref(
         tmp_path, monkeypatch):
     async def run():
@@ -184,4 +209,24 @@ def test_codex_invalid_state_directory_fails_without_path_disclosure(tmp_path):
         with pytest.raises(CoreError, match="WORKSPACE_UNAVAILABLE") as error:
             await child_environment(prepared, Resolver(), provider_home=tmp_path, trusted_home=True)
         assert str(tmp_path) not in str(error.value)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('adapter,state_name,variable', [
+    ('codex_app_server', '.codex', 'CODEX_HOME'),
+    ('claude_stream', '.claude', 'CLAUDE_CONFIG_DIR'),
+])
+def test_discovered_configuration_directory_is_used_directly(tmp_path, adapter, state_name, variable):
+    async def run():
+        binary = tmp_path / ('test.exe' if os.name == 'nt' else 'test')
+        binary.write_bytes(b'test')
+        if os.name != 'nt':
+            binary.chmod(0o755)
+        prepared = prepare_launch(LaunchIntent('ag', 'ws', adapter),
+                                  candidate(adapter, binary, explicit=True), tmp_path)
+        state = tmp_path / state_name
+        state.mkdir()
+        env = await child_environment(prepared, Resolver(), provider_home=state, trusted_home=True)
+        assert env[variable] == str(state.resolve())
+        assert not (state / state_name).exists()
     asyncio.run(run())
