@@ -22,9 +22,11 @@ def test_legacy_reply_switch_cannot_disable_runtime_routing():
 
 
 @pytest.mark.parametrize('enabled',[True,False,None])
-def test_roundtrip_preserves_complete_configuration(enabled):
+@pytest.mark.parametrize('policy',['shared','per_sender','per_sender_session',None])
+def test_roundtrip_preserves_complete_configuration(enabled, policy):
     value=configuration()
     value['runtime_enabled']=enabled
+    value['session_policy']=policy
     exported=json.loads(export_connection_configuration(value))
     assert exported['version']==2
     assert not DESTINATION_FIELDS.intersection(exported)
@@ -34,6 +36,7 @@ def test_roundtrip_preserves_complete_configuration(enabled):
     assert materialized['provider_home'] is None
     assert materialized['secret_bindings']=={}
     assert materialized['runtime_enabled']==enabled
+    assert materialized['session_policy']==policy
 
 
 def test_legacy_import_discards_machine_choices():

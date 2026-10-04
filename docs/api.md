@@ -303,6 +303,12 @@ retry with a new ID. Requests and responses remain bounded to 16 KiB.
 `parse_portable_connection_configuration(value)` and `export_connection_configuration(value)`
 for `okto-nexus-connection` version 2 templates. These contain native preferences,
 connection name, runtime/session policy, message/tool policies and requested limits.
+`session_policy` accepts `shared`, `per_sender`, `per_sender_session`, or `null`
+(inherit). Since Core 0.2.63.dev0, `per_sender_session` preserves a separate target
+conversation for each sending agent and verified source session. Routing and
+durable affinity are owned by the Nexus Server; Core preserves this policy in
+configuration imports and exports. Sessionless senders use their own per-agent
+fallback conversation, separate from verified source sessions.
 They never contain identity, credentials, installation IDs, execution-host selection,
 workspace/login paths, workspace names or local secret references. Version 1 imports
 are accepted after discarding all destination fields. Duplicate/unknown fields fail.

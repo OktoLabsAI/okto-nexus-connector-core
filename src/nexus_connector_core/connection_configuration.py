@@ -20,7 +20,7 @@ def parse_connection_configuration(value):
         raise CoreError('VALIDATION_ERROR', 'connection_configuration')
     if (value['execution_location'] not in ('local','remote','all') or
             (value['runtime_enabled'] is not None and type(value['runtime_enabled']) is not bool) or type(value['automatic_reply']) is not bool or
-            value['session_policy'] not in ('shared','per_sender',None) or value['tool_access'] not in ('ask','always_allow')):
+            value['session_policy'] not in ('shared','per_sender','per_sender_session',None) or value['tool_access'] not in ('ask','always_allow')):
         raise CoreError('VALIDATION_ERROR', 'connection_configuration')
     for name in ('workspace_root','workspace_label','alias','adapter_id'):
         if type(value[name]) is not str or len(value[name]) > 4096 or '\x00' in value[name]:
