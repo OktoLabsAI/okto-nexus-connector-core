@@ -17,6 +17,32 @@ imports neither application.
 
 ## What the Core is
 
+### Automatic runtime operation
+
+`DEFAULT_RUNTIME_AUTOMATION` enables automatic message delivery and recovery.
+Portable connection configurations normalize the compatibility field
+`automatic_reply` to `true`, including configurations used by Connector CLI.
+Delivery still requires an enabled runtime, a recipient and current authority.
+
+Hosts use `RuntimeAutomation` for the shared supervision behavior:
+
+- `recover(...)` retries an initial failed reconciliation, with delays of
+  2, 4, 8, 16 and 30 seconds. An optional host setting can suspend recovery;
+  turning it back on resets the retry budget. Pending work for independent
+  executors may progress while the current owner remains blocked.
+- `supervise_connection(...)` owns automatic Connector reconnects and bounds
+  recovery failures separately from transport reconnects. Exhaustion is exposed
+  as `RECOVERY_ATTENTION_REQUIRED`; restarting the daemon starts a new budget.
+- Both methods join in-flight callbacks on cooperative stop. They never retry
+  a submitted native operation, invent an ownership proof or bypass approval.
+
+The host callbacks verify Core journal/resource/event proofs and commit current
+authority before declaring readiness. Nexus owns inboxes, routing, transactional
+claims and durable pending messages; Connector owns its authenticated connection
+and dispatch lanes. Core owns the common defaults, retry scheduling and budgets.
+This split keeps the same behavior on a Nexus host and on the CLI machine without
+making Core depend on either application's database or transport.
+
 | Area | Delivered by |
 | --- | --- |
 | Discovery & selection | Trusted-path/explicit candidate selection, bounded PE/ELF/Mach-O architecture parsing, sealed read-only version probes (`--version`-class, secret-free) |

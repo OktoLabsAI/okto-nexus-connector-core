@@ -1,6 +1,7 @@
 """Embeddable native harness core. Importing this package has no runtime side effects."""
 
 from .discovery_control import DiscoveryCancelled
+from .automation import DEFAULT_RUNTIME_AUTOMATION, RuntimeAutomationPolicy, RuntimeAutomation
 from .models import (
     ControlTargeting,
     R4Authority, R4LeaseApplication,
@@ -102,9 +103,10 @@ from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.2.61.dev0"
+__version__ = "0.2.62.dev0"
 
 __all__ = [
+    "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",
     "native_input_response",
     "HarnessSettings", "validate_harness_settings", "harness_settings_dict", "validate_harness_configuration",
     "parse_harness_configuration_file", "export_harness_configuration_file",

@@ -3,6 +3,7 @@ import json
 
 from .harness_configuration import validate_harness_configuration, discover_harness_configuration
 from .models import CoreError
+from .automation import DEFAULT_RUNTIME_AUTOMATION
 
 CONNECTION_CONFIGURATION_FORMAT = 'okto-nexus-connection'
 
@@ -45,7 +46,7 @@ def parse_connection_configuration(value):
     elif value['runtime_enabled'] and value['execution_location'] != 'remote' or value['harness_settings']:
         raise CoreError('VALIDATION_ERROR', 'connection_configuration')
     # Compatibility field: active runtimes always receive eligible messages.
-    return {**json.loads(json.dumps(value)), 'automatic_reply': True}
+    return {**json.loads(json.dumps(value)), 'automatic_reply': DEFAULT_RUNTIME_AUTOMATION.automatic_messages}
 
 
 def export_connection_configuration(value):
