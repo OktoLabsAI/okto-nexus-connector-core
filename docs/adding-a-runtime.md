@@ -10,6 +10,24 @@ is an internal implementation, not a stable third-party plugin API.
 registry is static. A JSON settings file selects parameters for an existing
 adapter; it cannot register a module, executable factory, or new protocol.
 
+Plan the full scope before starting. Following this guide produces, in
+order:
+
+1. a recorded integration contract (§1), including the platform containment
+   check;
+2. registry and catalog entries plus the audited per-adapter branches (§2);
+3. passive discovery, the bounded version probe and launch preparation (§3);
+4. the native adapter and its bridge wiring (§4);
+5. settings validation and the portable JSON format (§5);
+6. Nexus tool and native question integration (§6);
+7. synthetic-peer tests plus real-harness campaign evidence (§7);
+8. a new Core distribution with regenerated contracts, updated consumer pins,
+   updated documentation and end-to-end consumer validation (§8).
+
+Expect to touch roughly fifteen source files, add coverage in the seven test
+areas of §7, and release a new Core version consumed by both Nexus Server and
+Nexus Connector.
+
 ## 1. Define the integration contract
 
 Choose a stable `adapter_id`, such as the illustrative `acme_rpc`, and a
@@ -29,6 +47,14 @@ Record the native protocol before implementing it:
 | Configuration | Model, provider, effort, permission mode, sandbox, defaults, and read-only discovery methods |
 | Shutdown | Graceful close, process-tree containment, observed termination, and recovery after a lost response |
 | Nexus tools | Native HTTP MCP configuration or an explicit typed native-action extension |
+
+Existing ID suffixes record the transport/lifetime mode: `_rpc` for
+request/response RPC over stdio, `_stream` for stream-json protocols,
+`_app_server` for long-lived app-server processes, and `_attach` for
+attaching to a process Core does not own. Pick the closest mode. The
+`adapter_id` → `native_kind` pair is declared once in `AdapterSpec` and
+constrains the `harness_kind` values accepted by
+[`adapter_types.py`](../src/nexus_connector_core/native/adapter_types.py).
 
 Unsupported controls must return an unsupported/refused result. Do not
 simulate steering by silently creating a new turn, infer success from a
@@ -53,6 +79,24 @@ harness process
 Core must not import either consumer application. An adapter does not own
 the inbox, handoff state, or recipient routing. The host binds incoming
 work to the appropriate Core session and routes the resulting events.
+
+### Platform containment prerequisite
+
+Managed execution requires a qualified owned-process containment backend
+for the target OS: Windows job objects, the Linux pidfd guardian or the
+Darwin launchd-coalition backend, all under `native/process/` (see
+[`preflight.py`](../src/nexus_connector_core/native/process/preflight.py)).
+Passive
+discovery and every native open call `require_containment()` first; on an
+unqualified host or login session the attempt fails with the typed
+`PROCESS_CONTAINMENT_UNAVAILABLE` error instead of falling back to a bare
+`kill(pid)`. Declaring a new platform in an `AdapterSpec` therefore means
+either an already-qualified backend exists there, or adding and natively
+qualifying one is part of the work — the
+[macOS campaign](../plans/implementation/evidence/macos-native-acceptance-20261002.md)
+records what that qualification looked like. The passive check is
+`containment_preflight()`; it never launches a process, and an active
+bootstrap probe is never part of discovery.
 
 ## 2. Register metadata and update closed adapter branches
 
@@ -88,6 +132,7 @@ For an audit starting point, run:
 rg -n 'codex_app_server|pi_rpc|claude_stream|claude_code' src contracts tests
 ```
 
+(`grep -rn` with the same pattern works if ripgrep is unavailable.)
 Review each match for semantics; do not perform a bulk rename or assume the
 existing Claude constructor fallback works for another harness.
 
@@ -134,6 +179,21 @@ Choose the closest protocol reference:
   ID-less turn-event ordering, queued steering, and extension UI requests.
 - [`claude_code_stream.py`](../src/nexus_connector_core/native/adapters/claude_code_stream.py):
   stream-json input/output and control requests.
+
+The object lifecycle around an adapter is:
+
+```text
+NativeFactory.open            async host contract (ports.py)
+  -> CopiedAdapterFactory.open constructs the adapter, guards the launch,
+     starts it on a worker and wraps the result
+  -> CopiedAdapterSession      owns send/events/close/force_stop/observe,
+     running them on reserved executor pools
+  -> _CopiedConnector          your adapter: protocol work only
+```
+
+Your adapter implements only the bottom layer; sessions, executor pools,
+secret redaction, launch guards and the runtime binding come from the
+bridge.
 
 The current synchronous connector interface is `_CopiedConnector` in
 `native/runtime_bridge.py`:
@@ -310,13 +370,23 @@ exports. If the change affects a wire shape or closed enum, update the source
 and regenerate the bundle; do not hand-edit generated JSON or retrofit R3
 hashes. Follow the [R4 development contract](nxl-r4-development.md).
 
-Publish/build the new Core version using the repository's release process.
-Update consumer dependency pins and Core-version compatibility checks, then
-install the same artifact in Nexus Server and Nexus Connector. The catalog
+Publish/build the new Core version using the repository's release process:
+`tools/build_artifacts.py`, `tools/verify_wheel.py` and
+`tools/validate_release.py`, with the protected workflows under
+`.github/workflows/`. Update the `nexus-connector-core` dependency pin in
+each consumer's `pyproject.toml` (for example the Nexus Connector
+repository) and the Core-version compatibility checks, then install the
+same artifact in Nexus Server and Nexus Connector. The catalog
 feeds consumer choices, but host-specific version probes, credential mappings,
 configuration reconstruction, and action wiring may still require updates.
 Audit those paths instead of assuming a new catalog entry makes everything
 work automatically.
+
+Documentation is part of the delivery: record the adapter's migration entry
+in [`adapters.md`](adapters.md), keep the qualification statements in
+[`compatibility.md`](compatibility.md) limited to demonstrated capabilities,
+and update this guide's references if the audit table or the interface above
+changed.
 
 Validate through the Nexus UI on both local and remote execution paths:
 
