@@ -60,6 +60,11 @@ tools/                  # build/verify/probe and campaign scripts
 
 ## Managed adapters and production qualification
 
+To implement another harness, follow
+[Adding a native harness runtime](docs/adding-a-runtime.md). It covers the
+registry, discovery, native transport, configuration/JSON import, Nexus tools,
+human input, qualification tests, and rollout to Server and Connector.
+
 Qualification is **exact**: native kind, observed version, real platform,
 parsed architecture and the selected file fingerprint (for Pi, a composite
 binding the trusted Node executable *and* the installed CLI JavaScript).
