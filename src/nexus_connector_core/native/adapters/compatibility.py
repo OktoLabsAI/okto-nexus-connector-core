@@ -107,6 +107,11 @@ QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
 }
 QUALIFIED_CONTROL_BUILD_IDENTITIES = set(QUALIFIED_BUILD_IDENTITIES)
 
+# 2026-10-03 isolated real handshake, conversation and authenticated Nexus MCP
+# call. Controls and native approval replies were not exercised for this build.
+QUALIFIED_BUILDS.add(("claude_code", "2.1.288", "win32", "x86_64",
+    "sha256:84304f7d4b0cd0ebcbe8318695a260151b48991a6659c3366fdd5da290c0ab91"))
+
 
 def qualified_capabilities(kind, substrate, report):
     if substrate == "attach":
@@ -132,6 +137,10 @@ def qualified_capabilities(kind, substrate, report):
 # claimed as an actual model-generated request by this allowlist.
 # This is a protocol-contract allowlist, never a semver range or permission.
 CODEX_NATIVE_REQUEST_CONTRACTS = {
+    # Exact local build: default-mode questions answered through Nexus UI.
+    # See codex-native-questions-0-159-alpha-20261003.md; other methods remain
+    # unqualified for this build.
+    "0.159.0-alpha.12.1": ("item/tool/requestUserInput",),
     "0.156.1": (
         "item/commandExecution/requestApproval", "item/fileChange/requestApproval",
         "item/tool/requestUserInput", "mcpServer/elicitation/request",
@@ -149,6 +158,9 @@ CODEX_NATIVE_REQUEST_CONTRACTS = {
 # campaigns recorded in P09. This does not assert sandbox or general capability
 # verification, nor support for any other can_use_tool shape.
 CLAUDE_NATIVE_REQUEST_CONTRACTS = {
+    # Real operator question answered through Nexus UI on 2026-10-03;
+    # native continuation returned the exact chosen value (Green).
+    "2.1.288": ("control_request:can_use_tool/AskUserQuestion",),
     "2.1.280": tuple("control_request:can_use_tool/" + tool
                      for tool in ("Write", "Edit", "Bash", "AskUserQuestion")),
     # Only the two flows actually qualified after the local binary updated.
@@ -202,10 +214,15 @@ def pi_version_observation(command, *, cwd, env):
     output = _version_output(command, cwd=cwd, env=env)
     match = re.fullmatch(rb"(\d{1,4}\.\d{1,4}\.\d{1,4})\r?\n?", output) if len(output) <= 1024 else None
     version = match.group(1).decode("ascii") if match else None
+    # Real UI round trips and native tool results in
+    # evidence/pi-native-questions-0-87-1-20261003.md.
+    contracts = ["extension_ui_request/" + method for method in
+                 ("select", "confirm", "input", "editor")] if version == "0.87.1" else []
     return {"schema_version": 1, "native_version": version,
         "observation": "executable_version" if version else "version_not_observed",
-        "capabilities_verified": False, "compatible_native_requests": [],
-        "native_request_basis": "unverified", **control_observation("pi", version)}
+        "capabilities_verified": False, "compatible_native_requests": contracts,
+        "native_request_basis": "tested_version_contract" if contracts else "unverified",
+        **control_observation("pi", version)}
 
 
 # Preserve prerelease/build identifiers: an alpha must never inherit a stable

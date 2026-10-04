@@ -8,6 +8,7 @@ from pathlib import Path
 from .discovery import selected_fingerprint
 from .models import CoreError, InstallationCandidate, LaunchIntent, PreparedLaunch
 from .protocol import canonical_json
+from .harness_configuration import harness_settings_dict, validate_harness_settings
 
 
 def _root_fingerprint(root: Path) -> str:
@@ -21,6 +22,8 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
         raise CoreError("BINDING_NOT_AUTHORIZED", "prepare")
     if intent.adapter_id not in {"codex_app_server", "pi_rpc", "claude_stream"}:
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
+    settings = harness_settings_dict(intent.harness_settings)
+    validate_harness_settings(intent.adapter_id, settings)
     if intent.model is not None and (
             type(intent.model) is not str or not intent.model or
             len(intent.model) > 200):
@@ -67,6 +70,10 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
                 (str(executable), "--mode", "rpc"))
         if intent.model is not None:
             argv += ("--model", intent.model)
+        if intent.harness_settings.provider is not None:
+            argv += ("--provider", intent.harness_settings.provider)
+        if intent.harness_settings.effort is not None:
+            argv += ("--thinking", intent.harness_settings.effort)
     elif intent.adapter_id == "claude_stream":
         # Mirrors the copied connector's own qualified default argv: the
         # partial-message flag is load-bearing for interrupt safety and
@@ -77,11 +84,17 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
                 "--include-partial-messages")
         if intent.model is not None:
             argv += ("--model", intent.model)
+        if intent.harness_settings.effort is not None:
+            argv += ("--effort", intent.harness_settings.effort)
+        if intent.harness_settings.permission_mode is not None:
+            argv += ("--permission-mode", intent.harness_settings.permission_mode)
     else:
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
     profile = {"adapter_id": intent.adapter_id, "mode": intent.mode,
                "model": intent.model, "auth_refs": list(intent.auth_refs),
                "argv": list(argv), "root": str(resolved)}
+    if settings:
+        profile['harness_settings'] = settings
     digest = "sha256:" + hashlib.sha256(canonical_json(profile)).hexdigest()
     return PreparedLaunch(intent, candidate, argv, str(resolved), str(root),
                           _root_fingerprint(resolved), digest, intent.auth_refs)

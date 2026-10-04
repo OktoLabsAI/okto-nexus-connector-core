@@ -31,11 +31,13 @@ class HarnessHTTPTemplate:
     server_url: str
     bearer_env_name: str
     capability_ref: str = field(repr=False)
+    always_allow_tools: bool = False
 
     def entry(self) -> dict[str, object]:
         if self.adapter_id == "codex_app_server":
             return {"url": self.server_url,
-                    "bearer_token_env_var": self.bearer_env_name}
+                    "bearer_token_env_var": self.bearer_env_name,
+                    **({"default_tools_approval_mode": "approve"} if self.always_allow_tools else {})}
         return {"type": "http", "url": self.server_url,
                 "headers": {"Authorization":
                             f"Bearer ${{{self.bearer_env_name}}}"}}
@@ -110,13 +112,16 @@ def harness_http_template(adapter_id: str, server_url: str,
                           harness_is_local: bool,
                           approved_origins: Collection[str] | None,
                           loopback_reachable: bool = False,
-                          format_qualified: bool = False) -> HarnessHTTPTemplate:
+                          format_qualified: bool = False,
+                          always_allow_tools: bool = False) -> HarnessHTTPTemplate:
     """Plan a native client's direct HTTP entry without a token or proxy.
 
     ``format_qualified`` is a trusted host assertion about the selected
     native build, not a value received from the Server/model. Pi has no
     built-in MCP HTTP client and cannot use this template.
     """
+    if type(always_allow_tools) is not bool:
+        raise CoreError("VALIDATION_ERROR", "mcp_client_configuration")
     if adapter_id not in {"codex_app_server", "claude_stream"} or format_qualified is not True:
         raise CoreError("CAPABILITY_UNSUPPORTED", "mcp_client_configuration")
     if not isinstance(entry_name, str) or not re.fullmatch(
@@ -131,7 +136,7 @@ def harness_http_template(adapter_id: str, server_url: str,
     env_name = _token_env_name(capability_ref)
     section = "mcp_servers" if adapter_id == "codex_app_server" else "mcpServers"
     return HarnessHTTPTemplate(adapter_id, section, entry_name,
-                               config.server_url, env_name, capability_ref)
+                               config.server_url, env_name, capability_ref, always_allow_tools)
 
 
 def render_codex_toml_fragment(template: HarnessHTTPTemplate) -> str:
@@ -140,7 +145,8 @@ def render_codex_toml_fragment(template: HarnessHTTPTemplate) -> str:
         raise CoreError("CAPABILITY_UNSUPPORTED", "mcp_client_configuration")
     return (f"[mcp_servers.{template.entry_name}]\n"
             f"url = {json.dumps(template.server_url)}\n"
-            f"bearer_token_env_var = {json.dumps(template.bearer_env_name)}\n")
+            f"bearer_token_env_var = {json.dumps(template.bearer_env_name)}\n" +
+            ('default_tools_approval_mode = "approve"\n' if template.always_allow_tools else ''))
 
 
 def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[str, ...]:
@@ -156,6 +162,7 @@ def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[s
     entries = {}
     for template in templates:
         if (type(template) is not HarnessHTTPTemplate or template.adapter_id != adapter_id
+                or type(template.always_allow_tools) is not bool
                 or template.section != ('mcp_servers' if adapter_id == 'codex_app_server' else 'mcpServers')
                 or type(template.entry_name) is not str
                 or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,63}', template.entry_name, re.ASCII)
@@ -170,7 +177,9 @@ def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[s
         entries[template.entry_name] = template.entry()
     if adapter_id == 'claude_stream':
         return ('--strict-mcp-config', '--mcp-config',
-                json.dumps({'mcpServers': entries}, separators=(',', ':')))
+                json.dumps({'mcpServers': entries}, separators=(',', ':')),
+                *(('--allowedTools', ','.join('mcp__'+t.entry_name+'__*' for t in templates if t.always_allow_tools))
+                  if any(t.always_allow_tools for t in templates) else ()))
     fields = ','.join(json.dumps(name) + '={' + ','.join(
         key + '=' + json.dumps(value) for key, value in entry.items()) + '}'
         for name, entry in entries.items())

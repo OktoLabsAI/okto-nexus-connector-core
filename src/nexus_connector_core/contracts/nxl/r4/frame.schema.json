@@ -1255,6 +1255,42 @@
                   "pattern": "^nexus-install-v1:[0-9a-f]{64}$",
                   "type": "string"
                 },
+                "harness_settings": {
+                  "additionalProperties": false,
+                  "properties": {
+                    "approval_policy": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "effort": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "permission_mode": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "provider": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "sandbox": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "user_input": {
+                      "maxLength": 200,
+                      "minLength": 1,
+                      "type": "string"
+                    }
+                  },
+                  "type": "object"
+                },
                 "inventory_revision": {
                   "pattern": "^sha256:[0-9a-f]{64}$",
                   "type": "string"

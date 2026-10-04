@@ -24,6 +24,7 @@ from .models import (
     CoreError,
     InstallationCandidate,
     LaunchIntent,
+    HarnessSettings,
     PreparedLaunch,
     DiscoveryRequest,
     Inventory,
@@ -94,12 +95,21 @@ from .executor_inventory import (
 )
 from .discovery import discover_installations
 from .provider_discovery import discover_provider_home
+from .harness_configuration import discover_harness_configuration, query_harness_configuration, CONFIGURATION_SCHEMA_VERSION, validate_harness_settings, harness_settings_dict, validate_harness_configuration
+from .configuration_file import parse_harness_configuration_file, export_harness_configuration_file
+from .configuration_probe import probe_selected_configuration
+from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
 __version__ = "0.2.56.dev0"
 
 __all__ = [
+    "native_input_response",
+    "HarnessSettings", "validate_harness_settings", "harness_settings_dict", "validate_harness_configuration",
+    "parse_harness_configuration_file", "export_harness_configuration_file",
+    "probe_selected_configuration",
+    "discover_harness_configuration", "query_harness_configuration", "CONFIGURATION_SCHEMA_VERSION",
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
     "r4_close_operation",
     "ControlTargeting", "get_control_targeting", "validate_control_target",

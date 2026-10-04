@@ -16,6 +16,7 @@ from typing import Any
 from .models import CoreError, ExecutionContext, SessionKey
 from .native_action_bridge import (
     ContextGet, HandoffClaim, HandoffComplete, ScopedNativeActionBridge,
+    RuntimeInputList, RuntimeInputRespond, MessageCreate,
 )
 from .protocol import canonical_json
 
@@ -25,6 +26,9 @@ _TIMEOUT_S = 10.0
 _COMMON_KEYS = frozenset({"action", "operation_id", "session_id",
                           "capability_ref", "handoff_id"})
 _ACTION_KEYS = {
+    'message.create': ((_COMMON_KEYS - {'handoff_id'}) | {'message'}, (_COMMON_KEYS - {'handoff_id'}) | {'message'}),
+    'runtime.input.list': (_COMMON_KEYS - {'handoff_id'}, _COMMON_KEYS - {'handoff_id'}),
+    'runtime.input.respond': ((_COMMON_KEYS - {'handoff_id'}) | {'request'}, (_COMMON_KEYS - {'handoff_id'}) | {'request'}),
     "handoff.get": (_COMMON_KEYS, _COMMON_KEYS),
     "handoff.claim": (_COMMON_KEYS | {"idempotency_key"},
                       _COMMON_KEYS | {"idempotency_key", "claim_epoch"}),
@@ -64,6 +68,11 @@ def _decode_request(line: bytes) -> ContextGet | HandoffClaim | HandoffComplete:
     required, allowed = _ACTION_KEYS[action]
     if not required <= value.keys() or not value.keys() <= allowed:
         raise CoreError("VALIDATION_ERROR", "native_action_ingress")
+    if action == 'message.create':
+        return MessageCreate(value['operation_id'], value['session_id'], value['capability_ref'], value['message'])
+    if action.startswith('runtime.input.'):
+        base = (value['operation_id'], value['session_id'], value['capability_ref'])
+        return RuntimeInputList(*base) if action == 'runtime.input.list' else RuntimeInputRespond(*base, value['request'])
     base = (value["operation_id"], value["session_id"],
             value["capability_ref"], value["handoff_id"])
     if action == "handoff.get":
@@ -209,7 +218,7 @@ class NativeActionSocketService:
 
     @staticmethod
     def _uncertain(request, effect_started):
-        mutation = effect_started and isinstance(request, (HandoffClaim, HandoffComplete))
+        mutation = effect_started and isinstance(request, (HandoffClaim, HandoffComplete, RuntimeInputRespond, MessageCreate))
         return canonical_json({"ok": False,
             "code": "OUTCOME_UNKNOWN" if mutation else "EXECUTOR_OFFLINE",
             "possible_effect": mutation, "retry_safe": not mutation,

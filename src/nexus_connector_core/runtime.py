@@ -702,7 +702,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("VALIDATION_ERROR", "approval_decide")
         projected = {"request_id": request_id, "request_hash": request_hash,
                      "method": method, "params": params}
-        if method == "control_request:can_use_tool":
+        if method in {"control_request:can_use_tool", "extension_ui_request"}:
             projected["local_generation"] = request["local_generation"]
         # C7/W04: ONE classification - decline/cancel map to a strictly
         # negative native reply (never new permission); accept and any
@@ -761,7 +761,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                 retry_safe=True)
             if action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "approval_decide")
-            if binding.adapter_id not in {"codex_app_server", "claude_stream"}:
+            if binding.adapter_id not in {"codex_app_server", "claude_stream", "pi_rpc"}:
                 raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
             reply = getattr(binding.native, "reply_native_approval", None)
             if not callable(reply):
@@ -2570,7 +2570,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                             isinstance(request.get("params"), dict)):
                         projected = {name: request.get(name) for name in
                                      ("request_id", "request_hash", "method", "params")}
-                        if request.get("method") == "control_request:can_use_tool":
+                        if request.get("method") in {"control_request:can_use_tool", "extension_ui_request"}:
                             projected["local_generation"] = request.get("local_generation")
                         try:
                             encoded = canonical_json(projected)
@@ -2584,7 +2584,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                     turn_id = event.payload.get("turn_id")
                     for key, encoded in tuple(binding.pending_native_requests.items()):
                         pending = json.loads(encoded)
-                        if (binding.adapter_id == "claude_stream" or
+                        if (binding.adapter_id in {"claude_stream", "pi_rpc"} or
                                 pending["params"].get("turnId") == turn_id):
                             binding.pending_native_requests.pop(key, None)
                 async with self._event_changed:

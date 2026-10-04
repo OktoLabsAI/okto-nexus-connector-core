@@ -8,6 +8,7 @@ import hashlib
 import re
 
 from .models import CoreError, NativeApprovalOperation, Operation, OperationKey, OperationReceipt, PreparedLaunch
+from .harness_configuration import harness_settings_dict
 from .protocol import canonical_json, intent_hash, strict_json
 from .frame_codec_r4 import decode_r4_frame, encode_r4_frame
 from .installation import effective_installation_ref
@@ -35,6 +36,7 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
                     prepared.intent.workspace_id != context.workspace_id or
                     prepared.intent.adapter_id != payload['adapter_id'] or
                     prepared.intent.mode != payload['mode'] or prepared.intent.model != payload.get('model') or
+                    harness_settings_dict(prepared.intent.harness_settings) != payload.get('harness_settings', {}) or
                     effective_installation_ref(prepared.candidate) != payload['candidate_ref']):
                 raise CoreError('PROFILE_DRIFT', 'r4_receipt_binding')
             semantic = Operation(frame['operation_id'], frame['session_id'], action,

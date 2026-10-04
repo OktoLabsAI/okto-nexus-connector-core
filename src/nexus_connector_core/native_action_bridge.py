@@ -65,7 +65,30 @@ class HandoffComplete(NativeActionRequest):
     result: Any
 
 
+@dataclass(frozen=True, slots=True)
+class RuntimeInputList:
+    operation_id: str
+    session_id: str
+    capability_ref: str
+
+
+@dataclass(frozen=True, slots=True)
+class RuntimeInputRespond(RuntimeInputList):
+    request: Mapping[str, Any]
+
+
+@dataclass(frozen=True, slots=True)
+class MessageCreate(RuntimeInputList):
+    message: Mapping[str, Any]
+
+
 class CanonicalNativeActions(Protocol):
+    async def create_message(self, request: MessageCreate,
+                             context: ExecutionContext) -> Mapping[str, Any]: ...
+    async def list_runtime_inputs(self, request: RuntimeInputList,
+                                  context: ExecutionContext) -> Mapping[str, Any]: ...
+    async def respond_runtime_input(self, request: RuntimeInputRespond,
+                                    context: ExecutionContext) -> Mapping[str, Any]: ...
     async def get_context(self, request: ContextGet,
                           context: ExecutionContext) -> Mapping[str, Any]: ...
     async def claim_handoff(self, request: HandoffClaim,
@@ -118,16 +141,26 @@ def native_action_request_body(request: NativeActionRequest, scope: Mapping[str,
     retries a request or implements a handoff transition.
     """
     scope = native_action_scope(scope)
-    types = {ContextGet: 'context', HandoffClaim: 'claim', HandoffComplete: 'complete'}
+    types = {ContextGet: 'context', HandoffClaim: 'claim', HandoffComplete: 'complete',
+             RuntimeInputList: 'input_list', RuntimeInputRespond: 'input_respond', MessageCreate: 'message_create'}
     action = types.get(type(request))
     if action is None:
         raise CoreError('CAPABILITY_UNSUPPORTED', 'native_action')
-    if (not _bounded_id(request.operation_id) or not _bounded_id(request.handoff_id)
+    question = type(request) in {RuntimeInputList, RuntimeInputRespond, MessageCreate}
+    if (not _bounded_id(request.operation_id) or (not question and not _bounded_id(request.handoff_id))
             or request.session_id != scope['session_id']
             or not _bounded_id(request.capability_ref, maximum=256)
             or not request.capability_ref.startswith('native-cap:')):
         raise CoreError('VALIDATION_ERROR', 'native_action')
-    payload = dict(handoff_id=request.handoff_id)
+    payload = {} if question else dict(handoff_id=request.handoff_id)
+    if type(request) is MessageCreate:
+        if not isinstance(request.message, Mapping):
+            raise CoreError('VALIDATION_ERROR', 'native_action')
+        payload['message'] = dict(request.message)
+    if type(request) is RuntimeInputRespond:
+        if not isinstance(request.request, Mapping):
+            raise CoreError('VALIDATION_ERROR', 'native_action')
+        payload['request'] = dict(request.request)
     if type(request) is HandoffClaim:
         if not _bounded_id(request.idempotency_key, maximum=128):
             raise CoreError('VALIDATION_ERROR', 'native_action')
@@ -162,7 +195,8 @@ class ScopedNativeActionBridge:
                 type(grant.expires_monotonic) not in (int, float) or
                 not math.isfinite(grant.expires_monotonic) or
                 not grant.allowed_actions <= {
-                    "handoff.get", "handoff.claim", "handoff.complete"}):
+                    "handoff.get", "handoff.claim", "handoff.complete",
+                    "runtime.input.list", "runtime.input.respond", "message.create"}):
             raise ValueError("invalid native action grant")
         if any(type(v) is not int or v < 1 for v in (
                 grant.connection_generation, grant.authorization_revision, grant.configuration_revision)):
@@ -190,15 +224,38 @@ class ScopedNativeActionBridge:
             action = "handoff.claim"
         elif type(request) is HandoffComplete:
             action = "handoff.complete"
+        elif type(request) is RuntimeInputList:
+            action = 'runtime.input.list'
+        elif type(request) is RuntimeInputRespond:
+            action = 'runtime.input.respond'
+        elif type(request) is MessageCreate:
+            action = 'message.create'
         else:
             raise CoreError("CAPABILITY_UNSUPPORTED", "native_action")
         grant = self._grant
         if (not _bounded_id(request.operation_id) or
                 not _bounded_id(request.session_id) or
-                not _bounded_id(request.handoff_id) or
+                (type(request) not in {RuntimeInputList, RuntimeInputRespond, MessageCreate} and not _bounded_id(request.handoff_id)) or
                 not isinstance(request.capability_ref, str)):
             raise CoreError("VALIDATION_ERROR", "native_action")
         self._authorize(request, context, action)
+        read_only = type(request) in {ContextGet, RuntimeInputList}
+        if type(request) is MessageCreate:
+            try:
+                if not isinstance(request.message, Mapping):
+                    raise CoreError('VALIDATION_ERROR', 'native_action')
+                if len(canonical_json(dict(request.message))) > _MAX_RESULT_BYTES:
+                    raise CoreError('CAPACITY_EXCEEDED', 'native_action')
+            except (TypeError, ValueError, RecursionError) as exc:
+                raise CoreError('VALIDATION_ERROR', 'native_action') from exc
+        if type(request) is RuntimeInputRespond:
+            if not isinstance(request.request, Mapping):
+                raise CoreError('VALIDATION_ERROR', 'native_action')
+            try:
+                if len(canonical_json(dict(request.request))) > _MAX_RESULT_BYTES:
+                    raise CoreError('CAPACITY_EXCEEDED', 'native_action')
+            except (TypeError, ValueError, RecursionError) as exc:
+                raise CoreError('VALIDATION_ERROR', 'native_action') from exc
         if type(request) is HandoffClaim:
             if (not _bounded_id(request.idempotency_key, maximum=128) or
                     (request.claim_epoch is not None and
@@ -220,12 +277,18 @@ class ScopedNativeActionBridge:
                 response = await self._backend.get_context(request, context)
             elif type(request) is HandoffClaim:
                 response = await self._backend.claim_handoff(request, context)
+            elif type(request) is RuntimeInputList:
+                response = await self._backend.list_runtime_inputs(request, context)
+            elif type(request) is RuntimeInputRespond:
+                response = await self._backend.respond_runtime_input(request, context)
+            elif type(request) is MessageCreate:
+                response = await self._backend.create_message(request, context)
             else:
                 response = await self._backend.complete_handoff(request, context)
         except CoreError:
             raise
         except Exception:
-            if type(request) is ContextGet:
+            if read_only:
                 raise CoreError("EXECUTOR_OFFLINE", "native_action",
                                 retry_safe=True,
                                 operation_id=request.operation_id) from None
@@ -237,29 +300,29 @@ class ScopedNativeActionBridge:
         try:
             self._authorize(request, context, action)
         except CoreError:
-            if type(request) is ContextGet:
+            if read_only:
                 raise
             raise CoreError('OUTCOME_UNKNOWN', 'native_action', possible_effect=True,
                             operation_id=request.operation_id) from None
         if (not isinstance(response, Mapping) or
                 _FORBIDDEN_ENVELOPE_KEYS.intersection(response)):
-            raise CoreError("VALIDATION_ERROR" if type(request) is ContextGet
+            raise CoreError("VALIDATION_ERROR" if read_only
                             else "OUTCOME_UNKNOWN", "native_action",
-                            possible_effect=type(request) is not ContextGet,
-                            retry_safe=type(request) is ContextGet,
+                            possible_effect=not read_only,
+                            retry_safe=read_only,
                             operation_id=request.operation_id)
         try:
             if len(canonical_json(dict(response))) > _MAX_RESULT_BYTES:
-                raise CoreError("CAPACITY_EXCEEDED" if type(request) is ContextGet
+                raise CoreError("CAPACITY_EXCEEDED" if read_only
                                 else "OUTCOME_UNKNOWN", "native_action",
-                                possible_effect=type(request) is not ContextGet,
-                                retry_safe=type(request) is ContextGet,
+                                possible_effect=not read_only,
+                                retry_safe=read_only,
                                 operation_id=request.operation_id)
         except (TypeError, ValueError, RecursionError) as exc:
-            raise CoreError("VALIDATION_ERROR" if type(request) is ContextGet
+            raise CoreError("VALIDATION_ERROR" if read_only
                             else "OUTCOME_UNKNOWN", "native_action",
-                            possible_effect=type(request) is not ContextGet,
-                            retry_safe=type(request) is ContextGet,
+                            possible_effect=not read_only,
+                            retry_safe=read_only,
                             operation_id=request.operation_id) from exc
         return response
 

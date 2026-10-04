@@ -82,6 +82,15 @@ def native_request_action(request: Mapping[str, Any]) -> str:
     method, params = request.get("method"), request.get("params")
     if not isinstance(params, dict):
         raise CoreError("VALIDATION_ERROR", "approval_decide")
+    if method == "extension_ui_request":
+        from .native.native_inputs import validate_request
+        try:
+            validate_request(method, params)
+            if type(request.get("local_generation")) is not int or request["local_generation"] < 1:
+                raise ValueError()
+        except (ValueError, TypeError):
+            raise CoreError("VALIDATION_ERROR", "approval_decide") from None
+        return "input.provide"
     if method in INPUT_METHODS or method in {
         "item/commandExecution/requestApproval", "item/fileChange/requestApproval",
     }:

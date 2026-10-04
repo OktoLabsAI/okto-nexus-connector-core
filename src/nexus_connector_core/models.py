@@ -276,6 +276,16 @@ class InstallationCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class HarnessSettings:
+    effort: str | None = None
+    provider: str | None = None
+    approval_policy: str | None = None
+    sandbox: str | None = None
+    permission_mode: str | None = None
+    user_input: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class LaunchIntent:
     agent_id: str
     workspace_id: str
@@ -283,6 +293,7 @@ class LaunchIntent:
     mode: str = "managed"
     model: str | None = None
     auth_refs: tuple[str, ...] = ()
+    harness_settings: HarnessSettings = field(default_factory=HarnessSettings)
 
 
 @dataclass(frozen=True, slots=True)

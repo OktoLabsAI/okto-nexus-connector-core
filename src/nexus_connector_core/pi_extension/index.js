@@ -2,6 +2,12 @@
 // A trusted host supplies a narrow, authenticated loopback JSONL socket.
 import { createConnection } from "node:net";
 const actions = [
+  ["nexus_message_create", "message.create", {message: {type: "object", additionalProperties: false,
+    properties: {subject: {type: "string"}, body: {type: "string"}, target: {type: "object"},
+      channel_id: {type: "string"}, parent_message_id: {type: "string"},
+      artifacts: {type: "array", items: {type: "string"}}}, required: ["subject", "body", "target"]}}],
+  ["nexus_runtime_input_list", "runtime.input.list", {}],
+  ["nexus_runtime_input_respond", "runtime.input.respond", {request: {type: "object"}}],
   ["nexus_handoff_get", "handoff.get", { handoff_id: { type: "string" } }],
   ["nexus_handoff_claim", "handoff.claim", {
     handoff_id: { type: "string" }, idempotency_key: { type: "string" },
@@ -42,7 +48,7 @@ function exchange(port, record, signal, uncertain) {
       settled = true;
       signal?.removeEventListener("abort", abort);
       socket.destroy();
-      if (error) reject(new Error(error)); else resolve(value);
+      if (error) reject(error instanceof Error ? error : new Error(error)); else resolve(value);
     };
     const abort = () => finish(uncertain);
     signal?.addEventListener("abort", abort, { once: true });
@@ -62,6 +68,17 @@ function exchange(port, record, signal, uncertain) {
       let reply;
       try { reply = JSON.parse(buffer.subarray(0, end).toString("utf8")); }
       catch { return finish(uncertain); }
+      // A correlated rejection is a known outcome, not a lost acknowledgement.
+      // Preserve the host's effect/retry facts; malformed or unrelated replies
+      // still take the conservative transport-uncertainty path below.
+      if (reply?.ok === false && reply.operation_id === record.operation_id &&
+          typeof reply.code === "string" && /^[A-Z][A-Z0-9_]{0,79}$/u.test(reply.code) &&
+          typeof reply.possible_effect === "boolean" && typeof reply.retry_safe === "boolean") {
+        return finish(Object.assign(new Error(`${reply.code} (possible_effect=${reply.possible_effect}, retry_safe=${reply.retry_safe})`), {
+          code: reply.code, possible_effect: reply.possible_effect,
+          retry_safe: reply.retry_safe, operation_id: reply.operation_id,
+        }));
+      }
       if (!reply || reply.ok !== true || !reply.data ||
           typeof reply.data !== "object" || Array.isArray(reply.data) ||
           ["jsonrpc", "method", "tools"].some((key) => key in reply.data)) {
@@ -73,18 +90,53 @@ function exchange(port, record, signal, uncertain) {
 }
 
 export default function (pi) {
+  pi.registerTool({
+    name: "nexus_ask_user", label: "Ask the conversation recipient",
+    description: "Ask your Nexus conversation recipient a question and wait for their answer through Pi's native UI protocol. Use select for choices, confirm for a boolean, input for text, or editor for longer text.",
+    parameters: {type: "object", additionalProperties: false,
+      properties: {method: {type: "string", enum: ["select", "confirm", "input", "editor"]},
+        title: {type: "string"}, options: {type: "array", items: {type: "string"}, minItems: 1, maxItems: 32},
+        message: {type: "string"}, placeholder: {type: "string"}, prefill: {type: "string"}},
+      required: ["method", "title"]},
+    async execute(toolCallId, params, signal, onUpdate, ctx) {
+      required(params.title, "question", 4096);
+      if (!ctx?.ui) throw new Error("Pi question UI is unavailable");
+      let value;
+      if (params.method === "select") {
+        if (!Array.isArray(params.options) || !params.options.length || params.options.length > 32 ||
+            new Set(params.options).size !== params.options.length) throw new Error("Invalid question options");
+        params.options.forEach(option => required(option, "option", 4096));
+        value = await ctx.ui.select(params.title, params.options, {signal});
+      } else if (params.method === "confirm") {
+        value = await ctx.ui.confirm(params.title, params.message ?? "", {signal});
+      } else if (params.method === "input") {
+        value = await ctx.ui.input(params.title, params.placeholder, {signal});
+      } else if (params.method === "editor") {
+        value = await ctx.ui.editor(params.title, params.prefill);
+      } else throw new Error("Invalid question method");
+      const data = value === undefined ? {cancelled: true} : {answer: value};
+      return {content: [{type: "text", text: JSON.stringify(data)}], details: data};
+    },
+  });
   for (const [name, action, properties] of actions) {
-    const requiredFields = action === "handoff.get" ? ["handoff_id"] :
+    const requiredFields = action === "message.create" ? ["message"] : action === "runtime.input.list" ? [] :
+      action === "runtime.input.respond" ? ["request"] : action === "handoff.get" ? ["handoff_id"] :
       action === "handoff.claim" ? ["handoff_id", "idempotency_key"] :
       ["handoff_id", "claim_epoch", "result"];
     pi.registerTool({
-      name, label: name, description: `Nexus native ${action} action`,
+      name, label: name, description: action === "message.create" ?
+        'Send a Nexus message as your authenticated runtime agent in its workspace. Use message={subject,body,target:{strategy:"direct",agent_id:"recipient"}}. Sender and workspace are supplied by the session. Replaying the same tool call ID cannot create a second message. The result can require operator approval.' : action === "runtime.input.list" ?
+        "List native questions addressed to you in this session's workspace. Return the native answer with nexus_runtime_input_respond." :
+        action === "runtime.input.respond" ?
+        "Answer a question addressed to you. Copy approval_key, expected_revision, request_hash and cas_token from the listed question into request. Add decision approve or deny and response when approving. Omit client_intent_id; the tool call supplies it. Preserve the native response contract: Codex answers={question_id:{answers:[text]}}; Claude answers={question_text:text}; Pi value=text or confirmed=boolean; MCP content={field:value}." : `Nexus native ${action} action`,
       parameters: { type: "object", properties, required: requiredFields,
         additionalProperties: false },
       async execute(toolCallId, params, signal) {
         const { port, capability, session } = configuration();
         required(toolCallId, "operation");
-        required(params.handoff_id, "handoff");
+        if (action.startsWith("handoff.")) required(params.handoff_id, "handoff");
+        if (action === "runtime.input.respond" && (!params.request || typeof params.request !== "object" ||
+            Array.isArray(params.request) || Object.hasOwn(params.request, "client_intent_id"))) throw new Error("invalid question response");
         if (action === "handoff.claim") required(params.idempotency_key, "idempotency key", 128);
         if (action === "handoff.claim" && params.claim_epoch !== undefined &&
             (!Number.isSafeInteger(params.claim_epoch) || params.claim_epoch < 1)) {
@@ -99,8 +151,10 @@ export default function (pi) {
           throw new Error("invalid completion result");
         }
         const request = { action, operation_id: toolCallId, session_id: session,
-          capability_ref: capability,
-          handoff_id: params.handoff_id };
+          capability_ref: capability };
+        if (action.startsWith("handoff.")) request.handoff_id = params.handoff_id;
+        if (action === "runtime.input.respond") request.request = params.request;
+        if (action === "message.create") request.message = params.message;
         if (action === "handoff.claim") {
           request.idempotency_key = params.idempotency_key;
           if (params.claim_epoch !== undefined) request.claim_epoch = params.claim_epoch;
@@ -112,7 +166,7 @@ export default function (pi) {
         if (Buffer.byteLength(JSON.stringify(request), "utf8") > 16 * 1024) {
           throw new Error("native action payload too large");
         }
-        const uncertain = action === "handoff.get" ? "EXECUTOR_OFFLINE" : "OUTCOME_UNKNOWN";
+        const uncertain = ["handoff.get", "runtime.input.list"].includes(action) ? "EXECUTOR_OFFLINE" : "OUTCOME_UNKNOWN";
         const data = await exchange(port, request, signal, uncertain);
         return { content: [{ type: "text", text: JSON.stringify(data) }], details: data };
       },

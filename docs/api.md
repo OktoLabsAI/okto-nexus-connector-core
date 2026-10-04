@@ -264,3 +264,18 @@ scoped proof digest; a digest alone is not evidence that a process stopped.
 `DiscoveryCancelled` reports that the host stopped passive observation before
 receiving an inventory. Hosts should retain shutdown ownership and distinguish
 cancellation from an empty successful inventory; it does not authorize a launch.
+
+## Native extension domain requests
+
+`native_action_bridge` provides typed `MessageCreate`, `RuntimeInputList` and
+`RuntimeInputRespond` requests alongside the handoff requests. Their canonical
+backend methods are `create_message`, `list_runtime_inputs` and
+`respond_runtime_input`. The bridge enforces the host-issued session grant;
+domain state, replay and recipient policy remain in the Nexus backend.
+
+Pi's local extension exposes `nexus_message_create`, `nexus_runtime_input_list`
+and `nexus_runtime_input_respond`. Message payloads contain content and target;
+the authenticated session supplies sender and workspace. Question answers retain
+the source harness contract. Tool call IDs provide operation identity. A lost
+message or answer acknowledgement is `OUTCOME_UNKNOWN`, never an instruction to
+retry with a new ID. Requests and responses remain bounded to 16 KiB.

@@ -6,6 +6,7 @@ import re
 USER_INPUT = "item/tool/requestUserInput"
 ELICITATION = "mcpServer/elicitation/request"
 CLAUDE_INPUT = "claude/AskUserQuestion"
+PI_INPUT = "extension_ui_request"
 INPUT_METHODS = {USER_INPUT, ELICITATION}
 
 
@@ -23,7 +24,22 @@ def _require(condition):
 
 
 def validate_request(method, params):
-    if method == CLAUDE_INPUT:
+    if method == PI_INPUT:
+        _require(params.get("method") in {"select", "confirm", "input", "editor"})
+        _require(isinstance(params.get("title"), str) and 1 <= len(params["title"]) <= 4096)
+        if params.get("timeout") is not None:
+            _require(type(params["timeout"]) is int and 1 <= params["timeout"] <= 86400000)
+        if params["method"] == "select":
+            options = params.get("options")
+            _require(isinstance(options, list) and 1 <= len(options) <= 32)
+            _require(all(isinstance(value, str) and 1 <= len(value) <= 4096 for value in options))
+            _require(len(set(options)) == len(options))
+        for key in ("message", "placeholder", "prefill"):
+            if key in params:
+                _require(isinstance(params[key], str) and len(params[key]) <= 4096)
+        if params["method"] == "confirm":
+            _require(isinstance(params.get("message"), str))
+    elif method == CLAUDE_INPUT:
         data = params.get("input")
         _require(isinstance(data, dict))
         questions = data.get("questions")
@@ -40,7 +56,7 @@ def validate_request(method, params):
             _require(len({o["label"] for o in options}) == len(options))
     elif method == USER_INPUT:
         questions = params.get("questions")
-        _require(params.get("isBlocking") is True and isinstance(questions, list) and 1 <= len(questions) <= 16)
+        _require(type(params.get("isBlocking")) is bool and isinstance(questions, list) and 1 <= len(questions) <= 16)
         ids = set()
         for q in questions:
             _require(isinstance(q, dict) and isinstance(q.get("id"), str) and 1 <= len(q["id"]) <= 128)
@@ -103,17 +119,29 @@ def response_for(request, response, *, approved):
     method, params = request["method"], request["params"]
     if method == "control_request:can_use_tool" and params.get("tool_name") == "AskUserQuestion":
         method = CLAUDE_INPUT
-    if method not in INPUT_METHODS and method != CLAUDE_INPUT:
+    if method not in INPUT_METHODS and method not in {CLAUDE_INPUT, PI_INPUT}:
         _require(response is None)
         return None
     validate_request(method, params)
     if not approved:
         _require(response is None)
+        if method == PI_INPUT:
+            return {"type": "extension_ui_response", "id": request["request_id"], "cancelled": True}
         if method == CLAUDE_INPUT:
             return None  # Native tool denial, not fabricated answer data.
         return {"answers": {}} if method == USER_INPUT else {"action": "decline"}
     _require(isinstance(response, dict))
     _require(len(json.dumps(response, allow_nan=False).encode()) <= 16384)
+    if method == PI_INPUT:
+        key = "confirmed" if params["method"] == "confirm" else "value"
+        _require(set(response) == {key})
+        if key == "confirmed":
+            _require(type(response[key]) is bool)
+        else:
+            _require(isinstance(response[key], str) and len(response[key]) <= 4096)
+            if params["method"] == "select":
+                _require(response[key] in params["options"])
+        return {"type": "extension_ui_response", "id": request["request_id"], **response}
     if method == CLAUDE_INPUT:
         answers = response.get("answers")
         questions = params["input"]["questions"]

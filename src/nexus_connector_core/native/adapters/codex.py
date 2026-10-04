@@ -995,6 +995,13 @@ class CodexAppServerConnector:
     # ------------------------------------------------------------------ #
     # Handshake
     # ------------------------------------------------------------------ #
+    def configuration_observation(self):
+        from ...harness_configuration import observe_transport_configuration
+        if self._transport is None:
+            raise RuntimeError('Codex transport is not initialized.')
+        return observe_transport_configuration('codex_app_server', self._transport,
+            version=self._compatibility_report.get('native_version'))
+
     def _spawn_and_initialize(self) -> None:
         """Spawn the child and complete the ``initialize`` handshake.
 

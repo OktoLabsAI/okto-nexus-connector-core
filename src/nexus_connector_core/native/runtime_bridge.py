@@ -301,6 +301,9 @@ class CopiedAdapterSession:
             if self._session.harness_kind != "claude_code":
                 raise RuntimeCommandNotSent("native approval adapter changed",
                                             code="STALE_TURN")
+        elif method == "extension_ui_request":
+            if self._session.harness_kind != "pi":
+                raise RuntimeCommandNotSent("native input adapter changed", code="STALE_TURN")
         else:
             raise RuntimeCommandNotSent("native approval method unsupported",
                                         code="CAPABILITY_UNSUPPORTED")
@@ -323,9 +326,12 @@ class CopiedAdapterSession:
             "decline", "deny", "denied", "reject", "refuse", "cancel"}
         fence = getattr(self, "effect_fence", None)
         guards = getattr(self._connector, "_dispatch_guards", None)
+        originating_operation = self._active_operation_id
 
         def _correlation_still_valid() -> bool:
-            if self._close_started or self._active_operation_id is None:
+            if self._close_started or self._active_operation_id != originating_operation:
+                return False
+            if method == "extension_ui_request" and not self._connector.native_input_still_current(dict(request)):
                 return False
             if method in {"item/commandExecution/requestApproval",
                           "item/fileChange/requestApproval", *INPUT_METHODS}:
@@ -369,6 +375,28 @@ class CopiedAdapterSession:
         await asyncio.to_thread(_guarded_reply)
 
     async def events(self) -> AsyncIterator[RuntimeEvent]:
+        observe_configuration = getattr(self._connector, 'configuration_observation', None)
+        if callable(observe_configuration):
+            try:
+                configuration = await asyncio.to_thread(observe_configuration)
+                from ..protocol import canonical_json
+                from hashlib import sha256
+                configuration['candidate_ref'] = getattr(self._connector, '_configuration_candidate_ref', None)
+                configuration.pop('schema_revision', None)
+                configuration = self._redactor.clean(configuration)
+                configuration['schema_revision'] = 'sha256:' + sha256(canonical_json(configuration)).hexdigest()
+                # Leave room for event framing within the public event limit.
+                if len(canonical_json(configuration)) > 48000:
+                    raise CoreError('CAPACITY_EXCEEDED', 'configuration_discovery')
+                payload = {'harness_configuration': configuration}
+                category = 'lifecycle'
+            except Exception:
+                # Failure is visible but cannot stop an otherwise usable
+                # session. Never publish transport text containing credentials.
+                payload = {'configuration_discovery_error': 'NATIVE_DISCOVERY_FAILED'}
+                category = 'system_warning'
+            yield RuntimeEvent(self._context.server_id, self._context.executor_id,
+                self._session_id, self._epoch, 0, category, 'core/harness_configuration', payload)
         if hasattr(self._connector, "events_for_session"):
             iterator = self._connector.events_for_session(self._session.session_id)
         else:
@@ -381,6 +409,15 @@ class CopiedAdapterSession:
             outcome_fn = getattr(self._connector, "delivery_outcome", None)
             phase = native.delivery_phase or (phase_fn(native) if phase_fn else None)
             outcome = native.delivery_outcome or (outcome_fn(native) if outcome_fn else None)
+            # Codex streams identify their native turn, not the Nexus operation.
+            # Correlate every assistant delta before redaction withholds its tail.
+            if native.harness_kind == "codex" and native.native_event == "item/agentMessage/delta":
+                active = self._active_operation_id
+                if (active is None or native.operation_id not in (None, active) or
+                        not native.turn_id or native.turn_id != self._active_turn_id):
+                    raise CoreError("EVENT_OPERATION_MISMATCH", "native_pump",
+                                    possible_effect=True)
+                native = replace(native, operation_id=active)
             # Claude and Pi process one submitted turn at a time. Text frames
             # carry no operation ID; bind them before redaction splits off
             # a terminal tail, otherwise the host drops the entire prefix.
@@ -767,9 +804,13 @@ class CopiedAdapterFactory:
             # ``model`` string in the qualified 0.157.0 contract - instead of
             # disappearing after the profile digest.
             explicit_model = prepared.intent.model
+            from ..harness_configuration import codex_thread_settings
+            overrides = dict(client_kwargs.get('thread_start_overrides', {}))
+            overrides.update(codex_thread_settings(prepared.intent.harness_settings))
             if explicit_model is not None:
-                client_kwargs["thread_start_overrides"] = {
-                    "model": explicit_model}
+                overrides['model'] = explicit_model
+            if overrides:
+                client_kwargs['thread_start_overrides'] = overrides
             connector = load_adapter(spec.adapter_id)(command=command,
                                                       cwd=prepared.cwd, env=env,
                                                       **client_kwargs)
@@ -790,7 +831,7 @@ class CopiedAdapterFactory:
             connector = load_adapter(spec.adapter_id)(binary=command[0],
                                                       argv=command[1:],
                                                       cwd=prepared.cwd, env=env)
-        if native_approvals_enabled and kind in {"codex", "claude_code"}:
+        if native_approvals_enabled and kind in {"codex", "claude_code", "pi"}:
             connector.native_approvals_enabled = True
         secrets = (*credential_values(env),
                    *((native_action.capability_ref,) if native_action is not None else ()))
@@ -823,6 +864,15 @@ class CopiedAdapterFactory:
         except BaseException:
             await asyncio.to_thread(connector.close)
             raise
+        connector._configuration_candidate_ref = prepared.candidate.installation_ref
+        if kind == 'claude_code':
+            from ..configuration_probe import probe_selected_configuration
+            def observe_configuration():
+                _revalidate_launch('configuration_discovery')
+                value = probe_selected_configuration(candidate, cwd=prepared.cwd, env=env)
+                _revalidate_launch('configuration_discovery')
+                return value
+            connector.configuration_observation = observe_configuration
         return CopiedAdapterSession(connector, native_session,
                                     session_id=session_id,
                                     stream_epoch=stream_epoch, context=context,
