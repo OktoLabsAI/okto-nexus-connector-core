@@ -1,4 +1,4 @@
-# Core API (`0.2.57.dev0`)
+# Core API (`0.2.58.dev0`)
 
 ## Harness configuration and native input
 

@@ -63,3 +63,9 @@ isolated CLI subprocesses unable to import user-site packages, a missing new
 vendored Core wheel, and a Pi fixture selecting the first host installation
 rather than its own candidate reference. The installed rerun includes CLI,
 packaging, Windows Job Object, IPC, native-action and regression tests.
+
+## Follow-up
+
+The shared-workspace `PROFILE_DRIFT` finding above is addressed in Core
+`0.2.58.dev0`. See [the dedicated regression record](workspace-identity-20261003.md).
+The original merge campaign results above remain historical evidence.

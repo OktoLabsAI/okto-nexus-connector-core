@@ -19,18 +19,21 @@ def template(adapter):
         format_qualified=True)
 
 
-def prepared(adapter):
+def prepared(adapter, root=None):
     candidate=InstallationCandidate(adapter,'C:/native.exe','sha256:test','explicit','selected',version='technical')
     intent=LaunchIntent('agent','ws',adapter,auth_refs=('mcp-cap:session',))
-    return PreparedLaunch(intent,candidate,('C:/native.exe',),'C:/workspace','C:/workspace',
-                          'root','profile',intent.auth_refs)
+    from nexus_connector_core.profiles import _root_fingerprint
+    cwd = str(root) if root is not None else 'C:/workspace'
+    identity = _root_fingerprint(root) if root is not None else 'root'
+    return PreparedLaunch(intent,candidate,('C:/native.exe',),cwd,cwd,
+                          identity,'profile',intent.auth_refs)
 
 
 @pytest.mark.parametrize('adapter',['codex_app_server','claude_stream'])
 def test_factory_keeps_home_and_supplies_only_environment_reference_in_argv(adapter,tmp_path,monkeypatch):
     import nexus_connector_core.native.runtime_bridge as bridge
     item=template(adapter)
-    launch=prepared(adapter)
+    launch=prepared(adapter, tmp_path)
     seen=[]
     class Resolver:
         async def resolve(self,ref):

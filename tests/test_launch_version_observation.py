@@ -16,7 +16,7 @@ def test_missing_version_is_observed_before_secrets_with_frontier_guards(tmp_pat
     import nexus_connector_core.native.runtime_bridge as bridge
     binary=tmp_path/"provider.exe"
     binary.write_bytes(b"selected")
-    launch=prepared("codex_app_server")
+    launch=prepared("codex_app_server", tmp_path)
     launch=replace(launch,candidate=replace(launch.candidate,version=None,executable=str(binary)),
                    argv=(str(binary),"app-server"),cwd=str(tmp_path))
     now=[1]

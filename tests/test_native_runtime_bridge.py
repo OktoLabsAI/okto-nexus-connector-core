@@ -16,6 +16,7 @@ from nexus_connector_core import (
     r4_operational_request_hash, r4_submit_intent_hash,
     reduce_r4_approval_request,
 )
+from nexus_connector_core.profiles import _root_fingerprint
 from nexus_connector_core.protocol import canonical_json
 from nexus_connector_core.discovery import fingerprint
 from nexus_connector_core.journal import SQLiteJournal
@@ -932,7 +933,7 @@ def test_codex_stale_terminal_keeps_new_runtime_receipt_unsettled(tmp_path):
     asyncio.run(run())
 
 
-def test_real_factory_fails_closed_before_resolving_secrets():
+def test_real_factory_fails_closed_before_resolving_secrets(tmp_path):
     async def run():
         called = False
 
@@ -946,7 +947,7 @@ def test_real_factory_fails_closed_before_resolving_secrets():
                                           version="0.156.1")
         intent = LaunchIntent("agent", "ws", "codex_app_server")
         prepared = PreparedLaunch(intent, candidate, ("C:/codex.exe", "app-server"),
-                                  "C:/workspace", "C:/workspace", "root", "profile", ())
+                                  str(tmp_path), str(tmp_path), _root_fingerprint(tmp_path), "profile", ())
         with pytest.raises(CoreError, match="NATIVE_VERSION_UNQUALIFIED") as denied:
             await CopiedAdapterFactory(environment).open(prepared, "session",
                                                          context(), stream_epoch="epoch")
@@ -956,7 +957,7 @@ def test_real_factory_fails_closed_before_resolving_secrets():
     asyncio.run(run())
 
 
-def test_factory_passes_only_preapproved_capability_env_to_adapter(monkeypatch):
+def test_factory_passes_only_preapproved_capability_env_to_adapter(monkeypatch, tmp_path):
     import nexus_connector_core.native.runtime_bridge as bridge_module
     import nexus_connector_core.native.adapters.codex as codex_module
 
@@ -970,7 +971,7 @@ def test_factory_passes_only_preapproved_capability_env_to_adapter(monkeypatch):
                                       version="synthetic")
     intent = LaunchIntent("agent", "ws", "codex_app_server", auth_refs=(ref,))
     prepared = PreparedLaunch(intent, candidate, ("C:/codex.exe", "app-server"),
-                              "C:/workspace", "C:/workspace", "root", "profile", (ref,))
+                              str(tmp_path), str(tmp_path), _root_fingerprint(tmp_path), "profile", (ref,))
     seen = []
 
     class StubCodex:
@@ -1068,7 +1069,7 @@ def test_factory_passes_only_preapproved_capability_env_to_adapter(monkeypatch):
     asyncio.run(run())
 
 
-def test_factory_pi_native_action_launch_is_scoped_and_adds_local_extension(monkeypatch):
+def test_factory_pi_native_action_launch_is_scoped_and_adds_local_extension(monkeypatch, tmp_path):
     import nexus_connector_core.native.runtime_bridge as bridge_module
     import nexus_connector_core.native.adapters.pi as pi_module
 
@@ -1077,7 +1078,7 @@ def test_factory_pi_native_action_launch_is_scoped_and_adds_local_extension(monk
                                       "explicit", "selected", version="synthetic")
     intent = LaunchIntent("agent", "ws", "pi_rpc", auth_refs=(reference,))
     prepared = PreparedLaunch(intent, candidate, ("C:/pi.exe", "--mode", "rpc"),
-                              "C:/workspace", "C:/workspace", "root", "profile",
+                              str(tmp_path), str(tmp_path), _root_fingerprint(tmp_path), "profile",
                               (reference,))
     observed = []
 

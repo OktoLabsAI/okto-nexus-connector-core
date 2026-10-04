@@ -679,31 +679,43 @@ class CopiedAdapterFactory:
             if opening_guard is not None and opening_guard.closed:
                 raise CoreError("RUNTIME_DRAINING", stage, retry_safe=True)
 
-        def _launch_signature() -> tuple:
+        def _workspace_identity(stage: str) -> str:
+            # A workspace is mutable: child creation/removal changes directory
+            # size/mtime without changing the authorized directory itself.
+            # Re-resolve the requested path too, so a redirected symlink or
+            # junction cannot retain authorization for its old target.
+            from pathlib import Path
+            from ..profiles import _root_fingerprint
+            try:
+                root = Path(prepared.requested_root).resolve(strict=True)
+                if root != Path(prepared.cwd) or not root.is_dir():
+                    raise OSError('workspace target changed')
+                identity = _root_fingerprint(root)
+                if identity != prepared.root_fingerprint:
+                    raise OSError('workspace identity changed')
+                return identity
+            except (OSError, ValueError, RuntimeError) as exc:
+                raise CoreError('PROFILE_DRIFT', stage, retry_safe=True) from exc
+
+        def _launch_signature(stage: str = 'open') -> tuple:
             """C4/T05 + C5/U05: stat seal over the REAL artifact set of
             this launch, taken before the callbacks and re-verified at
             every frontier. For single-binary adapters that is argv[0]+
-            cwd; for the Pi pair it is Node + CLI + the full declared
+            directory identity; for the Pi pair it is Node + CLI + the full declared
             dependency closure (stat-only walk with the identity's caps)
             - argv[0] is Node and proves nothing about the CLI or the
             dependencies. Residual same-stat window declared, not atomic."""
             import os
+            workspace_identity = _workspace_identity(stage)
             launch_script = getattr(prepared.candidate, "launch_script",
                                     None)
             if (launch_script and
                     prepared.candidate.adapter_id == "pi_rpc"):
                 from ..build_identity import launch_artifact_signature
-                signature = [launch_artifact_signature(
-                    prepared.argv[0], launch_script)]
-                for target in (prepared.cwd,):
-                    try:
-                        info = os.stat(target)
-                        signature.append((info.st_size, info.st_mtime_ns))
-                    except OSError:
-                        signature.append(None)
-                return tuple(signature)
-            signature = []
-            for target in (prepared.argv[0], prepared.cwd):
+                return (launch_artifact_signature(
+                    prepared.argv[0], launch_script), workspace_identity)
+            signature = [workspace_identity]
+            for target in (prepared.argv[0],):
                 try:
                     info = os.stat(target)
                     signature.append((info.st_size, info.st_mtime_ns))
@@ -712,7 +724,7 @@ class CopiedAdapterFactory:
             return tuple(signature)
 
         def _revalidate_content(stage: str, snapshot: tuple) -> None:
-            if _launch_signature() != snapshot:
+            if _launch_signature(stage) != snapshot:
                 raise CoreError("PROFILE_DRIFT", stage, retry_safe=True)
 
         content_snapshot = await asyncio.to_thread(_launch_signature)
