@@ -1,4 +1,22 @@
-# Core API (`0.2.10.dev0`)
+# Core API (`0.2.57.dev0`)
+
+## Harness configuration and native input
+
+`CONFIGURATION_SCHEMA_VERSION` identifies the discovery schema.
+`discover_harness_configuration` describes adapter settings;
+`query_harness_configuration` queries native runtime observations, and
+`probe_selected_configuration` probes a selected installation with an explicit
+working directory and environment. Discovery does not grant execution authority.
+
+`HarnessSettings` carries typed session settings. `validate_harness_settings`
+validates adapter settings; `harness_settings_dict` serializes them.
+`validate_harness_configuration` also checks the discovered supported values.
+`parse_harness_configuration_file` validates the bounded, versioned JSON envelope,
+rejecting unknown and duplicate fields; `export_harness_configuration_file`
+produces that envelope. Files contain settings, not credentials or grants.
+
+`native_input_response` converts a canonical decision to the originating
+harness's native response contract.
 
 This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,

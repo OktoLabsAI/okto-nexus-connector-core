@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-This project is `0.2.56.dev0`, an unpublished development build. Its API and
+This project is `0.2.57.dev0`, an unpublished development build. Its API and
 contract bundle can still change. The historical R3 revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with
@@ -36,8 +36,21 @@ Passive discovery also resolves known POSIX npm Codex symlinks to fixed native
 Linux/macOS package payloads, and Pi npm/managed layouts to explicit Node+CLI
 pairs. It reads package metadata and files only. Trust applies to the physical
 targets, not to the directory containing a launcher. Unknown scripts are not
-interpreted; an unresolved script remains an unprobed observation. This discovery
-support does not implement macOS process containment or qualify execution there.
+interpreted; an unresolved script remains an unprobed observation.
+
+macOS process ownership is implemented through a per-launch launchd guardian
+job whose coalition pair (resource and jetsam ids, private 40-byte ABI) is the
+tree key: membership survives `setsid`/double-fork escapes, signalling is
+guarded by birth + coalition revalidation with a `SIGSTOP` interlock and
+post-signal birth verification, and stop proof requires two consecutive
+complete empty censuses plus a kqueue-confirmed owner-death channel. This is
+qualified natively only on the recorded Intel host (macOS 26.4.1, GUI login
+session, Python 3.12.4) with synthetic fixtures through the production
+backend ([native acceptance campaign](../plans/implementation/evidence/macos-native-acceptance-20261002.md));
+real providers, headless/SSH sessions (user-domain bootstrap was refused
+natively), Apple Silicon, other macOS versions and hosted CI remain
+unqualified, and passive preflight exposes the GUI-session requirement
+through its `session_domain` check instead of claiming headless support.
 
 Registry platform membership is a code-path gate, **not** a capability grant.
 The conversation qualification set also includes the exact Windows Codex

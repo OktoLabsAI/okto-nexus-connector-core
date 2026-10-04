@@ -12,4 +12,4 @@ def test_alpha_qualification_is_exact(control):
         assert not c.qualified_build('codex', version, 'win32', 'x86_64', FINGERPRINT, build_identity=IDENTITY, control=control)
     assert not c.qualified_build('codex', '0.159.0-alpha.12.1', 'linux', 'x86_64', FINGERPRINT, build_identity=IDENTITY, control=control)
     assert not c.qualified_build('codex', '0.159.0-alpha.12.1', 'win32', 'x86_64', 'changed', build_identity='changed', control=control)
-    assert c.CODEX_NATIVE_REQUEST_CONTRACTS.get('0.159.0-alpha.12.1', ()) == ()
+    assert c.CODEX_NATIVE_REQUEST_CONTRACTS['0.159.0-alpha.12.1'] == ('item/tool/requestUserInput',)

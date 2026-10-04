@@ -190,7 +190,8 @@ def test_codex_prerelease_identity_matches_probe_and_handshake(monkeypatch, vers
     assert probe["native_version"] == handshake["native_version"] == version
     assert not probe["capabilities_verified"]
     assert not handshake["capabilities_verified"]
-    assert probe["compatible_native_requests"] == []
+    assert probe["compatible_native_requests"] == (
+        ["item/tool/requestUserInput"] if version == "0.159.0-alpha.12.1" else [])
 
 
 @pytest.mark.parametrize("version", ["0.159.0-", "0.159.0-alpha..1", "0.159.0+", "0.159.0/alpha"])
@@ -235,7 +236,12 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
           "sha256:3765c5c53d04d5ef6ed4d1309284338aa14104228280fd643ec4cd12fa862058")
     claude = ("claude_code", "2.1.282", "win32", "x86_64",
               "sha256:fc0e3af017705624b9e1bce913f72761864ff994804514da1f5e41380fca4484")
-    assert compatibility.QUALIFIED_BUILDS == compatibility.QUALIFIED_CONTROL_BUILDS
+    claude_288 = ("claude_code", "2.1.288", "win32", "x86_64",
+                  "sha256:84304f7d4b0cd0ebcbe8318695a260151b48991a6659c3366fdd5da290c0ab91")
+    assert compatibility.QUALIFIED_BUILDS - compatibility.QUALIFIED_CONTROL_BUILDS == {claude_288}
+    assert compatibility.QUALIFIED_CONTROL_BUILDS <= compatibility.QUALIFIED_BUILDS
+    assert compatibility.qualified_build(*claude_288)
+    assert not compatibility.qualified_build(*claude_288, control=True)
     # C2/R06: Pi qualifies only through the dependency-covering portable
     # identity; the legacy composite fingerprint stays a binding proof but
     # is not a grant on its own. Codex/Claude keep the fingerprint grant.

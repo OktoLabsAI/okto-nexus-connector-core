@@ -45,6 +45,16 @@ def _linux_birth_token(pid: int) -> tuple[str, str]:
     return f"boot-start:{boot_id}:{int(fields[19])}", fields[0]
 
 
+def _darwin_birth_token(pid: int) -> tuple[str, int]:
+    from .macos_abi import boot_session_hash, identity, SZOMB
+
+    info = identity(pid)
+    sec, usec = info["birth"]
+    token = (f"boot-start:{boot_session_hash()}:"
+             f"{sec:020d}{usec:06d}")
+    return token, info["status"]
+
+
 def snapshot_owned_process_birth(process: subprocess.Popen) -> ProcessBirthEvidence:
     """Read an OS birth token from the exact Core-owned process handle."""
     if sys.platform == "win32":
@@ -69,6 +79,19 @@ def snapshot_owned_process_birth(process: subprocess.Popen) -> ProcessBirthEvide
             "linux", process.pid, token,
             "linux_guardian")
 
+    if sys.platform == "darwin":
+        from .macos_process import OwnedDarwinPopen
+        from .macos_abi import SZOMB
+
+        if not isinstance(process, OwnedDarwinPopen):
+            raise TypeError("not a Core-owned Darwin process")
+        token, state = _darwin_birth_token(process.pid)
+        if state == SZOMB:
+            raise RuntimeError("owned process is already stopped")
+        return ProcessBirthEvidence(
+            "darwin", process.pid, token,
+            "darwin_launchd_coalition")
+
     raise RuntimeError("owned process birth identity unqualified on this platform")
 
 
@@ -89,6 +112,18 @@ def observe_recorded_process_birth(evidence: ProcessBirthEvidence) -> str:
         if token != evidence.birth_token:
             return "DIFFERENT_BIRTH"
         return "NOT_RUNNING" if state in {"Z", "X", "x"} else "MATCHING_LIVE"
+
+    if sys.platform == "darwin":
+        from .macos_abi import SZOMB
+        try:
+            token, state = _darwin_birth_token(evidence.pid)
+        except (FileNotFoundError, ProcessLookupError):
+            return "NOT_OBSERVED"
+        except (OSError, ValueError):
+            return "UNKNOWN"
+        if token != evidence.birth_token:
+            return "DIFFERENT_BIRTH"
+        return "NOT_RUNNING" if state == SZOMB else "MATCHING_LIVE"
 
     if sys.platform == "win32":
         kernel = ctypes.WinDLL("kernel32", use_last_error=True)

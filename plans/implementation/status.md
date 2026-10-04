@@ -1,3 +1,25 @@
+## Native macOS Intel launchd-coalition backend — 2026-10-02
+
+Core 0.2.57.dev0 implements the darwin owned-process backend per
+[MACOS_INTEL_IMPLEMENTATION](../MACOS_INTEL_IMPLEMENTATION.md): a unique
+per-launch launchd guardian job (`RunAtLoad`, `KeepAlive=false`, gui domain
+only), stdin/stdout/stderr handed over AF_UNIX `SCM_RIGHTS`, kqueue
+owner-exit registration bracketed by birth verification, SIGTERM-then-kill
+escalation, 32-slot retention until proven stop, and a stop proof requiring
+two consecutive complete empty coalition censuses with per-PID birth and
+coalition revalidation, a SIGSTOP interlock and post-signal birth checks.
+The native acceptance campaign (100/100 double-fork/setsid escapes with zero
+leaks, owner SIGKILL, cancellation escalation, descriptor hygiene,
+shared-coalition refusal, 64-child census/overflow, 32-slot retention, PID
+churn, SIGSTOP races, normal exit) **passed** on the Intel host; see
+[evidence](evidence/macos-native-acceptance-20261002.md). Installed-suite
+darwin status moved from 132 baseline failures to 1205 passed/42 skipped
+with one documented deselect (a pre-existing claude runtime-lifecycle gap
+exposed by darwin spawn latency, root cause retained in the evidence). A
+genuine late-open containment hole in `runtime.py` was fixed. Providers,
+Connector IPC, Nexus UI, headless operation and other hosts remain separate
+campaigns.
+
 ## C10 admission synchronization and hosted infrastructure — 2026-10-02
 
 The C10 release-obligation setup failure is reproduced by a delayed receipt
