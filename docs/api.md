@@ -1,4 +1,4 @@
-# Core API (`0.2.58.dev0`)
+# Core API (`0.2.61.dev0`)
 
 ## Harness configuration and native input
 
@@ -297,3 +297,19 @@ the authenticated session supplies sender and workspace. Question answers retain
 the source harness contract. Tool call IDs provide operation identity. A lost
 message or answer acknowledgement is `OUTCOME_UNKNOWN`, never an instruction to
 retry with a new ID. Requests and responses remain bounded to 16 KiB.
+# Portable connection configuration
+
+`nexus_connector_core.connection_configuration` provides
+`parse_portable_connection_configuration(value)` and `export_connection_configuration(value)`
+for `okto-nexus-connection` version 2 templates. These contain native preferences,
+connection name, runtime/session policy, message/tool policies and requested limits.
+They never contain identity, credentials, installation IDs, execution-host selection,
+workspace/login paths, workspace names or local secret references. Version 1 imports
+are accepted after discarding all destination fields. Duplicate/unknown fields fail.
+`materialize_connection_configuration` combines a template with explicit destination
+arguments. `parse_connection_configuration` validates that complete version 1 shape
+for the internal Server API; it is not the portable export format.
+This document is a configuration draft, not execution authority. Hosts must
+authenticate the operator, resolve their own installation, validate directories,
+test the selected configuration and explicitly commit it before normal runtime
+use. Importing JSON must never renew or recreate an execution grant implicitly.

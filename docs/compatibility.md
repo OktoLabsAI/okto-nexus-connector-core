@@ -1,13 +1,13 @@
 # Version and platform compatibility
 
-From `0.2.58.dev0`, managed opening checks the authorized workspace's resolved
+From `0.2.61.dev0`, managed opening checks the authorized workspace's resolved
 path and filesystem identity instead of its mutable directory size and mtime.
 Creating, renaming, or removing child files during another session's opening
 is allowed. Replacing the root, redirecting its link, or changing launch
 artifacts still fails with `PROFILE_DRIFT`. The artifact revalidation frontiers
 are unchanged; these checks do not provide an atomic filesystem snapshot.
 
-This project is `0.2.58.dev0`, an unpublished development build. Its API and
+This project is `0.2.61.dev0`, an unpublished development build. Its API and
 contract bundle can still change. The historical R3 revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with

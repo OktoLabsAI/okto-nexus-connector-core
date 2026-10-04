@@ -1,6 +1,6 @@
 # Adding a native harness runtime
 
-This guide describes the extension points in Core `0.2.58.dev0`. Use it to
+This guide describes the extension points in Core `0.2.61.dev0`. Use it to
 add a new managed harness implementation that Nexus Server can run locally
 and Nexus Connector can run remotely. All paths below are relative to this
 repository. Read the code at the version you are changing: the native bridge
