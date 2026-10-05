@@ -66,6 +66,13 @@ OPEN = obj({
     "profile_revision": REV,
     "mode": {"const": "managed"},
     "model": {"type": ["string", "null"], "maxLength": 160},
+    "harness_settings": {
+        "type": "object", "additionalProperties": False,
+        "properties": {
+            name: {"type": "string", "minLength": 1, "maxLength": 200}
+            for name in ("approval_policy", "effort", "permission_mode", "provider", "sandbox", "user_input")
+        },
+    },
 }, ("adapter_id", "candidate_ref", "inventory_revision", "realization_ref",
     "realization_revision", "profile_revision", "mode"))
 SUBMIT = obj({"text": {"type": "string", "minLength": 1, "maxLength": 65536},
