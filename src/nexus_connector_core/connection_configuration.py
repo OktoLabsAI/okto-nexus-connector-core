@@ -18,7 +18,7 @@ def parse_connection_configuration(value):
               'harness_settings','automatic_reply','tool_access','authorization'}
     if not isinstance(value, dict) or set(value) != fields or value['format'] != CONNECTION_CONFIGURATION_FORMAT or type(value['version']) is not int or value['version'] != 1:
         raise CoreError('VALIDATION_ERROR', 'connection_configuration')
-    if (value['execution_location'] not in ('local','remote','all') or
+    if (value['execution_location'] not in ('local','remote') or
             (value['runtime_enabled'] is not None and type(value['runtime_enabled']) is not bool) or type(value['automatic_reply']) is not bool or
             value['session_policy'] not in ('shared','per_sender','per_sender_session',None) or value['tool_access'] not in ('ask','always_allow')):
         raise CoreError('VALIDATION_ERROR', 'connection_configuration')
