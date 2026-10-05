@@ -9,7 +9,7 @@ description = "Shared native harness runtime contracts for Okto Nexus"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "Okto Labs"}]
-license = "Elastic-2.0"
+license = "LicenseRef-Okto-Labs-ELv2-SaaS-Branding"
 license-files = ["LICENSE"]
 dependencies = ["rfc8785==0.1.4", "jsonschema==4.26.0"]
 
