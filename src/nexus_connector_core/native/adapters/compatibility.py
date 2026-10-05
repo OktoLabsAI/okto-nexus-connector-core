@@ -59,6 +59,15 @@ QUALIFIED_CONTROL_BUILDS |= _QUALIFIED_PRODUCTION_BUILDS
 ATTACH_QUALIFIED = False
 
 
+def can_probe_protocol(version, architecture, fingerprint):
+    """Eligibility to attempt a live handshake, never a capability grant."""
+    return (isinstance(version, str)
+            and re.fullmatch(r'\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?', version) is not None
+            and architecture in ('x86_64', 'arm64', 'aarch64')
+            and isinstance(fingerprint, str)
+            and re.fullmatch(r'sha256:[0-9a-f]{64}', fingerprint) is not None)
+
+
 def qualified_build(kind, version, platform, architecture, fingerprint,
                     *, control=False, build_identity=None):
     """Exact-build qualification (PC09): fingerprint OR portable identity.

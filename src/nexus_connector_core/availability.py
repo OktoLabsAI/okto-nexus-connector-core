@@ -40,7 +40,7 @@ from typing import Iterable, Mapping
 from .catalog import get_runtime_catalog
 from .installation import effective_installation_ref
 from .models import CoreError, InstallationCandidate, Inventory
-from .native.adapters.compatibility import qualified_build
+from .native.adapters.compatibility import qualified_build, can_probe_protocol
 from .native.process.preflight import containment_preflight
 
 #: Bumped when the projection's SHAPE or SEMANTICS change.
@@ -277,7 +277,7 @@ def evaluate_runtime_availability(
                 candidate.architecture, candidate.fingerprint,
                 build_identity=candidate.build_identity)
             qualification = "qualified" if qualified else "unqualified"
-            if not qualified:
+            if not qualified and not can_probe_protocol(candidate.version, candidate.architecture, candidate.fingerprint):
                 reasons.append("build_not_qualified")
         else:
             # Absence of a probe stays inconclusive - never READY.

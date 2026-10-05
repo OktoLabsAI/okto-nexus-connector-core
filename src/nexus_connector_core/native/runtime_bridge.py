@@ -20,7 +20,7 @@ from ..harness_config import _token_env_name
 from ..pi_extension_resource import PiNativeActionLaunch
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, RuntimeCommandNotSent)
-from .adapters.compatibility import qualified_build
+from .adapters.compatibility import qualified_build, can_probe_protocol
 
 #: Reserved capacity for containment/observation calls (C2/R02): physical
 #: force, lifecycle observation and connector close never queue behind the
@@ -599,10 +599,10 @@ class CopiedAdapterSession:
 
 
 class CopiedAdapterFactory:
-    """Real launch gate; copied protocols require Core-owned qualification.
+    """Guard installation integrity and negotiate native protocol at startup.
 
-    Synthetic peer tests use injected NativeFactory instances; they do not
-    grant a real installation capability. The current Core allowlist is empty.
+    Recorded build campaigns remain capability evidence. Other observed builds
+    can attempt a live handshake without inheriting recorded control grants.
     """
 
     def __init__(self, environment: Callable[[PreparedLaunch],
@@ -749,7 +749,12 @@ class CopiedAdapterFactory:
                 candidate, candidate.adapter_id, cwd=prepared.cwd,
                 env=dict(os.environ), before_observe=probe_guard)
             probe_guard()
-        if not is_qualified(candidate):
+        recorded_build = is_qualified(candidate)
+        # Build campaigns are evidence, not a cross-platform execution allowlist.
+        # An observed native version may attempt the adapter's live handshake.
+        # Unknown/malformed identities still fail before credentials are resolved.
+        if not recorded_build and not can_probe_protocol(
+                candidate.version, candidate.architecture, candidate.fingerprint):
             raise CoreError("NATIVE_VERSION_UNQUALIFIED", "open", retry_safe=True)
         approval_actions = {"approval.decide", "input.provide"}.issubset(context.allowed_actions)
         if self._native_approvals_enabled and not approval_actions:
@@ -873,8 +878,16 @@ class CopiedAdapterFactory:
                 return connector.start(**start_kwargs)
 
             native_session = await asyncio.to_thread(_guarded_start)
-        except BaseException:
-            await asyncio.to_thread(connector.close)
+            if kind == 'claude_code' and not recorded_build:
+                await asyncio.to_thread(connector.verify_protocol)
+        except BaseException as error:
+            stopped = await asyncio.to_thread(connector.close)
+            if isinstance(error, NativeAdapterError) and stopped in ('graceful', 'forced', 'already_closed'):
+                from ..models import EffectRejected
+                raise EffectRejected('Native startup failed and its process was stopped.',
+                    failure_code=('NATIVE_PROTOCOL_INCOMPATIBLE'
+                        if error.details.get('reason') == 'protocol_incompatible'
+                        else 'NATIVE_STARTUP_FAILED')) from error
             raise
         connector._configuration_candidate_ref = prepared.candidate.installation_ref
         if kind == 'claude_code':
