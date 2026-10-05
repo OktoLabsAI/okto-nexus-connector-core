@@ -110,8 +110,8 @@ def main() -> None:
         env=env,
         check=True,
     )
-    sdists = sorted(outdir.glob("nexus_connector_core-*.tar.gz"))
-    wheels = sorted(outdir.glob("nexus_connector_core-*.whl"))
+    sdists = sorted(outdir.glob("okto_nexus_connector_core-*.tar.gz"))
+    wheels = sorted(outdir.glob("okto_nexus_connector_core-*.whl"))
     if len(sdists) != 1 or len(wheels) != 1:
         raise RuntimeError("expected exactly one Core wheel and sdist in output directory")
     _normalize_wheel(wheels[0])

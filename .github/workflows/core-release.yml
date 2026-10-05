@@ -130,7 +130,7 @@ jobs:
           import hashlib, os, re
           from pathlib import Path
           version = os.environ["CORE_VERSION"]
-          distribution = "nexus_connector_core-" + version
+          distribution = "okto_nexus_connector_core-" + version
           expected = {
               distribution + "-py3-none-any.whl": os.environ["CORE_WHEEL_SHA"],
               distribution + ".tar.gz": os.environ["CORE_SDIST_SHA"],

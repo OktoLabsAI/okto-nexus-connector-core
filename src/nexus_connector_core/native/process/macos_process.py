@@ -219,7 +219,9 @@ class OwnedDarwinPopen:
         config_path.write_text(json.dumps(config), encoding='utf-8')
         os.chmod(config_path, 0o600)
         plist_path = self._root / 'job.plist'
-        python = str(Path(sys.executable).resolve())
+        # Preserve the venv executable: resolving its symlink selects the base
+        # interpreter, whose isolated site-packages may not contain Core.
+        python = os.path.abspath(sys.executable)
         guardian = str(Path(__file__).with_name('macos_process_guardian.py'))
         plist_path.write_bytes(plistlib.dumps(job_plist(
             self._label, python, guardian, config_path,

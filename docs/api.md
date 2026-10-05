@@ -26,7 +26,7 @@ produces that envelope. Files contain settings, not credentials or grants.
 `native_input_response` converts a canonical decision to the originating
 harness's native response contract.
 
-This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
+This is the development API of the independent `okto-nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,
 credentials and canonical application state. Core does not import Nexus Server
 or Connector code. The supported top-level exports are listed below; native

@@ -42,7 +42,6 @@ from __future__ import annotations
 
 import array
 import contextlib
-import importlib.util
 import json
 import os
 from pathlib import Path
@@ -66,13 +65,10 @@ GUARDIAN_FAILED = 126
 
 
 def load_abi():
-    """Load the sibling ABI helper under ``python -I`` isolation."""
-    path = Path(__file__).with_name('macos_abi.py')
-    spec = importlib.util.spec_from_file_location('nexus_macos_abi', path)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[spec.name] = module
-    spec.loader.exec_module(module)
-    return module
+    """Import the installed Core ABI under ``python -I`` isolation."""
+    from nexus_connector_core.native.process import macos_abi
+
+    return macos_abi
 
 
 def coalition_conflict(own, caller, launchd) -> bool:
