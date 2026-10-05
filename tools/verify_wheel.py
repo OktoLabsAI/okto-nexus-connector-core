@@ -80,10 +80,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--artifact-dir", type=Path, default=root / "dist")
     args = parser.parse_args()
-    wheels = sorted(args.artifact_dir.glob("nexus_connector_core-*.whl"))
+    wheels = sorted(args.artifact_dir.glob("okto_nexus_connector_core-*.whl"))
     if len(wheels) != 1:
         raise SystemExit("expected exactly one local wheel in dist/")
-    sdists = sorted(args.artifact_dir.glob("nexus_connector_core-*.tar.gz"))
+    sdists = sorted(args.artifact_dir.glob("okto_nexus_connector_core-*.tar.gz"))
     if len(sdists) != 1:
         raise SystemExit("expected exactly one local sdist in dist/")
     with tarfile.open(sdists[0], "r:gz") as archive:
@@ -132,7 +132,15 @@ def main() -> None:
                         "--disable-pip-version-check", str(wheels[0])], check=True)
         code = """
 import hashlib, json
+import runpy
 from importlib.resources import files
+from nexus_connector_core.native.process import macos_abi
+# Exercise the launchd script's loading mode under the installed venv's -I
+# interpreter, without invoking Darwin APIs or launching any provider.
+guardian = files('nexus_connector_core.native.process').joinpath('macos_process_guardian.py')
+guardian_globals = runpy.run_path(str(guardian))
+assert guardian_globals['load_abi']() is macos_abi
+assert macos_abi.__name__ == 'nexus_connector_core.native.process.macos_abi'
 from nexus_connector_core import RuntimeCore, LocalRuntimeCore, OperationReceipt, RuntimeEvent, submit_frame_intent_hash
 from nexus_connector_core.native.adapters import codex, pi, claude_code_stream, claude_code_attach
 from nexus_connector_core.native.runtime_bridge import CopiedAdapterFactory
@@ -206,7 +214,15 @@ for name, expected in manifest['files'].items():
     assert 'sha256:' + hashlib.sha256(folder.joinpath(name).read_bytes()).hexdigest() == expected
 print('clean wheel import and contract resources OK')
 """
-        subprocess.run([str(python), "-I", "-c", code], cwd=directory, check=True)
+        # A working-directory lookalike must never shadow the installed Core
+        # when launchd starts the guardian with isolated Python.
+        workspace = Path(directory) / "untrusted-cwd"
+        shadow = workspace / "nexus_connector_core"
+        shadow.mkdir(parents=True)
+        (shadow / "__init__.py").write_text(
+            "raise RuntimeError('untrusted working-directory Core imported')\n",
+            encoding="utf-8")
+        subprocess.run([str(python), "-I", "-c", code], cwd=workspace, check=True)
         consumer_source = (root / "tools" / "consumer_smoke.py").read_text(
             encoding="utf-8")
         wheel_sha = "sha256:" + hashlib.sha256(wheels[0].read_bytes()).hexdigest()
@@ -215,7 +231,7 @@ print('clean wheel import and contract resources OK')
             result = subprocess.run(
                 [str(python), "-I", "-c", consumer_source,
                  role, pinned_manifest, wheel_sha],
-                cwd=directory, capture_output=True, text=True)
+                cwd=workspace, capture_output=True, text=True)
             if result.returncode:
                 raise RuntimeError(
                     f"{role} clean-wheel consumer failed: {result.stderr}")

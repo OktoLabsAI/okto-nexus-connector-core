@@ -16,9 +16,9 @@ Intel macOS 26.4.1 host (see ``plans/implementation/evidence/``) are used:
 - ``kern.bootsessionuuid`` sysctl: boot identity for birth tokens.
 
 This module is a dependency-free ABI helper: it is imported as a package
-module by the observer side and loaded by file location inside the
-isolated launchd guardian (``python -I``), so it must rely on the
-standard library only and never on package-relative imports.
+module by both the observer and the isolated launchd guardian (``python -I``).
+The guardian uses the same installed Core distribution and interpreter
+environment as the observer. This helper relies on the standard library only.
 """
 
 from __future__ import annotations

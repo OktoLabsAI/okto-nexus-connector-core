@@ -142,7 +142,8 @@ sys.exit(7)
 
 
 def load_backend():
-    sys.path.insert(0, str(ROOT / 'src'))
+    if not sys.flags.isolated:
+        sys.path.insert(0, str(ROOT / 'src'))
     from nexus_connector_core.native.process import (
         observe_owned_process, owned_tree_census, spawn_owned_process)
     from nexus_connector_core.native.process.macos_abi import coalition_members
@@ -237,7 +238,8 @@ def scenario_owner_sigkill(backend, runs=3):
             observer = subprocess.Popen(
                 [sys.executable, '-I', '-c', f'''
 import json, os, sys, time
-sys.path.insert(0, {str(ROOT / "src")!r})
+if not sys.flags.isolated:
+    sys.path.insert(0, {str(ROOT / "src")!r})
 from nexus_connector_core.native.process import spawn_owned_process
 import subprocess
 process = spawn_owned_process((sys.executable, "-I", "-c", {DOUBLE_FORK_ESCAPE!r}),

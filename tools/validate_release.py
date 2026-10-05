@@ -12,8 +12,8 @@ import zipfile
 from email.parser import BytesParser
 from pathlib import Path
 
-PROJECT_NAME = "nexus-connector-core"
-DIST_NAME = "nexus_connector_core"
+PROJECT_NAME = "okto-nexus-connector-core"
+DIST_NAME = "okto_nexus_connector_core"
 _VERSION = re.compile(r"\d+\.\d+\.\d+(?:\.dev\d+)?\Z", re.ASCII)
 _SHA256 = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 

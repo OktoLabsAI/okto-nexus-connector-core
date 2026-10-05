@@ -18,7 +18,7 @@ from pathlib import Path
 
 
 GENERATOR = "cyclonedx-bom==7.3.1"
-REQUIRED = {"nexus-connector-core", "rfc8785", "jsonschema"}
+REQUIRED = {"okto-nexus-connector-core", "rfc8785", "jsonschema"}
 
 
 def _python(venv_dir: Path) -> Path:
@@ -36,7 +36,7 @@ def _run(argv: list[str], *, env: dict[str, str]) -> None:
 
 def generate(output: Path) -> None:
     root = Path(__file__).resolve().parents[1]
-    wheels = sorted((root / "dist").glob("nexus_connector_core-*.whl"))
+    wheels = sorted((root / "dist").glob("okto_nexus_connector_core-*.whl"))
     if len(wheels) != 1:
         raise SystemExit("expected exactly one built Core wheel in dist/")
     env = _clean_environment()
