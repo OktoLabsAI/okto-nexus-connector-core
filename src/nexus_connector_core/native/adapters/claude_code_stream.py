@@ -442,6 +442,27 @@ class ClaudeCodeStreamConnector:
             raise
         return session
 
+    def verify_protocol(self, timeout: float = 10.0) -> None:
+        """Require a correlated initialize response before accepting model work."""
+        import uuid
+        request_id = 'nexus-initialize-' + uuid.uuid4().hex
+        event = threading.Event()
+        self._initialize_probe = (request_id, event, {})
+        try:
+            self._write_json({'type': 'control_request', 'request_id': request_id,
+                              'request': {'subtype': 'initialize', 'hooks': {}}})
+            if not event.wait(timeout):
+                raise NativeAdapterError(ErrorCode.CONFIG_ERROR,
+                    'Claude initialization did not complete before the deadline.',
+                    {'reason': 'protocol_incompatible', 'stage': 'initialize'})
+            response = self._initialize_probe[2]
+            if response.get('subtype') != 'success' or not isinstance(response.get('response'), dict):
+                raise NativeAdapterError(ErrorCode.CONFIG_ERROR,
+                    'Claude rejected the initialization contract.',
+                    {'reason': 'protocol_incompatible', 'stage': 'initialize'})
+        finally:
+            self._initialize_probe = None
+
     def send(self, session: HarnessSession, command: HarnessCommand) -> None:
         if self._proc is None or self._session is None:
             raise NativeAdapterError(
@@ -869,6 +890,12 @@ class ClaudeCodeStreamConnector:
         elif native_type == "result":
             self._handle_result(obj)
         elif native_type == "control_response":
+            probe = getattr(self, '_initialize_probe', None)
+            response = obj.get('response')
+            if probe is not None and isinstance(response, dict) and response.get('request_id') == probe[0]:
+                probe[2].update(response)
+                probe[1].set()
+                return
             subtype = (obj.get("response") or {}).get("subtype")
             self._emit("tool_activity", f"control_response:{subtype}", obj)
         elif native_type == "control_request":

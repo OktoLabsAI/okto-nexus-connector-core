@@ -22,7 +22,7 @@ from .journal import (SQLiteJournal, validate_claim_namespace,
 from .kernel import OperationKernel
 from .models import (
     CloseOperation, ControlOperation, CoreError, DiscoveryRequest, EventCursor,
-    EffectNotSent, ExecutionContext, InstallationCandidate, Inventory, LaunchIntent,
+    EffectNotSent, EffectRejected, ExecutionContext, InstallationCandidate, Inventory, LaunchIntent,
     OpenOperation, Operation, OperationKey, OperationReceipt, NativeApprovalOperation,
     PreparedLaunch,
     ReconcileReport, ReconcileRequest, RuntimeEvent, RuntimeSnapshot,
@@ -543,6 +543,12 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                        _attempt, done))
                     raise
                 except EffectNotSent:
+                    if slot_reserved:
+                        await self._owned_slots.release_owned_slot(
+                            opening_key, operation.session_id)
+                    effect_started = False
+                    raise
+                except EffectRejected:
                     if slot_reserved:
                         await self._owned_slots.release_owned_slot(
                             opening_key, operation.session_id)

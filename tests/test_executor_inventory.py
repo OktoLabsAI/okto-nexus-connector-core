@@ -62,7 +62,8 @@ def test_revision_tracks_evidence_but_not_publication_metadata(tmp_path):
 def test_tampered_evidence_is_rejected(tmp_path):
     snapshot = _snapshot(_candidate(str(tmp_path / "codex")))
     tampered = deepcopy(snapshot)
-    tampered["evidence"][0]["state"] = "READY_FOR_RUNTIME"
+    tampered["evidence"][0]["state"] = "UNQUALIFIED_BUILD"
+    assert tampered["evidence"][0]["state"] != snapshot["evidence"][0]["state"]
     with pytest.raises(CoreError) as error:
         verify_executor_inventory_snapshot(tampered)
     assert error.value.code == "VALIDATION_ERROR"

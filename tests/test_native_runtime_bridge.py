@@ -933,6 +933,48 @@ def test_codex_stale_terminal_keeps_new_runtime_receipt_unsettled(tmp_path):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('probe_outcome', ['success', 'error', 'uncertain'])
+def test_unrecorded_claude_build_requires_live_handshake(monkeypatch, tmp_path, probe_outcome):
+    import nexus_connector_core.native.runtime_bridge as bridge
+    binary = tmp_path / 'claude'
+    binary.write_bytes(b'synthetic selected installation')
+    from nexus_connector_core.discovery import fingerprint
+    candidate = InstallationCandidate('claude_stream', str(binary), fingerprint(binary),
+        'explicit', 'selected', version='2.1.999', architecture='x86_64')
+    prepared = PreparedLaunch(LaunchIntent('agent', 'ws', 'claude_stream'), candidate,
+        (str(binary),), str(tmp_path), str(tmp_path), _root_fingerprint(tmp_path), 'profile', ())
+    calls = []
+    class Claude:
+        def __init__(self, **kwargs): pass
+        def start(self, **kwargs):
+            calls.append('start')
+            return HarnessSession('native', 'claude_code', 'agent', 'STARTING',
+                HarnessCapabilities(False, None, False, False, True), '2026-10-05T00:00:00Z')
+        def verify_protocol(self):
+            calls.append('handshake')
+            if probe_outcome != 'success':
+                from nexus_connector_core.native.adapter_types import NativeAdapterError, ErrorCode
+                raise NativeAdapterError(ErrorCode.CONFIG_ERROR, 'Rejected', {'reason': 'protocol_incompatible'})
+        def close(self): return 'unknown' if probe_outcome == 'uncertain' else 'graceful'
+    monkeypatch.setattr(bridge, 'load_adapter', lambda _: Claude)
+    monkeypatch.setattr(bridge, 'qualified_build', lambda *a, **k: False)
+    async def run():
+        async def env(_): return {}
+        factory = CopiedAdapterFactory(env)
+        try:
+            if probe_outcome == 'success':
+                await factory.open(prepared, 'session', context(), stream_epoch='epoch')
+            else:
+                from nexus_connector_core.models import EffectRejected
+                from nexus_connector_core.native.adapter_types import NativeAdapterError
+                with pytest.raises(EffectRejected if probe_outcome == 'error' else NativeAdapterError):
+                    await factory.open(prepared, 'session', context(), stream_epoch='epoch')
+            assert calls == ['start', 'handshake']
+        finally:
+            factory.close()
+    asyncio.run(run())
+
+
 def test_real_factory_fails_closed_before_resolving_secrets(tmp_path):
     async def run():
         called = False
