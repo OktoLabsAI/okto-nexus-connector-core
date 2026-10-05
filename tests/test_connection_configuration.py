@@ -51,6 +51,7 @@ def test_portable_import_rejects_host_fields_and_credentials():
 
 
 @pytest.mark.parametrize('changes',[
+    {'execution_location':'all'},
     {'api_key':'secret'}, {'secret_bindings':{'TOKEN':'raw-secret'}}, {'authorization':{'minutes':True,'actions':10}},
     {'harness_settings':{'model':'bad\x00model'}}, {'version':True}, {'tool_access':'invalid'},
 ])
