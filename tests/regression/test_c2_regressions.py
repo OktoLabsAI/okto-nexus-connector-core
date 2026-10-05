@@ -668,10 +668,12 @@ def test_r10_stopped_session_native_is_released_even_when_host_sink_stalls(
         tmp_path):
     async def run():
         stall = asyncio.Event()
+        sink_entered = asyncio.Event()
         delivered = []
 
         async def stalled_sink(event):
             delivered.append(event)
+            sink_entered.set()
             await stall.wait()
 
         runtime, journal, factory = make_runtime(
@@ -689,7 +691,7 @@ def test_r10_stopped_session_native_is_released_even_when_host_sink_stalls(
             factory.native.queue.put_nowait(RuntimeEvent(
                 "srv", "exe", "session", "epoch", 0, "lifecycle",
                 "x", {}))
-            await asyncio.sleep(0.1)
+            await asyncio.wait_for(sink_entered.wait(), timeout=5)
             binding = runtime._sessions[key]
             assert binding.sink_task is not None, "sink was never scheduled"
             ref = weakref.ref(factory.native)

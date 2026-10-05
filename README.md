@@ -23,6 +23,8 @@ imports neither application.
 Portable connection configurations normalize the compatibility field
 `automatic_reply` to `true`, including configurations used by Connector CLI.
 Delivery still requires an enabled runtime, a recipient and current authority.
+Portable configurations accept only `local` or `remote` for `execution_location`;
+the removed `all` value is rejected instead of implying a fallback order.
 
 Hosts use `RuntimeAutomation` for the shared supervision behavior:
 
