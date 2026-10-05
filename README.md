@@ -1,4 +1,4 @@
-# nexus-connector-core
+# okto-nexus-connector-core
 
 Independent, embeddable Python library that owns the **native agent-harness
 runtime** shared by the Okto Nexus products: discovering, preparing,
@@ -8,7 +8,7 @@ operations. The same wheel is consumed embedded by Nexus Server (local
 runtimes) and by the Nexus Connector daemon (remote runtimes); the Core
 imports neither application.
 
-- Distribution `nexus-connector-core`, import `nexus_connector_core`,
+- Distribution `okto-nexus-connector-core`, import `nexus_connector_core`,
   Python ≥ 3.11, src-layout, `py.typed`, pure-Python runtime dependencies
   (`rfc8785`, `jsonschema`).
 - First release version: `0.0.1`. Importing the

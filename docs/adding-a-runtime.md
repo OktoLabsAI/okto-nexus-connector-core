@@ -373,7 +373,7 @@ hashes. Follow the [R4 development contract](nxl-r4-development.md).
 Publish/build the new Core version using the repository's release process:
 `tools/build_artifacts.py`, `tools/verify_wheel.py` and
 `tools/validate_release.py`, with the protected workflows under
-`.github/workflows/`. Update the `nexus-connector-core` dependency pin in
+`.github/workflows/`. Update the `okto-nexus-connector-core` dependency pin in
 each consumer's `pyproject.toml` (for example the Nexus Connector
 repository) and the Core-version compatibility checks, then install the
 same artifact in Nexus Server and Nexus Connector. The catalog

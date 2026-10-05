@@ -28,8 +28,8 @@ def verify(root: Path, wheelhouse: Path) -> None:
         encoding="utf-8"))["project"]["version"]
     dist = root / "dist"
     artifacts = (
-        dist / f"nexus_connector_core-{version}-py3-none-any.whl",
-        dist / f"nexus_connector_core-{version}.tar.gz",
+        dist / f"okto_nexus_connector_core-{version}-py3-none-any.whl",
+        dist / f"okto_nexus_connector_core-{version}.tar.gz",
     )
     if not all(path.is_file() for path in artifacts):
         raise ValueError("build the matching wheel and sdist first")
@@ -59,7 +59,7 @@ from importlib.resources import files
 from nexus_connector_core import LocalRuntimeCore, RuntimeCore
 from nexus_connector_core.conformance import verify_contract_bundle
 from nexus_connector_core.pi_extension_resource import pi_extension_path
-assert md.version('nexus-connector-core') == __import__('sys').argv[1]
+assert md.version('okto-nexus-connector-core') == __import__('sys').argv[1]
 assert files('nexus_connector_core').joinpath('py.typed').is_file()
 assert files('nexus_connector_core.native').joinpath(
     'codex_app_server_0_157_0.schemas.json').is_file()

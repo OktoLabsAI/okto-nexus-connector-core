@@ -45,3 +45,14 @@ def test_wheel_import_audit_allows_package_relative_registry_load():
         'from importlib import import_module\n'
         'import_module(spec.module, package="nexus_connector_core.native")',
         "nexus_connector_core/native/registry.py")
+
+
+def test_guardian_uses_package_abi_and_passes_unchanged_import_audit():
+    from runpy import run_path
+    from nexus_connector_core.native.process import macos_abi
+
+    path = (Path(__file__).resolve().parents[1] / 'src/nexus_connector_core/'
+            'native/process/macos_process_guardian.py')
+    verify_import_boundaries(path.read_bytes(), str(path))
+    namespace = run_path(str(path))
+    assert namespace['load_abi']() is macos_abi
