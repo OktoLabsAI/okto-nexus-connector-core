@@ -1,0 +1,71 @@
+{
+  "conclusion": "failure",
+  "headSha": "beed29513f6bd4f57d7312e64b674355861d6d6a",
+  "jobs": [
+    {
+      "name": "windows-2022 / Python 3.13",
+      "databaseId": 110809043188,
+      "status": "completed",
+      "conclusion": "failure",
+      "startedAt": "2026-10-02T11:00:53Z",
+      "completedAt": "2026-10-02T11:07:48Z",
+      "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262/job/110809043188"
+    },
+    {
+      "name": "windows-2022 / Python 3.11",
+      "databaseId": 110809043294,
+      "status": "completed",
+      "conclusion": "failure",
+      "startedAt": "2026-10-02T11:10:42Z",
+      "completedAt": "2026-10-02T11:17:35Z",
+      "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262/job/110809043294"
+    },
+    {
+      "name": "windows-2022 / Python 3.12",
+      "databaseId": 110809043338,
+      "status": "completed",
+      "conclusion": "failure",
+      "startedAt": "2026-10-02T11:02:41Z",
+      "completedAt": "2026-10-02T11:09:30Z",
+      "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262/job/110809043338"
+    },
+    {
+      "name": "ubuntu-24.04 / Python 3.13",
+      "databaseId": 110809043421,
+      "status": "completed",
+      "conclusion": "failure",
+      "startedAt": "2026-10-02T11:02:33Z",
+      "completedAt": "2026-10-02T11:07:17Z",
+      "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262/job/110809043421"
+    },
+    {
+      "name": "ubuntu-24.04 / Python 3.12",
+      "databaseId": 110809043428,
+      "status": "completed",
+      "conclusion": "failure",
+      "startedAt": "2026-10-02T11:11:20Z",
+      "completedAt": "2026-10-02T11:15:57Z",
+      "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262/job/110809043428"
+    },
+    {
+      "name": "ubuntu-24.04 / Python 3.11",
+      "databaseId": 110809043668,
+      "status": "completed",
+      "conclusion": "failure",
+      "startedAt": "2026-10-02T11:12:02Z",
+      "completedAt": "2026-10-02T11:16:22Z",
+      "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262/job/110809043668"
+    },
+    {
+      "name": "Runtime dependency SBOM",
+      "databaseId": 110815921195,
+      "status": "completed",
+      "conclusion": "skipped",
+      "startedAt": "2026-10-02T11:17:36Z",
+      "completedAt": "2026-10-02T11:17:36Z",
+      "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262/job/110815921195"
+    }
+  ],
+  "status": "completed",
+  "url": "https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262"
+}

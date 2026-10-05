@@ -298,6 +298,7 @@ class ClaudeCodeStreamConnector:
         # otherwise block forever on an unbounded get() with nothing left
         # to receive. threading.Event is safe to read from any thread.
         self._closed_event = threading.Event()
+        self._termination_requested = threading.Event()
         self._stdout_thread: threading.Thread | None = None
         self._stderr_thread: threading.Thread | None = None
 
@@ -372,6 +373,7 @@ class ClaudeCodeStreamConnector:
         # its queue happens to run momentarily dry, even though this
         # session is healthy and still has real events coming.
         self._closed_event.clear()
+        self._termination_requested.clear()
 
         # C5/U02: re-validate immediately before the spawn primitive
         # (after the connector's own pre-start checks/waits).
@@ -379,7 +381,8 @@ class ClaudeCodeStreamConnector:
         if launch_guard is not None:
             launch_guard("claude_start")
         argv = [self._binary, *self._argv]
-        if self.native_approvals_enabled and self._argv == _DEFAULT_ARGV:
+        if (self.native_approvals_enabled and
+                self._argv[:len(_DEFAULT_ARGV)] == _DEFAULT_ARGV):
             argv.extend(["--permission-prompt-tool", "stdio"])
         spawn_env = child_environment(self._env)
         try:
@@ -623,12 +626,17 @@ class ClaudeCodeStreamConnector:
             try:
                 self._proc.wait(timeout=5)
             except subprocess.TimeoutExpired:
+                self._termination_requested.set()
                 self._proc.kill()
                 self._proc.wait(timeout=5)
+            if observe_owned_process(self._proc)["stop_observed"]:
+                return "forced" if self._termination_requested.is_set() else "graceful"
+        return "unknown"
 
     def force_stop(self):
         """Kill only this connector's Core-owned process tree."""
         if self._proc is not None:
+            self._termination_requested.set()
             self._proc.kill()
 
     def _end(self) -> None:
@@ -976,11 +984,11 @@ class ClaudeCodeStreamConnector:
             self._emit("error", f"result:{subtype}", payload)
 
     def _handle_permission_request(self, obj):
-        from ..native_inputs import CLAUDE_INPUT, validate_request
+        from ..native_inputs import CLAUDE_INPUT, validate_request, claude_permission_tool_supported
         request_id, params = obj.get("request_id"), obj.get("request")
         valid = (self.native_approvals_enabled and isinstance(request_id, str) and bool(request_id)
                  and isinstance(params, dict) and params.get("subtype") == "can_use_tool"
-                 and isinstance(params.get("tool_name"), str) and params["tool_name"] in {"Write", "Edit", "Bash", "AskUserQuestion"}
+                 and claude_permission_tool_supported(params.get("tool_name"))
                  and isinstance(params.get("tool_use_id"), str) and bool(params["tool_use_id"])
                  and isinstance(params.get("input"), dict))
         encoded = json.dumps([request_id, params], sort_keys=True, separators=(",", ":"))
@@ -1061,6 +1069,9 @@ class ClaudeCodeStreamConnector:
             native_event=native_event,
             occurred_at=utc_now_iso(),
             payload=payload,
+            # The assistant message repeats the complete streamed text.
+            # Preserve replacement semantics through redaction and NXL.
+            output_snapshot=kind == "output_delta" and native_event == "assistant",
         )
         # Append and nonblocking fanout share one ordering lock. Overflow
         # stops the owned process; every affected reader observes an explicit gap.

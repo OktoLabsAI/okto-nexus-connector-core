@@ -1,5 +1,10 @@
 # Native adapter migration and provenance
 
+For a new integration, use [Adding a native harness runtime](adding-a-runtime.md).
+This page records migration history; current qualification gates live in
+`native/adapters/compatibility.py`, and current native-input behavior is
+documented in [Harness configuration discovery](harness-configuration.md).
+
 Core owns adapted copies of `codex.py`, `pi.py`,
 `claude_code_stream.py` and `claude_code_attach.py` under
 `src/nexus_connector_core/native/adapters/`. It also owns the neutral helper

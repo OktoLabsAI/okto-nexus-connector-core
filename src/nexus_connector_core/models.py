@@ -30,6 +30,46 @@ class EffectNotSent(Exception):
         self.code = code
 
 
+class EffectRejected(Exception):
+    """A correlated native reply confirms rejection after a protocol write."""
+
+    def __init__(self, message: str, *, failure_code: str = "NATIVE_OPERATION_FAILED"):
+        super().__init__(message)
+        self.failure_code = failure_code
+
+
+@dataclass(frozen=True, slots=True)
+class ControlTargeting:
+    """Implemented control shape, never a grant or provider qualification."""
+
+    action: str
+    supported: bool
+    native_turn_id: str  # required | optional | forbidden
+    requires_active_run: bool
+    steer_timing: str | None = None
+
+    def to_dict(self) -> dict[str, Any]:
+        return {"action": self.action, "supported": self.supported,
+                "native_turn_id": self.native_turn_id,
+                "requires_active_run": self.requires_active_run,
+                "steer_timing": self.steer_timing}
+
+
+@dataclass(frozen=True, slots=True)
+class R4Authority:
+    """Additional immutable scope of a Core-installed R4 lease."""
+
+    session_id: str
+    workspace_binding_id: str
+    binding_revision: int
+    credential_epoch: int
+    grant_id: str
+    lease_id: str
+    lease_serial: int
+    connection_id: str
+    boot_id: str
+
+
 @dataclass(frozen=True, slots=True)
 class ExecutionContext:
     server_id: str
@@ -43,6 +83,13 @@ class ExecutionContext:
     lease_deadline_monotonic: float
     allowed_actions: frozenset[str]
     session_owner_generation: int = 1
+    r4_authority: R4Authority | None = None
+
+
+@dataclass(frozen=True, slots=True)
+class R4LeaseApplication:
+    context: ExecutionContext
+    acknowledgement: Mapping[str, Any]
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,6 +163,15 @@ class SessionClaimPage:
 class OwnedSlotReservation:
     key: SessionKey
     opening_operation_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class OwnedSlotState:
+    """Historical reservation/release fact, never live process authority."""
+
+    key: SessionKey
+    opening_operation_id: str
+    released: bool
 
 
 @dataclass(frozen=True, slots=True)
@@ -220,6 +276,16 @@ class InstallationCandidate:
 
 
 @dataclass(frozen=True, slots=True)
+class HarnessSettings:
+    effort: str | None = None
+    provider: str | None = None
+    approval_policy: str | None = None
+    sandbox: str | None = None
+    permission_mode: str | None = None
+    user_input: str | None = None
+
+
+@dataclass(frozen=True, slots=True)
 class LaunchIntent:
     agent_id: str
     workspace_id: str
@@ -227,6 +293,7 @@ class LaunchIntent:
     mode: str = "managed"
     model: str | None = None
     auth_refs: tuple[str, ...] = ()
+    harness_settings: HarnessSettings = field(default_factory=HarnessSettings)
 
 
 @dataclass(frozen=True, slots=True)
@@ -305,6 +372,7 @@ class ControlOperation:
     verb: str
     text: str | None = None
     expected_turn_id: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -354,6 +422,8 @@ class AttachPolicy:
 class CloseOperation:
     operation_id: str
     session_id: str
+    reason: str | None = None
+    policy: ShutdownPolicy | None = None
 
 
 @dataclass(frozen=True, slots=True)

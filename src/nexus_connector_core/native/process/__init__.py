@@ -39,6 +39,9 @@ def spawn_owned_process(argv: Sequence[str], **kwargs) -> subprocess.Popen:
     if sys.platform == "linux":
         from .linux_process import OwnedLinuxPopen
         return OwnedLinuxPopen(list(argv), **options)
+    if sys.platform == "darwin":
+        from .macos_process import OwnedDarwinPopen
+        return OwnedDarwinPopen(list(argv), **options)
     raise RuntimeError("managed process ownership is unqualified on this platform")
 
 
@@ -49,8 +52,10 @@ def owned_tree_census(process: subprocess.Popen, *,
     Windows counts the job object's member PIDs (kernel view, includes
     descendants that kept their group). Linux counts the child's live process
     group from /proc; descendants that called setsid escape both this census
-    and containment, exactly as documented for kill semantics. This is an
-    observation, never authority to signal or adopt a PID.
+    and containment, exactly as documented for kill semantics. Darwin counts
+    the launchd job's coalition pair, which ``setsid``/double-fork descendants
+    cannot escape; the guardian itself is excluded. This is an observation,
+    never authority to signal or adopt a PID.
     """
     census = getattr(process, "owned_tree_pids", None)
     if not callable(census):

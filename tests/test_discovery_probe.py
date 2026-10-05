@@ -180,6 +180,29 @@ def test_codex_version_observation_accepts_only_narrow_cli_output(monkeypatch):
     assert invalid["native_version"] is None
 
 
+@pytest.mark.parametrize("version", ["0.159.0-alpha.12.1", "0.159.3", "0.159.0-rc.1+build.42"])
+def test_codex_prerelease_identity_matches_probe_and_handshake(monkeypatch, version):
+    monkeypatch.setattr(compatibility, "_version_output",
+                        lambda *args, **kwargs: f"codex-cli {version}\n".encode())
+    probe = compatibility.codex_version_observation(("codex", "--version"), cwd="/", env={})
+    handshake = compatibility.codex_initialize_observation(
+        {"userAgent": f"nexus/{version} (Windows)"}, client_name="nexus")
+    assert probe["native_version"] == handshake["native_version"] == version
+    assert not probe["capabilities_verified"]
+    assert not handshake["capabilities_verified"]
+    assert probe["compatible_native_requests"] == (
+        ["item/tool/requestUserInput"] if version == "0.159.0-alpha.12.1" else [])
+
+
+@pytest.mark.parametrize("version", ["0.159.0-", "0.159.0-alpha..1", "0.159.0+", "0.159.0/alpha"])
+def test_codex_malformed_version_cannot_fall_back_to_stable(monkeypatch, version):
+    monkeypatch.setattr(compatibility, "_version_output",
+                        lambda *args, **kwargs: f"codex-cli {version}\n".encode())
+    assert compatibility.codex_version_observation(("codex", "--version"), cwd="/", env={})["native_version"] is None
+    assert compatibility.codex_initialize_observation(
+        {"userAgent": f"nexus/{version} (Windows)"}, client_name="nexus")["native_version"] is None
+
+
 @pytest.mark.skipif(os.name != "nt", reason="Windows wrapper policy")
 def test_codex_command_wrapper_is_not_a_native_candidate(tmp_path):
     wrapper = tmp_path / "codex.cmd"
@@ -213,7 +236,12 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
           "sha256:3765c5c53d04d5ef6ed4d1309284338aa14104228280fd643ec4cd12fa862058")
     claude = ("claude_code", "2.1.282", "win32", "x86_64",
               "sha256:fc0e3af017705624b9e1bce913f72761864ff994804514da1f5e41380fca4484")
-    assert compatibility.QUALIFIED_BUILDS == compatibility.QUALIFIED_CONTROL_BUILDS
+    claude_288 = ("claude_code", "2.1.288", "win32", "x86_64",
+                  "sha256:84304f7d4b0cd0ebcbe8318695a260151b48991a6659c3366fdd5da290c0ab91")
+    assert compatibility.QUALIFIED_BUILDS - compatibility.QUALIFIED_CONTROL_BUILDS == {claude_288}
+    assert compatibility.QUALIFIED_CONTROL_BUILDS <= compatibility.QUALIFIED_BUILDS
+    assert compatibility.qualified_build(*claude_288)
+    assert not compatibility.qualified_build(*claude_288, control=True)
     # C2/R06: Pi qualifies only through the dependency-covering portable
     # identity; the legacy composite fingerprint stays a binding proof but
     # is not a grant on its own. Codex/Claude keep the fingerprint grant.

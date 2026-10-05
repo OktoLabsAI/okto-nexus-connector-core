@@ -1,0 +1,15 @@
+{
+  "version": "0.2.35.dev0",
+  "wheel": "D:\\Projetos\\Techridy\\okto-nexus-connector-core\\artifacts\\nexus_connector_core-0.2.35.dev0-py3-none-any.whl",
+  "sha256": "20013ae173652ea3726f5b7ae5d7c37e66eac8f9bc319ae3c36f84e70247e760",
+  "contract_checks": {
+    "contracts/generate.py --check": 0,
+    "contracts/generate_r4.py --check": 0
+  },
+  "installed_tests": {
+    "passed": 104,
+    "failed": 0,
+    "skipped": 0
+  },
+  "scope": "Receipt binding/projection, kernel, journal, reducers and close regression; full M00-M13 remains open."
+}

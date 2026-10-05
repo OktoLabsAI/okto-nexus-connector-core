@@ -16,8 +16,12 @@ import hashlib
 import json
 import os
 import stat
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from pathlib import Path
 
+from .discovery_control import check_discovery_cancelled
 from .protocol import canonical_json
 
 __all__ = ["executable_build_identity", "pi_build_identity",
@@ -42,12 +46,15 @@ _MAX_DEPENDENCY_PACKAGES = 512
 _MAX_DIRECTORIES = 65536
 _MAX_DEPTH = 48
 _READ_CHUNK = 1024 * 1024
+_IDENTITY_READ_WORKERS = 4
 
 
 def _file_digest(path: Path) -> str:
+    check_discovery_cancelled()
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(_READ_CHUNK), b""):
+            check_discovery_cancelled()
             digest.update(chunk)
     return "sha256:" + digest.hexdigest()
 
@@ -56,10 +63,15 @@ def _file_digest_counted(path: Path, expected: int) -> str:
     """Digest while counting the bytes ACTUALLY read (C4/T07): a file
     growing between stat and read refuses instead of silently exceeding
     the budget."""
+    check_discovery_cancelled()
     digest = hashlib.sha256()
     read = 0
     with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(_READ_CHUNK), b""):
+        # Small package files must not allocate a megabyte for every read.
+        # One extra byte still detects growth, including after the exact
+        # expected size has been consumed. No content or EOF check is skipped.
+        while chunk := stream.read(min(_READ_CHUNK, expected - read + 1)):
+            check_discovery_cancelled()
             read += len(chunk)
             if read > expected:
                 raise ValueError(
@@ -101,6 +113,7 @@ def _iter_tree_files(directory: Path):
 
     def walk(current: Path, depth: int) -> None:
         nonlocal dirs_visited, names_seen
+        check_discovery_cancelled()
         if depth > _MAX_DEPTH:
             raise ValueError("pi package tree exceeds bounded depth")
         dirs_visited += 1
@@ -113,6 +126,7 @@ def _iter_tree_files(directory: Path):
             raise ValueError("unreadable directory in package") from exc
         try:
             for entry in iterator:
+                check_discovery_cancelled()
                 names_seen += 1
                 if names_seen > _MAX_MANIFEST_ENTRIES:
                     # C6/M01: refuse AT the first name beyond the budget
@@ -127,6 +141,7 @@ def _iter_tree_files(directory: Path):
         finally:
             iterator.close()
         for name in sorted(names):
+            check_discovery_cancelled()
             if len(collected) > _MAX_MANIFEST_ENTRIES:
                 raise ValueError("pi package manifest exceeds bounded size")
             path = current / name
@@ -195,44 +210,68 @@ def pi_build_identity(node: str | os.PathLike,
     entries = []
     total = 0
 
-    def _add_tree(directory: Path, prefix: str) -> None:
-        nonlocal total
-        for current in _iter_tree_files(directory):
-            relative = prefix + current.relative_to(directory).as_posix()
-            total = _add_entry(entries, total, current, relative)
+    # Keep only four reads in flight. Append results in manifest order,
+    # regardless of completion order, and propagate the discovery stop scope.
+    with ThreadPoolExecutor(max_workers=_IDENTITY_READ_WORKERS,
+                            thread_name_prefix="core-identity") as readers:
+        def _add_tree(directory: Path, prefix: str) -> None:
+            nonlocal total
+            pending = deque()
+            def append_first():
+                relative, size, future = pending.popleft()
+                digest = future.result()
+                check_discovery_cancelled()
+                entries.append({"path": relative, "sha256": digest.split(":", 1)[1],
+                                "size": size})
+            try:
+                for current in _iter_tree_files(directory):
+                    check_discovery_cancelled()
+                    relative = prefix + current.relative_to(directory).as_posix()
+                    size = _entry_size(len(entries) + len(pending), total, current)
+                    total += size  # Reserve count/bytes before scheduling any read.
+                    future = readers.submit(copy_context().run, _file_digest_counted, current, size)
+                    pending.append((relative, size, future))
+                    if len(pending) >= _IDENTITY_READ_WORKERS:
+                        append_first()
+                while pending:
+                    append_first()
+            finally:
+                for _, _, future in pending:
+                    future.cancel()
 
-    _add_tree(root_resolved, "")
+        _add_tree(root_resolved, "")
 
-    install_root = _node_install_root(root_resolved)
-    # C4/T06: importer-relative logical topology ("@/name/subname").
-    queue = [(root_resolved, "@")]
-    seen = {root_resolved.resolve()}
-    absent_relations: list[str] = []
-    packages = 0
-    while queue:
-        package_dir, logical = queue.pop(0)
-        packages += 1
-        if packages > _MAX_DEPENDENCY_PACKAGES:
-            raise ValueError("pi dependency closure exceeds bounded size")
-        for name, required in _declared_relations(package_dir):
-            resolved = _resolve_node_modules_package(package_dir, name,
-                                                     install_root)
-            if resolved is None:
-                if not required:
-                    # Recorded absence: installing it later must change
-                    # the identity (C4/T06).
-                    absent_relations.append(f"{logical}:{name}")
-                else:
-                    raise ValueError(
-                        f"declared dependency missing from installation: "
-                        f"{name}")
-                continue
-            if resolved in seen:
-                continue
-            seen.add(resolved)
-            dep_logical = f"{logical}/{name}"
-            _add_tree(resolved, f"{dep_logical}/")
-            queue.append((resolved, dep_logical))
+        install_root = _node_install_root(root_resolved)
+        # C4/T06: importer-relative logical topology ("@/name/subname").
+        queue = [(root_resolved, "@")]
+        seen = {root_resolved.resolve()}
+        absent_relations: list[str] = []
+        packages = 0
+        while queue:
+            check_discovery_cancelled()
+            package_dir, logical = queue.pop(0)
+            packages += 1
+            if packages > _MAX_DEPENDENCY_PACKAGES:
+                raise ValueError("pi dependency closure exceeds bounded size")
+            for name, required in _declared_relations(package_dir):
+                resolved = _resolve_node_modules_package(package_dir, name,
+                                                         install_root)
+                if resolved is None:
+                    if not required:
+                        # Recorded absence: installing it later must change
+                        # the identity (C4/T06).
+                        absent_relations.append(f"{logical}:{name}")
+                    else:
+                        raise ValueError(
+                            f"declared dependency missing from installation: "
+                            f"{name}")
+                    continue
+                if resolved in seen:
+                    continue
+                seen.add(resolved)
+                dep_logical = f"{logical}/{name}"
+                _add_tree(resolved, f"{dep_logical}/")
+                queue.append((resolved, dep_logical))
 
     identity = {
         "algorithm": BUILD_IDENTITY_ALGORITHM,
@@ -253,7 +292,17 @@ def _add_entry(entries: list, total: int, path: Path, relative: str) -> int:
     hitting the limit exactly is allowed, exceeding it by one byte
     refuses before any digest work.
     """
-    if len(entries) >= _MAX_MANIFEST_ENTRIES:
+    size = _entry_size(len(entries), total, path)
+    entries.append({"path": relative,
+                    "sha256": _file_digest_counted(path, size)
+                    .split(":", 1)[1],
+                    "size": size})
+    return total + size
+
+
+def _entry_size(entry_count: int, total: int, path: Path) -> int:
+    """Reserve the same manifest budget before a sequential or parallel read."""
+    if entry_count >= _MAX_MANIFEST_ENTRIES:
         raise ValueError("pi package manifest exceeds bounded size")
     try:
         st = path.stat()
@@ -262,11 +311,7 @@ def _add_entry(entries: list, total: int, path: Path, relative: str) -> int:
         raise ValueError("unreadable file in package") from exc
     if total + size > _MAX_MANIFEST_BYTES:
         raise ValueError("pi package manifest exceeds bounded size")
-    entries.append({"path": relative,
-                    "sha256": _file_digest_counted(path, size)
-                    .split(":", 1)[1],
-                    "size": size})
-    return total + size
+    return size
 
 
 def _node_install_root(package_root: Path) -> Path:

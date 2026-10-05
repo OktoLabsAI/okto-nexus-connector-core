@@ -40,6 +40,7 @@ class _StoppableNative:
         self.queue = asyncio.Queue()
         self.stopped = False
         self.start_gate = threading.Event()
+        self.open_entered = asyncio.Event()
 
     async def send(self, verb, payload, operation_id, *,
                    expected_turn_id=None):
@@ -101,12 +102,12 @@ async def _reach_stopped_obligation(runtime, native, ledger):
         LaunchIntent("agent", "ws", "codex_app_server"), auth)
     opening = asyncio.create_task(runtime.open(
         OpenOperation("open-op", "session", "epoch", prepared), auth))
-    await asyncio.sleep(0.2)
+    # Cancel only after the owned native producer exists. Slow receipt or
+    # reservation I/O must not turn this into a pre-effect cancellation test.
+    await asyncio.wait_for(native.open_entered.wait(), 3)
     opening.cancel()
-    try:
+    with pytest.raises(asyncio.CancelledError):
         await opening
-    except BaseException:
-        pass
     native.start_gate.set()
     deadline = time.monotonic() + 3
     key = SessionKey("srv", "exe", "session")
@@ -128,6 +129,7 @@ def test_shutdown_deadline_does_not_cancel_owned_release_producer(
         class _Factory:
             async def open(self, prepared, session_id, auth, *,
                            stream_epoch):
+                native.open_entered.set()
                 await asyncio.to_thread(native.start_gate.wait, 5)
                 return native
 
@@ -183,6 +185,7 @@ def test_shutdown_return_does_not_wait_for_release_cancel_cleanup(
         class _Factory:
             async def open(self, prepared, session_id, auth, *,
                            stream_epoch):
+                native.open_entered.set()
                 await asyncio.to_thread(native.start_gate.wait, 5)
                 return native
 

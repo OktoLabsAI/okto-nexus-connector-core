@@ -1,0 +1,9 @@
+{
+  "version": "0.2.52.dev0",
+  "wheel": "C:\\Users\\jpamb\\AppData\\Local\\Temp\\okto-core-lease-052-dist\\nexus_connector_core-0.2.52.dev0-py3-none-any.whl",
+  "sha256": "470eb23b28d917a3a154c2ef7cd9fdddf972ca6402c0668961b4c01909f1b732",
+  "installed_runtime_tests_passed": 63,
+  "verification": "All installed Core package bytes match wheel in new Python 3.13 venv; pytest -I outside checkout",
+  "scope": "Absolute maximum lease comparison; exact boundary succeeds, next representable deadline refused before native open",
+  "consumers": "Integration and pins pending; live previous campaigns remain on 0.2.51.dev0"
+}

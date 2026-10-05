@@ -119,11 +119,13 @@ def test_codex_resume_rejects_invalid_id_or_start_only_overrides_before_spawn():
     assert incompatible._transport is None
 
 
-def test_codex_resume_grant_validated_before_native_open(monkeypatch):
+def test_codex_resume_grant_validated_before_native_open(monkeypatch, tmp_path):
     import nexus_connector_core.native.runtime_bridge as bridge_module
     import nexus_connector_core.native.adapters.codex as codex_module
 
-    prepared = _prepared()
+    from nexus_connector_core.profiles import _root_fingerprint
+    prepared = replace(_prepared(), cwd=str(tmp_path), requested_root=str(tmp_path),
+                       root_fingerprint=_root_fingerprint(tmp_path))
     context = _context()
     seen = []
 

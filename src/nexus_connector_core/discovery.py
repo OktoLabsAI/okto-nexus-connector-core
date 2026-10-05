@@ -11,8 +11,9 @@ from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
 
+from .discovery_control import check_discovery_cancelled, discovery_scope
 from .installation import installation_ref
-from .models import CoreError, InstallationCandidate
+from .models import CoreError, InstallationCandidate, Inventory
 from .native.process import require_containment
 from .native.registry import adapter_specs
 from .build_identity import (executable_build_identity,
@@ -57,9 +58,11 @@ def binary_architecture(path: str | Path) -> str | None:
 
 
 def fingerprint(path: Path) -> str:
+    check_discovery_cancelled()
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            check_discovery_cancelled()
             digest.update(chunk)
     return "sha256:" + digest.hexdigest()
 
@@ -184,7 +187,7 @@ async def probe_selected_codex(candidate: InstallationCandidate, *, cwd: str | P
 
 def _probe_selected_version(candidate: InstallationCandidate, adapter_id: str, *,
                             cwd: str | Path,
-                            env: Mapping[str, str]) -> InstallationCandidate:
+                            env: Mapping[str, str], before_observe=None) -> InstallationCandidate:
     """Bounded read-only version observation; never grants a capability."""
     # C2/R07: an active probe spawns a version process; the containment
     # gate must refuse BEFORE any observer runs in an environment whose
@@ -208,6 +211,8 @@ def _probe_selected_version(candidate: InstallationCandidate, adapter_id: str, *
     command = ((str(executable), candidate.launch_script, "--version")
                if candidate.launch_script is not None else
                (str(executable), "--version"))
+    if before_observe is not None:
+        before_observe()
     report = observer(command, cwd=str(root),
                       env={key: value for key, value in env.items()
                            if key.upper() in _PROBE_ENV})
@@ -238,6 +243,7 @@ def discover_pi_releases(install_root: str | Path, node_path: str | Path,
         "pi-coding-agent" / "dist" / "bundle" / "cli.js"
     candidates = []
     for release in sorted(releases.iterdir(), reverse=True):
+        check_discovery_cancelled()
         if not release.is_dir():
             continue
         cli = release / cli_suffix
@@ -298,36 +304,98 @@ def resolve_windows_npm_shim(shim_path: str | Path) -> Path:
 
 def discover_path(adapter_id: str, *, path_env: str | None = None,
                   trusted_roots: tuple[Path, ...] = ()) -> tuple[InstallationCandidate, ...]:
-    """Return only candidates under trusted roots; never search current cwd."""
+    """Observe PATH installations without promoting their trust; never search cwd."""
     name = EXECUTABLE_NAMES.get(adapter_id)
     if name is None:
         raise CoreError("CAPABILITY_UNSUPPORTED", "discovery")
     suffixes = (".exe", ".com") if os.name == "nt" else ("",)
-    cwd = Path.cwd().resolve()
+    from .discovery_layouts import path_directories, windows_layout_targets, posix_layout_targets
+    directories = tuple(path_directories(path_env if path_env is not None else os.environ.get("PATH", "")))
+    roots = tuple(root.resolve(strict=True) for root in trusted_roots)
     found: dict[str, InstallationCandidate] = {}
-    for entry in (path_env if path_env is not None else os.environ.get("PATH", "")).split(os.pathsep):
-        if not entry:
-            continue
-        directory = Path(entry)
-        if not directory.is_absolute():
-            continue
+    targets = ((directory / (name + suffix), None, None)
+               for directory in directories for suffix in suffixes)
+    replaced_launchers = set()
+    from itertools import chain
+    windows = ((path, script, None) for path, script in windows_layout_targets(adapter_id, directories))
+    for path, script, launcher in chain(targets, windows, posix_layout_targets(adapter_id, directories)):
+        check_discovery_cancelled()
         try:
-            directory = directory.resolve(strict=True)
-        except OSError:
+            # These constructors only read bytes. Never expose their temporary
+            # selected value until the actual caller-supplied roots are checked.
+            item = (candidate(adapter_id, path, explicit=True) if script is None else
+                    candidate_pi_node_cli(path, script, explicit=True))
+            paths = (Path(item.executable),) + ((Path(item.launch_script),) if item.launch_script else ())
+            trusted = all(any(target.is_relative_to(root) for root in roots) for target in paths)
+            item = replace(item, source="trusted_root" if trusted else "path",
+                           trust="selected" if trusted else "untrusted")
+        except (CoreError, OSError):
             continue
-        if directory == cwd:
-            continue
-        for suffix in suffixes:
-            path = directory / (name + suffix)
-            if not path.is_file():
-                continue
-            try:
-                item = candidate(adapter_id, path, trusted_roots=trusted_roots)
-            except (CoreError, OSError):
-                continue
-            # C11/A11-01 + alias policy: key by the installation ref -
-            # PATH duplicates/symlinks to the SAME canonical target are
-            # ONE installation; distinct targets stay distinct rows.
-            found[item.installation_ref
-                  or installation_ref(adapter_id, item.executable)] = item
-    return tuple(found.values())
+        found[item.installation_ref or installation_ref(adapter_id, item.executable)] = item
+        if launcher is not None:
+            replaced_launchers.add(str(launcher))
+    return tuple(item for item in found.values()
+                 if not (item.launch_script is None and item.architecture is None
+                         and item.executable in replaced_launchers))
+
+
+def _discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
+                           trusted_roots: tuple[Path, ...] = (),
+                           path_env: str | None = None,
+                           pi_install_root: str | Path | None = None,
+                           pi_node: str | Path | None = None) -> Inventory:
+    """Passively discover full candidates without constructing a runtime.
+
+    The default adapter set comes from the public catalog. Hosts retain the
+    full returned candidates locally; wire inventory is a separate redacted
+    projection. No provider process, journal or credential is opened here.
+    """
+    from .catalog import get_runtime_catalog
+    if adapter_ids is None:
+        selected = tuple(item.adapter_id for item in get_runtime_catalog().runtimes
+                         if item.discoverable)
+    elif isinstance(adapter_ids, tuple) and all(isinstance(item, str) for item in adapter_ids):
+        selected = adapter_ids
+    else:
+        raise TypeError("adapter_ids must be a tuple of strings or None")
+    if not isinstance(trusted_roots, tuple):
+        raise TypeError("trusted_roots must be a tuple")
+    if (pi_install_root is None) != (pi_node is None):
+        raise ValueError("pi_install_root and pi_node must be supplied together")
+    candidates: list[InstallationCandidate] = []
+    for adapter_id in selected:
+        check_discovery_cancelled()
+        candidates.extend(discover_path(adapter_id, path_env=path_env,
+                                        trusted_roots=trusted_roots))
+        if adapter_id == "pi_rpc" and pi_install_root is not None:
+            candidates.extend(discover_pi_releases(
+                pi_install_root, pi_node, trusted_roots=trusted_roots))
+    unique: dict[str, InstallationCandidate] = {}
+    for item in candidates:
+        check_discovery_cancelled()
+        ref = item.installation_ref or installation_ref(
+            item.adapter_id, item.executable, item.launch_script)
+        previous = unique.get(ref)
+        if previous is not None and previous != item:
+            # Do not pick one observation if an installation changed between
+            # the automatic and explicitly configured discovery paths.
+            raise CoreError("PROFILE_DRIFT", "discovery")
+        unique[ref] = item
+    return Inventory(tuple(unique.values()))
+
+
+def discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
+                           trusted_roots: tuple[Path, ...] = (),
+                           path_env: str | None = None,
+                           pi_install_root: str | Path | None = None,
+                           pi_node: str | Path | None = None,
+                           cancel_requested=None) -> Inventory:
+    """Observe installations; a host may cooperatively stop passive reads.
+
+    Cancellation raises DiscoveryCancelled, never a partial Inventory. The
+    callback is checked between filesystem operations, not during an OS read.
+    It does not cancel provider operations, state writes or runtime owners.
+    """
+    with discovery_scope(cancel_requested):
+        return _discover_installations(adapter_ids=adapter_ids, trusted_roots=trusted_roots,
+            path_env=path_env, pi_install_root=pi_install_root, pi_node=pi_node)

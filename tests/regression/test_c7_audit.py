@@ -271,16 +271,20 @@ class _SlowCancelCloseNative:
         return ("STOPPED" if self.stopped else "RUNNING", "IDLE")
 
 
-def test_w03_force_does_not_wait_for_close_cancellation_to_finish(tmp_path):
+@pytest.mark.parametrize("pre_open_delay", [0.0, 0.3])
+def test_w03_force_does_not_wait_for_close_cancellation_to_finish(
+        tmp_path, monkeypatch, pre_open_delay):
     clock = FakeClock(100.0)
 
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
         native = _SlowCancelCloseNative()
+        factory_entered = asyncio.Event()
 
         class _Factory:
             async def open(self, prepared, session_id, auth, *,
                            stream_epoch):
+                factory_entered.set()
                 await asyncio.to_thread(native.start_gate.wait, 5)
                 return native
 
@@ -294,6 +298,13 @@ def test_w03_force_does_not_wait_for_close_cancellation_to_finish(tmp_path):
             native_factory=_Factory(), clock=clock,
             lease_grace_seconds=0.0, lease_poll_seconds=0.01,
             cleanup_budget_seconds=0.2)
+        existing = runtime._existing
+
+        async def delayed_existing(*args, **kwargs):
+            await asyncio.sleep(pre_open_delay)
+            return await existing(*args, **kwargs)
+
+        monkeypatch.setattr(runtime, "_existing", delayed_existing)
         try:
             auth = replace(context(),
                            lease_deadline_monotonic=clock.now + 60)
@@ -302,7 +313,9 @@ def test_w03_force_does_not_wait_for_close_cancellation_to_finish(tmp_path):
             opening = asyncio.create_task(runtime.open(
                 OpenOperation("open-op", "session", "epoch", prepared),
                 auth))
-            await asyncio.sleep(0.2)
+            # Cancellation follows actual factory entry, even when journal
+            # admission takes longer than the old fixed 200 ms sleep.
+            await asyncio.wait_for(factory_entered.wait(), timeout=5)
             opening.cancel()
             try:
                 await opening
@@ -341,6 +354,7 @@ class _StalledObserverNative(_SlowCancelCloseNative):
         super().__init__()
         self.close_barrier.set()  # close completes (unknown)
         self.observe_gate = threading.Event()
+        self.observe_entered = asyncio.Event()
 
     async def close(self):
         self.close_saw_cancel.set()
@@ -355,6 +369,7 @@ class _StalledObserverNative(_SlowCancelCloseNative):
 
     async def observe(self):
         if not self.observe_gate.is_set() and self.force_calls <= 1:
+            self.observe_entered.set()
             await asyncio.to_thread(self.observe_gate.wait, 5)
         return ("STOPPED" if self.stopped else "RUNNING", "IDLE")
 
@@ -366,10 +381,12 @@ def test_w03b_second_shutdown_can_retry_late_handle_after_observer_stalls(
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
         native = _StalledObserverNative()
+        factory_entered = asyncio.Event()
 
         class _Factory:
             async def open(self, prepared, session_id, auth, *,
                            stream_epoch):
+                factory_entered.set()
                 await asyncio.to_thread(native.start_gate.wait, 5)
                 return native
 
@@ -392,7 +409,7 @@ def test_w03b_second_shutdown_can_retry_late_handle_after_observer_stalls(
             opening = asyncio.create_task(runtime.open(
                 OpenOperation("open-op", "session", "epoch", prepared),
                 auth))
-            await asyncio.sleep(0.2)
+            await asyncio.wait_for(factory_entered.wait(), timeout=5)
             opening.cancel()
             try:
                 await opening
@@ -417,6 +434,9 @@ def test_w03b_second_shutdown_can_retry_late_handle_after_observer_stalls(
                 await asyncio.sleep(0.05)
             assert key in runtime._late_handles, (
                 "stalled observer left the handle outside recovery")
+            # Registration precedes asynchronous cleanup. Observe entry proves
+            # the first force attempt has actually run and failed.
+            await asyncio.wait_for(native.observe_entered.wait(), timeout=5)
             assert native.force_calls == 1
             # Backend restored: the SECOND public shutdown retries the
             # SAME handle - no new spawn, force #2 succeeds.
@@ -483,8 +503,10 @@ class _ApprovalNative:
 
 
 @pytest.mark.parametrize("decision", ["decline", "cancel", "accept"])
+@pytest.mark.parametrize("decision_delay", [0.0, 0.1])
+@pytest.mark.parametrize("past_grace", [False, True])
 def test_w04_public_approval_distinguishes_containment_from_new_permission(
-        tmp_path, decision):
+        tmp_path, decision, decision_delay, past_grace):
     clock = FakeClock(100.0)
 
     async def run():
@@ -504,7 +526,7 @@ def test_w04_public_approval_distinguishes_containment_from_new_permission(
             candidates={"codex_app_server": _codex_candidate(tmp_path)},
             workspace_roots={"ws": str(tmp_path)},
             native_factory=_Factory(), clock=clock,
-            lease_grace_seconds=0.0, lease_poll_seconds=0.01)
+            lease_grace_seconds=15.0, lease_poll_seconds=0.01)
         try:
             auth = replace(context(),
                            lease_deadline_monotonic=clock.now + 60,
@@ -529,8 +551,19 @@ def test_w04_public_approval_distinguishes_containment_from_new_permission(
             binding = runtime._sessions[SessionKey("srv", "exe", "session")]
             binding.pending_native_requests[
                 json.dumps(7)] = encoded  # durably observed request
-            # The productive lease expires; the request/turn remain valid.
-            clock.advance(200)
+            # Exercise an expired productive lease while still inside the
+            # public containment grace window. Advancing beyond that window
+            # lets the supervisor correctly close the session before reply.
+            clock.advance(200 if past_grace else 61)
+            await asyncio.sleep(decision_delay)
+            if past_grace:
+                async def wait_closed():
+                    while not binding.closed:
+                        await asyncio.sleep(0.005)
+                await asyncio.wait_for(wait_closed(), timeout=5)
+                assert native.stopped
+            else:
+                assert not binding.closed and not native.stopped
             operation = NativeApprovalOperation(
                 f"decide-{decision}", "session", request, decision)
             if decision == "accept":
@@ -538,6 +571,12 @@ def test_w04_public_approval_distinguishes_containment_from_new_permission(
                 with pytest.raises(CoreError) as excinfo:
                     await runtime.decide_native_approval(operation, auth)
                 assert excinfo.value.code == "AGENT_REVOKED"
+                assert native.replies == [] and native.sent == []
+            elif past_grace:
+                # A negative reply cannot resurrect an already closed peer.
+                with pytest.raises(CoreError) as excinfo:
+                    await runtime.decide_native_approval(operation, auth)
+                assert excinfo.value.code == "SESSION_CLOSED"
                 assert native.replies == [] and native.sent == []
             else:
                 # Decline/cancel are containment: exactly one negative

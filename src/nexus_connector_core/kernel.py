@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 
 from .clock import RollbackFencedClock, SystemClock
 from .journal import SQLiteJournal
-from .models import CoreError, EffectNotSent, ExecutionContext, Operation, OperationKey, OperationReceipt
+from .models import CoreError, EffectNotSent, EffectRejected, ExecutionContext, Operation, OperationKey, OperationReceipt
 from .ports import Journal, Clock
 from .protocol import intent_hash
 
@@ -19,7 +19,12 @@ class OperationKernel:
 
     async def execute(self, operation: Operation, context: ExecutionContext,
                       effect: Callable[[], Awaitable[str | None]], *,
-                      containment: bool | None = None) -> OperationReceipt:
+                      containment: bool | None = None,
+                      completion_stage: str = "SUBMITTED") -> OperationReceipt:
+        # Only a caller that has observed completion may request a terminal
+        # receipt. Validate before admission or any native effect.
+        if type(completion_stage) is not str or completion_stage not in {"SUBMITTED", "SUCCEEDED"}:
+            raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)
         # C7/W04: callers with a derived per-operation classification
         # (a strictly negative approval reply) pass it explicitly; the
         # default stays action-based.
@@ -85,6 +90,11 @@ class OperationKernel:
             raise CoreError(exc.code, "native_send",
                             retry_safe=True,
                             operation_id=operation.operation_id) from exc
+        except EffectRejected as exc:
+            rejected = OperationReceipt(operation.operation_id, digest,
+                "FAILED", True, False, operation.session_id,
+                error_code=exc.failure_code)
+            return await self.journal.record_receipt(key, rejected)
         except CoreError as exc:
             if exc.retry_safe and not exc.possible_effect:
                 await self.journal.record_not_sent(key, exc.code)
@@ -103,6 +113,6 @@ class OperationKernel:
                                        error_code="OUTCOME_UNKNOWN")
             await self.journal.record_receipt(key, unknown)
             raise
-        submitted = OperationReceipt(operation.operation_id, digest, "SUBMITTED",
+        submitted = OperationReceipt(operation.operation_id, digest, completion_stage,
                                      True, False, operation.session_id, native_id)
         return await self.journal.record_receipt(key, submitted)

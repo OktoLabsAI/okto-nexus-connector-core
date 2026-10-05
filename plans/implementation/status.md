@@ -1,4 +1,132 @@
+## Native macOS Intel launchd-coalition backend — 2026-10-02
+
+Core 0.2.57.dev0 implements the darwin owned-process backend per
+[MACOS_INTEL_IMPLEMENTATION](../MACOS_INTEL_IMPLEMENTATION.md): a unique
+per-launch launchd guardian job (`RunAtLoad`, `KeepAlive=false`, gui domain
+only), stdin/stdout/stderr handed over AF_UNIX `SCM_RIGHTS`, kqueue
+owner-exit registration bracketed by birth verification, SIGTERM-then-kill
+escalation, 32-slot retention until proven stop, and a stop proof requiring
+two consecutive complete empty coalition censuses with per-PID birth and
+coalition revalidation, a SIGSTOP interlock and post-signal birth checks.
+The native acceptance campaign (100/100 double-fork/setsid escapes with zero
+leaks, owner SIGKILL, cancellation escalation, descriptor hygiene,
+shared-coalition refusal, 64-child census/overflow, 32-slot retention, PID
+churn, SIGSTOP races, normal exit) **passed** on the Intel host; see
+[evidence](evidence/macos-native-acceptance-20261002.md). Installed-suite
+darwin status moved from 132 baseline failures to 1205 passed/42 skipped
+with one documented deselect (a pre-existing claude runtime-lifecycle gap
+exposed by darwin spawn latency, root cause retained in the evidence). A
+genuine late-open containment hole in `runtime.py` was fixed. Providers,
+Connector IPC, Nexus UI, headless operation and other hosts remain separate
+campaigns.
+
+## C10 admission synchronization and hosted infrastructure — 2026-10-02
+
+The C10 release-obligation setup failure is reproduced by a delayed receipt
+lookup before native admission. Both setup helpers now observe native-factory
+entry before cancellation; their ownership/containment assertions remain.
+Eight installed cases passed on Windows Python 3.11/3.13 and WSL Linux Python
+3.12 with unchanged Core .56 package bytes. See [reproduction and evidence](evidence/c10-admission-review.md).
+
+Run 37001262922 is terminal: Windows Python 3.12 passed, but GitHub refused to
+start five other jobs due to account payment/spending-limit restrictions.
+This supersedes the queued status below; hosted qualification is still open.
+
+## Core .56 POSIX discovery preparation — 2026-10-02
+
+See [DISCOVERY_056](../DISCOVERY_056.md) for passive physical-payload resolution,
+official npm before/after evidence and installed Windows/Linux campaigns.
+The initial Linux suite exposed two test-fixture issues; both original failures
+are retained and the focused reviewed checks pass. The reviewed complete Linux
+suite passed 1192 tests/24 skips; Windows passed 1121/95. Clean-wheel imports,
+contract resources and Core consumer smokes passed. Consumers still use .55; no release
+gate or independent-host acceptance is closed by this increment.
+
+Hosted .55 run 37000873878 completed five successful matrix cells but Windows
+Python 3.11 failed `test_retained_ledger_does_not_delay_other_resource_force`.
+That retained-obligation failure remains unresolved. Run 37001262922 was still
+queued/partially completed when checked; a successful Windows 3.12 cell alone
+does not qualify the matrix.
+
+## Core .55 hosted reconciliation — 2026-10-02
+
+Core `beed295` fixes duplicate PATH/explicit Pi discovery, following the .54
+passive Windows layout correction. See `../DISCOVERY_054.md` and
+`../DISCOVERY_055.md` for installed evidence. Hosted run
+https://github.com/OktoLabsAI/okto-nexus-connector-core/actions/runs/36998004262
+completed all six Windows/Linux Python 3.11–3.13 test cells: each Windows cell
+recorded 1120 passed/77 skipped and each Linux cell 1174 passed/23 skipped.
+All six failed only the public documentation version assertion (.53 vs .55);
+artifact build and offline installation steps were skipped. Public version and
+hosted-status guidance are corrected; the historical entries below retain their
+original scope and do not override this current status. Full green hosted
+qualification and release gates remain open.
+
+The public-documentation correction passed all three checks against the installed
+.55 wheel on Windows Python 3.13.1 and WSL Linux Python 3.12.13. Evidence:
+`evidence/docs-055-installed.xml`, `evidence/docs-055-linux-installed.xml` and
+`evidence/hosted-055-terminal.json`. These checks do not replace the pending
+hosted rebuild/offline-install qualification after documentation correction.
+
+## Core 0.2.52.dev0 — exact maximum lease boundary
+
+Corrects floating-point subtraction drift that could reject a valid 120-second lease on Windows. Compare the absolute deadline with now plus the maximum instead; no tolerance or extra lease duration is granted. The regression rejects the immediately larger representable deadline before native open. Installed wheel verification: 63 runtime tests passed in a new Python 3.13 environment outside the checkout. See evidence/lease-boundary-052.json. Consumer pins and integrated tests remain pending.
+
+## Hosted Windows qualification follow-up — 2026-10-02
+
+Run 36948182442 passed all three Linux jobs, but Windows exposed additional byte-sensitive native schema checkout and timing/ownership fixture defects. Native JSON now keeps LF. The crash fixture retains the owned process through the receipt boundary so garbage collection cannot close the Windows Job early; revocation waits for the observed stop within two seconds instead of assuming a 30 ms scheduler turn. Ten directed Windows tests passed locally. The intermittent native-action listener connection refusal test passed locally but remains unresolved pending hosted results; no release gate closes.
+
+# CI documentation and checkout correction — 2026-10-01
+
+Hosted run 36868353381 failed Windows R3 byte checks after CRLF checkout conversion and Linux public-documentation checks. The R3 JSON bundle now explicitly uses LF, as the R4 bundle already did; no contract bytes or protocol semantics changed. Public API/compatibility docs now cover the current 0.2.51.dev0 exports. Local validation: 3 public-doc tests passed and contracts/generate.py --check passed. Hosted re-execution and the isolated Pi optional-dependency probe timeout remain unverified; this does not close release qualification.
+
+## September 30, 2026 — Owned late close completion
+
+Core 0.2.34.dev0 adds explicit retained completion observation for policy close. Installed focused regression: 78 passed. Physical deadlines are unchanged; storage errors propagate. See evidence/late-close-owner-20260930.md. Full acceptance remains open.
+
+## September 30, 2026 — Terminal R4 close receipts
+
+Core 0.2.33.dev0 persists SUCCEEDED after confirmed R4 policy close. Focused installed regression: 76 passed. Real Pi, Codex and Claude returned and persisted terminal close success. Delayed/disconnected publication and full acceptance remain open. See evidence/r4-terminal-close-20260930.md.
+
+## September 30, 2026 — Confirmed native close outcomes
+
+Core 0.2.32.dev0 distinguishes observed normal/forced stop from unknown cleanup. Installed Core: 966 passed, 74 skipped. Real Codex and Claude R4 close accepted with no receipt error; Codex long-turn shutdown reports forced. Full product acceptance remains open. See evidence/native-close-outcome-20260930.md.
+
+## September 30, 2026 — Codex 0.159.0
+
+Core 0.2.31.dev0 adds exact Windows conversation/control qualification. Installed suite: 951 passed, 74 skipped. Real Pi/Codex/Claude R4 lease probes completed turns. Close classification and full product acceptance remain open. See evidence/codex-0159-qualification.md.
+
 # Implementation status — 2026-09-25
+
+## R4 pending renewal containment — 2026-09-30
+
+Core 0.2.28.dev0 releases session locks after reserving the productive hold,
+before waiting on durable lease CAS. Same-scope authorized containment can
+proceed while the CAS port is retained; reconnect, changed scope, removed
+actions and revocation cannot borrow old authority. A late renewal cannot
+acknowledge an already draining or closed session.
+
+Source regression: 920 passed/74 skipped, with three previously observed
+test warnings. Twelve new cases passed against the installed wheel, with
+the CAS barrier held during assertions. See `evidence/r4-pending-containment.json`.
+This verifies runtime coordination, not concurrent admission through a
+blocked SQLite writer. Full R4 conformance and provider/product gates remain
+open. The earlier entries below record historical increment boundaries.
+
+## R4 close policy increment — 2026-09-30
+
+Core 0.2.27.dev0 implements typed per-session close policy, full 0–1024
+interrupt/close reasons, verified R4 policy projection and one owned close
+producer surviving waiter cancellation. The same wheel is consumed by
+Nexus and Connector. Source regression: 908 passed/74 skipped; installed
+close/projection cases: 21 passed. Generated R3/R4 checks and clean-wheel
+verification passed. See `evidence/r4-close-policy.json` and the close
+policy section of `docs/nxl-r4-development.md` for commands and limits.
+
+Pending lease CAS containment and full provider/host conformance remain
+open. Public close still observes its durable admission frontier; independent
+owned-resource shutdown remains available when storage blocks admission.
+R4 is development-partial, not executable; no full milestone is closed.
 
 The current Pi 0.87.1 integration slice is closed in
 [`milestone-pi-0871-2026-09-26.md`](milestone-pi-0871-2026-09-26.md).

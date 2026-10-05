@@ -26,10 +26,11 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .native.registry import adapter_specs
+from .models import ControlTargeting
 
 #: Bumped when the projection's SHAPE changes; values themselves derive
 #: from the single registry source on every call.
-CATALOG_FORMAT_VERSION = 1
+CATALOG_FORMAT_VERSION = 2
 
 _SUPPORT_STATUS = {
     # managed adapters: implemented and eligible for the normal
@@ -78,6 +79,7 @@ class RuntimeDescriptor:
     #: executables). Attach needs an explicit target and never
     #: path-scans.
     discoverable: bool
+    control_targeting: tuple[ControlTargeting, ...]
 
 
 @dataclass(frozen=True, slots=True)
@@ -111,6 +113,7 @@ def get_runtime_catalog() -> RuntimeCatalog:
                                                "registered_unqualified"),
             discoverable=(spec.mode == "managed"
                           and spec.executable_name is not None),
+            control_targeting=spec.control_targeting,
         ))
     return RuntimeCatalog(
         core_version=__version__,

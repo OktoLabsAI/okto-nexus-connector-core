@@ -15,7 +15,7 @@ from pathlib import Path
 from typing import AsyncIterator
 
 from .models import (ClaimedSession, CoreError, EventCursor, OperationKey,
-                     OwnedSlotPage, OwnedSlotReservation,
+                     OwnedSlotPage, OwnedSlotReservation, OwnedSlotState,
                      OperationReceipt, ProcessBirthEvidence,
                      ProcessBirthRecord, RuntimeEvent, SessionClaimPage,
                      SessionLeaseState, SessionKey, StorageStatus)
@@ -702,6 +702,35 @@ class SQLiteJournal:
             return not bool(row[1])
         return await self._run(_worker_impl, urgent=True)
 
+    async def owned_slot_state(self, session: SessionKey) -> OwnedSlotState | None:
+        """Read a specific durable fact; a missing row means no known record.
+
+        Released reservations are retained across restarts. Release can mean
+        proven non-effect or observed stop, so callers must also correlate the
+        original opening receipt before interpreting session history.
+        """
+        if not isinstance(session, SessionKey):
+            raise ValueError("Invalid owned-slot session.")
+        validate_claim_namespace(session.server_id, session.executor_id)
+        if type(session.session_id) is not str or not session.session_id:
+            raise ValueError("Invalid owned-slot session.")
+
+        def _worker_impl(db):
+            policy = db.execute(
+                "SELECT max_slots FROM owned_slot_policy WHERE singleton=1").fetchone()
+            if policy is not None and policy[0] != self.limits.max_owned_slots:
+                raise CoreError("PROFILE_DRIFT", "owned_slot_state")
+            row = db.execute(
+                "SELECT operation_id,released FROM owned_slot_reservations "
+                "WHERE server_id=? AND executor_id=? AND session_id=?",
+                (session.server_id, session.executor_id, session.session_id)).fetchone()
+            if row is None:
+                return None
+            if type(row[0]) is not str or not row[0] or row[1] not in (0, 1):
+                raise CoreError("JOURNAL_UNAVAILABLE", "owned_slot_state")
+            return OwnedSlotState(session, row[0], bool(row[1]))
+        return await self._run(_worker_impl)
+
     async def owned_slot_page(self, *, after_rowid: int = 0,
                               high_water_rowid: int | None = None,
                               limit: int = 128) -> OwnedSlotPage:
@@ -1249,9 +1278,14 @@ class SQLiteJournal:
             raise CoreError("OPERATION_STAGE_CONFLICT", "event_append",
                             possible_effect=True,
                             operation_id=event.operation_id)
+        error_code = None
+        if stage == "FAILED":
+            error_code = ("PROVIDER_AUTH_REQUIRED" if
+                event.payload.get("delivery_error_code") == "PROVIDER_AUTH_REQUIRED"
+                else "NATIVE_OPERATION_FAILED")
         db.execute(
-            "UPDATE operations_v2 SET stage=?,possible_effect=1,retry_safe=0 WHERE server_id=? AND executor_id=? AND operation_id=?",
-            (stage, key.server_id, key.executor_id, key.operation_id))
+            "UPDATE operations_v2 SET stage=?,possible_effect=1,retry_safe=0,error_code=? WHERE server_id=? AND executor_id=? AND operation_id=?",
+            (stage, error_code, key.server_id, key.executor_id, key.operation_id))
 
     async def append_event(self, event: RuntimeEvent) -> None:
         self._validate_event(event)

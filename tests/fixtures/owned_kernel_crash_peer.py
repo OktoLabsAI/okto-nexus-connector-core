@@ -49,6 +49,10 @@ async def run(db_path: str, marker: str, boundary: str) -> None:
         process = spawn_owned_process(
             (sys.executable, str(native_peer), marker),
             cwd=str(Path(marker).parent), env=dict(os.environ))
+        # Retain the owned Job/guardian until the injected supervisor crash.
+        # Dropping the process object after effect() returns can close the
+        # Windows kill-on-close Job before the after_receipt boundary is reached.
+        journal.native_process = process
         ready = process.stdout.readline().decode("ascii").strip()
         if not ready.startswith("READY "):
             raise RuntimeError("native peer did not become ready")

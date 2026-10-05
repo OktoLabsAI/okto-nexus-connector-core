@@ -1,0 +1,16 @@
+{
+  "status": "PARTIAL_INTEGRATION_VERIFIED",
+  "branch": "feature/v0.2.0",
+  "core_version": "0.2.30.dev0",
+  "core_wheel_sha256": "e060e033be05fdd4c9aff5c90902d191483d400b3f6778fa7bb5395b66f561e6",
+  "installed_campaign": "pi-owner-installed-core.xml",
+  "commands": "pi-owner-installed-core.json",
+  "passed": 143,
+  "skipped": [],
+  "joint_integration_manifest": "Nexus plans/r4_execution/test_runs_20260930_pi_owner.json",
+  "limitations": [
+    "Technical Pi CLI and synthetic build qualification; no provider acceptance.",
+    "Automatic approved configuration, capability lifecycle and recovery remain pending.",
+    "No G0-G3 gate or full milestone closed."
+  ]
+}

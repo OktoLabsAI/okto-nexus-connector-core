@@ -1,4 +1,30 @@
-# Core API (`0.2.10.dev0`)
+# Core API (`0.0.1`)
+
+## Runtime automation
+
+`DEFAULT_RUNTIME_AUTOMATION` supplies the shared defaults for automatic message
+delivery and runtime recovery. `RuntimeAutomationPolicy` describes those settings
+and the bounded retry policy. `RuntimeAutomation` supervises host recovery and
+Connector reconnections through callbacks, without replaying submitted native
+operations or bypassing the host's ownership and authorization checks.
+
+## Harness configuration and native input
+
+`CONFIGURATION_SCHEMA_VERSION` identifies the discovery schema.
+`discover_harness_configuration` describes adapter settings;
+`query_harness_configuration` queries native runtime observations, and
+`probe_selected_configuration` probes a selected installation with an explicit
+working directory and environment. Discovery does not grant execution authority.
+
+`HarnessSettings` carries typed session settings. `validate_harness_settings`
+validates adapter settings; `harness_settings_dict` serializes them.
+`validate_harness_configuration` also checks the discovered supported values.
+`parse_harness_configuration_file` validates the bounded, versioned JSON envelope,
+rejecting unknown and duplicate fields; `export_harness_configuration_file`
+produces that envelope. Files contain settings, not credentials or grants.
+
+`native_input_response` converts a canonical decision to the originating
+harness's native response contract.
 
 This is the development API of the independent `nexus-connector-core` wheel (correction revision C1).
 The trusted host supplies authority, selected binaries, workspace roots,
@@ -152,6 +178,17 @@ treated as a qualified cross-application integration contract.
 
 ## Availability consumption (C10) - the two integration paths
 
+Passive discovery is also available through `discover_installations`, without
+constructing a runtime, journal or credentials. R4 hosts use
+`build_executor_inventory_snapshot` and `calculate_inventory_revision` over
+the complete Core inventory, and verify remote projections with
+`verify_executor_inventory_snapshot`. `SNAPSHOT_FORMAT_VERSION` versions this
+envelope independently from catalog and availability formats. Keep the full
+local candidate for selection; the published snapshot contains opaque refs.
+`get_executor_inventory_schema` returns the generated current HTTP inventory
+schema verified by the same R4 manifest as the wire bundle. Consumers compose
+these definitions into their HTTP response schemas without copying enums.
+
 The catalog (`get_runtime_catalog()`),
 `evaluate_runtime_availability()` and `resolve_installation()` complete
 the selector contract (projection format **2**; see the installation
@@ -190,3 +227,103 @@ unknown `format_version` renders INCOMPATIBLE
 selection: a ref from another executor does not resolve against this
 inventory (typed not-found); the Server validates scope/revision, the
 Core never issues network endpoints.
+
+## Independent R4 development exports
+
+`ControlTargeting`, `get_control_targeting` and `validate_control_target` expose the
+registry's control contract. Catalog format 2 includes these facts in each
+`RuntimeDescriptor.control_targeting`. Validation is shared with runtime
+admission; active-run identity is checked again at the native write frontier.
+Implemented targeting does not grant authority or qualify a provider build.
+
+All R4 exports below require authenticated host authority. The runtime lease
+methods install that authority; pure reducers alone grant no native effect.
+See [the R4 guide](nxl-r4-development.md)
+for native decision hash domains and the remaining executable-bundle gate.
+
+| Public exports | Host responsibility and behavior |
+|---|---|
+| `R4_CONTRACT_REVISION`, `R4_BUNDLE_EXECUTABLE`, `verify_r4_bundle` | Inspect the verified executable R4 bundle independently of historical R3. Executability does not grant host or native authority. |
+| `R4_PREVIEW_REVISION`, `verify_r4_development_bundle` | Compatibility aliases for the explicit R4 revision and verifier; preserved wire bytes and return shape. |
+| `decode_r4_frame`, `encode_r4_frame`, `r4_submit_intent_hash` | Strict closed schemas, bounded UTF-8 and independent JCS intent hashing. Preserve R3 history. |
+| `r4_close_operation` | Validate an R4 close frame and convert its reason and bounded drain/interrupt policy into `CloseOperation`. Apply it with the installed context; never discard policy fields. |
+| `R4ReconcileAttempt`, `R4ControlProjection`, `reduce_r4_reconcile_accepted` | Correlate a Server ACK with its connection and reconciliation attempt. Control readiness does not imply a session lease. |
+| `R4AttachAttempt`, `R4LaneProjection`, `reduce_r4_binding_attached`, `r4_lane_ready` | Correlate committed attach ACKs, revisions and local expiry; socket write alone does not admit a lane. |
+| `R4LeaseAttempt`, `R4LeaseProjection`, `r4_lease_renew_frame`, `reduce_r4_lease_grant` | Capture monotonic time before the request, correlate scope/serial, and consume transport delay from the granted duration. |
+| `R4Authority`, `R4LeaseApplication` | Immutable full R4 context scope and the actual runtime application result. Use `RuntimeCore.begin_r4_lease_request`, `install_r4_lease`, `r4_operation_context` and `revoke_r4_lease`; never manufacture a context or ACK from receipt of a grant. |
+| `reduce_r4_lease_applied`, `r4_lease_productive` | Track reported Core installation and check local deadline/action. The host must actually install or renew the Core context before ACKing it. |
+| `R4ReceiptProjection`, `reduce_r4_receipt` | Validate scoped revisions, stages, possible effects and idempotent replay. Hosts persist the result atomically. |
+| `project_r4_open_receipt`, `project_r4_turn_receipt`, `project_r4_steer_receipt`, `project_r4_interrupt_receipt`, `project_r4_close_receipt` | Verify the corresponding Core journal semantic before projecting a distinct R4 receipt; open also requires prepared launch/stream evidence. |
+| `project_r4_decision_receipt`, `r4_native_decision_operation`, `r4_operational_request_hash` | Preserve native request evidence, validate response digests and project approval/input receipts from the exact applied operation. |
+| `R4EventCommitProjection`, `reduce_r4_durable_event_batch`, `r4_event_ack_frame` | Compute contiguous event ACKs. The host commits durable ingress before emitting an ACK and retains connection scope. |
+| `R4ApprovalProjection`, `reduce_r4_approval_request`, `reduce_r4_approval_decision` | Retain the complete operational request hash and correlated decision notification. These reducers never apply a native decision. |
+
+
+### Waiting for an owned close result
+
+For policy close, `close(operation, context, wait_for_completion=True)` joins the
+retained producer through the final receipt commit. The physical drain/interrupt
+deadline is unchanged. The default remains a bounded observation that can return
+OUTCOME_UNKNOWN while the producer continues. Canceling either waiter does not
+cancel the producer. Trusted daemon/embedded operation owners use the complete
+wait; failures of the producer, including storage failures, propagate to them.
+This option requires an explicit close policy and is not a wire payload field.
+
+## Durable R4 receipt bindings
+
+The public functions are `prepare_r4_receipt_binding`,
+`validate_r4_receipt_binding` and `project_r4_bound_receipt`.
+
+`prepare_r4_receipt_binding(frame, context, prepared=..., stream_epoch=..., applied_operation=...)` verifies the dispatched semantic and returns a schema-1, non-secret record associating its R4 hash with the exact Core hash. Supply prepared launch/stream for open and the typed native decision for approval/input. The trusted host must commit this record before calling the runtime. It contains no prompt, response, native request, executable path, environment or credential.
+
+After restart, read `Journal.get_receipt(OperationKey(...))` and call `project_r4_bound_receipt(binding, receipt, key=key, receipt_revision=...)`. This validates the stored digest, namespace, operation/session IDs and Core hash, and preserves the original source connection. `validate_r4_receipt_binding` returns a detached checked record for storage readers. The digest detects corruption, not hostile forgery: these are trusted local records, not network authority. No API creates a receipt from absence, renews a lease, restores a native handle or authorizes replay. Missing or legacy associations remain unresolved.
+
+## Resource release and passive discovery cancellation
+
+`OwnedSlotState` records the historical session reservation and release fact;
+it never grants authority over a live process. `project_r4_resource_release`
+requires matching receipt binding, claimed session, released owned slot and
+opening receipt before projecting an EXITED resource proof. It rejects mismatched
+scope and unresolved opening outcomes. `r4_resource_release_digest` computes the
+scoped proof digest; a digest alone is not evidence that a process stopped.
+
+`DiscoveryCancelled` reports that the host stopped passive observation before
+receiving an inventory. Hosts should retain shutdown ownership and distinguish
+cancellation from an empty successful inventory; it does not authorize a launch.
+
+## Native extension domain requests
+
+`native_action_bridge` provides typed `MessageCreate`, `RuntimeInputList` and
+`RuntimeInputRespond` requests alongside the handoff requests. Their canonical
+backend methods are `create_message`, `list_runtime_inputs` and
+`respond_runtime_input`. The bridge enforces the host-issued session grant;
+domain state, replay and recipient policy remain in the Nexus backend.
+
+Pi's local extension exposes `nexus_message_create`, `nexus_runtime_input_list`
+and `nexus_runtime_input_respond`. Message payloads contain content and target;
+the authenticated session supplies sender and workspace. Question answers retain
+the source harness contract. Tool call IDs provide operation identity. A lost
+message or answer acknowledgement is `OUTCOME_UNKNOWN`, never an instruction to
+retry with a new ID. Requests and responses remain bounded to 16 KiB.
+# Portable connection configuration
+
+`nexus_connector_core.connection_configuration` provides
+`parse_portable_connection_configuration(value)` and `export_connection_configuration(value)`
+for `okto-nexus-connection` version 2 templates. These contain native preferences,
+connection name, runtime/session policy, message/tool policies and requested limits.
+`session_policy` accepts `shared`, `per_sender`, `per_sender_session`, or `null`
+(inherit). Since Core 0.2.63.dev0, `per_sender_session` preserves a separate target
+conversation for each sending agent and verified source session. Routing and
+durable affinity are owned by the Nexus Server; Core preserves this policy in
+configuration imports and exports. Sessionless senders use their own per-agent
+fallback conversation, separate from verified source sessions.
+They never contain identity, credentials, installation IDs, execution-host selection,
+workspace/login paths, workspace names or local secret references. Version 1 imports
+are accepted after discarding all destination fields. Duplicate/unknown fields fail.
+`materialize_connection_configuration` combines a template with explicit destination
+arguments. `parse_connection_configuration` validates that complete version 1 shape
+for the internal Server API; it is not the portable export format.
+This document is a configuration draft, not execution authority. Hosts must
+authenticate the operator, resolve their own installation, validate directories,
+test the selected configuration and explicitly commit it before normal runtime
+use. Importing JSON must never renew or recreate an execution grant implicitly.

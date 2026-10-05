@@ -10,8 +10,10 @@ a silent fallback to bare ``kill(pid)``.
 
 from __future__ import annotations
 
+import contextlib
 import ctypes
 import os
+import subprocess
 import sys
 
 from ...models import CoreError
@@ -21,6 +23,8 @@ __all__ = ["containment_preflight", "containment_requirements"]
 _REQUIREMENTS: dict[str, tuple[str, ...]] = {
     "win32": ("job_objects",),
     "linux": ("procfs", "proc_children", "pidfd", "subreaper"),
+    "darwin": ("coalition_abi", "proc_identity", "kqueue", "launchctl",
+               "session_domain"),
 }
 
 
@@ -126,6 +130,67 @@ def _query_subreaper(prctl) -> str:
     return "ok"
 
 
+def _check_darwin() -> dict[str, str]:
+    """Passive checks only: no job submission, no provider wrapper.
+
+    The launchd coalition backend needs the exact 40-byte coalition ABI,
+    stable birth identity, kqueue exit registration and ``launchctl``.
+    ``session_domain`` exposes the GUI-login-session requirement without
+    claiming headless support: native evidence (2026-10-02) qualified
+    ``gui/<uid>`` bootstrap, while ``user`` bootstrap was refused (error 5).
+    """
+    status: dict[str, str] = {}
+    try:
+        from .macos_abi import coalition_pair, identity
+        try:
+            own = coalition_pair(os.getpid())
+            init = coalition_pair(1)
+            if own == init:
+                status["coalition_abi"] = "observer shares launchd coalition"
+            else:
+                status["coalition_abi"] = "ok"
+        except (OSError, ValueError) as exc:
+            status["coalition_abi"] = f"coalition ABI unusable: {exc}"
+        try:
+            if identity(os.getpid())["birth"] != identity(os.getpid())["birth"]:
+                status["proc_identity"] = "birth identity changed across reads"
+            else:
+                status["proc_identity"] = "ok"
+        except (OSError, ValueError) as exc:
+            status["proc_identity"] = f"proc_pidinfo unusable: {exc}"
+    except OSError as exc:
+        status["coalition_abi"] = status["proc_identity"] = f"libproc unavailable: {exc}"
+    try:
+        import select
+        with contextlib.closing(select.kqueue()) as queue:
+            queue.control([select.kevent(
+                os.getpid(), filter=select.KQ_FILTER_PROC,
+                flags=select.KQ_EV_ADD | select.KQ_EV_ONESHOT,
+                fflags=select.KQ_NOTE_EXIT)], 0, 0)
+        status["kqueue"] = "ok"
+    except (OSError, ValueError, AttributeError) as exc:
+        status["kqueue"] = f"kqueue registration failed: {exc}"
+    launchctl_path = "/bin/launchctl"
+    if os.path.isfile(launchctl_path) and os.access(launchctl_path, os.X_OK):
+        status["launchctl"] = "ok"
+    else:
+        status["launchctl"] = f"{launchctl_path} is missing or not executable"
+    try:
+        query = subprocess.run([launchctl_path, "managername"],
+                               capture_output=True, text=True, timeout=5,
+                               stdin=subprocess.DEVNULL, close_fds=True)
+        manager = query.stdout.strip()
+        if query.returncode == 0 and manager == "Aqua":
+            status["session_domain"] = "ok"
+        else:
+            status["session_domain"] = (
+                f"caller domain is {manager or 'unknown'}; the qualified "
+                "gui-domain launchd bootstrap needs a GUI login session")
+    except (OSError, subprocess.SubprocessError) as exc:
+        status["session_domain"] = f"launchctl managername failed: {exc}"
+    return status
+
+
 def containment_preflight(*, platform: str = None) -> dict[str, str]:
     """Passive status map requirement -> 'ok' | diagnostic (never raises)."""
     platform = platform or sys.platform
@@ -133,6 +198,8 @@ def containment_preflight(*, platform: str = None) -> dict[str, str]:
         return _check_windows()
     if platform == "linux":
         return _check_linux()
+    if platform == "darwin":
+        return _check_darwin()
     return {"platform": f"no qualified containment backend on {platform}"}
 
 

@@ -51,7 +51,7 @@ def handle_turn(thread_id, turn_id, text, req_id):
     write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"turn": {"id": turn_id, "status": "inProgress"}}})
     write_msg({"method": "turn/started", "params": {"threadId": thread_id, "turn": {"id": turn_id, "status": "inProgress"}}})
 
-    if "TRIGGER_APPROVAL_HOLD" in text or "TRIGGER_INPUT_HOLD" in text:
+    if any(trigger in text for trigger in ("TRIGGER_APPROVAL_HOLD", "TRIGGER_INPUT_HOLD", "TRIGGER_MCP_PERMISSION_HOLD")):
         approval_id = 10000 + int(turn_id.split("_")[-1])
         waiter = threading.Event()
         with _approval_lock:
@@ -61,7 +61,15 @@ def handle_turn(thread_id, turn_id, text, req_id):
                   "item/commandExecution/requestApproval")
         params = {"threadId": thread_id, "turnId": turn_id,
                   "itemId": "item_" + turn_id}
-        if asking_input:
+        if "TRIGGER_MCP_PERMISSION_HOLD" in text:
+            method = "mcpServer/elicitation/request"
+            params = {"threadId": thread_id, "turnId": turn_id,
+                "serverName": "nexus_test", "mode": "form",
+                "_meta": {"codex_approval_kind": "mcp_tool_call", "persist": ["session", "always"],
+                          "tool_params": {"agent_id": "agent", "handoff_id": "work"}},
+                "message": 'Allow the nexus_test MCP server to run tool "handoff_get"?',
+                "requestedSchema": {"type": "object", "properties": {}}}
+        elif asking_input:
             params.update({"isBlocking": True,
                            "questions": [{"id": "answer", "header": "Choice",
                                           "question": "Proceed?",

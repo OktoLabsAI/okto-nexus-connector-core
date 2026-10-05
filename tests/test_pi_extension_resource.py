@@ -7,7 +7,7 @@ import time
 
 import pytest
 
-from nexus_connector_core import ExecutionContext
+from nexus_connector_core import CoreError, ExecutionContext
 from nexus_connector_core.native_action_bridge import NativeActionGrant, ScopedNativeActionBridge
 from nexus_connector_core.native_action_socket import NativeActionSocketService
 from nexus_connector_core.pi_extension_resource import pi_extension_path
@@ -29,10 +29,24 @@ class Backend:
         self.calls.append(("complete", request.claim_epoch, context.agent_id))
         return {"handoff_id": request.handoff_id, "status": "COMPLETED"}
 
+    async def list_runtime_inputs(self, request, context):
+        self.calls.append(('input_list', request.operation_id, context.agent_id))
+        return {'items': [], 'status': 'READY'}
+
+    async def respond_runtime_input(self, request, context):
+        assert request.request == {'decision': 'deny'}
+        self.calls.append(('input_respond', request.operation_id, context.agent_id))
+        return {'status': 'CONFIRMED'}
+
+    async def create_message(self, request, context):
+        assert request.message == {'subject':'Test', 'body':'Hello', 'target':{'strategy':'direct','agent_id':'other'}}
+        self.calls.append(('message_create', request.operation_id, context.agent_id))
+        return {'status':'CREATED'}
+
 
 def _service(backend=None, context_override=None):
     backend = backend or Backend()
-    actions = frozenset({"handoff.get", "handoff.claim", "handoff.complete"})
+    actions = frozenset({"handoff.get", "handoff.claim", "handoff.complete", "runtime.input.list", "runtime.input.respond", "message.create"})
     expiry = time.monotonic() + 60
     grant = NativeActionGrant("native-cap:session", "srv", "exe", "bind",
                               "agent", "ws", "session", 6, 4, 5, expiry, actions)
@@ -70,7 +84,13 @@ import { pathToFileURL } from "node:url";
 const { default: extension } = await import(pathToFileURL(process.argv[1]).href);
 const tools = new Map();
 extension({registerTool(tool) { tools.set(tool.name, tool); }});
-if (tools.size !== 3) throw new Error("unexpected action set");
+if (tools.size !== 7 || !tools.has("nexus_ask_user") || !tools.has("nexus_runtime_input_respond")) throw new Error("unexpected action set");
+const ask = tools.get("nexus_ask_user");
+for (const [method, value] of [["select", "Blue"], ["confirm", false], ["input", "custom"], ["editor", ""]]) {
+  const ui = {[method]: async () => value};
+  const result = await ask.execute("question", {method, title:"Question", options:["Blue","Green"]}, undefined, undefined, {ui});
+  if (result.details.answer !== value) throw new Error("native answer changed");
+}
 const get = tools.get("nexus_handoff_get");
 let closed = false;
 try { await get.execute("op", {handoff_id:"h"}); } catch { closed = true; }
@@ -79,6 +99,9 @@ process.env.NEXUS_NATIVE_ACTION_PORT = process.argv[2];
 process.env.NEXUS_NATIVE_CAPABILITY_REF = "native-cap:session";
 process.env.NEXUS_NATIVE_SESSION_ID = "session";
 for (const [name, params, expected] of [
+  ["nexus_message_create", {message:{subject:"Test",body:"Hello",target:{strategy:"direct",agent_id:"other"}}}, "CREATED"],
+  ["nexus_runtime_input_list", {}, "READY"],
+  ["nexus_runtime_input_respond", {request:{decision:"deny"}}, "CONFIRMED"],
   ["nexus_handoff_get", {handoff_id:"h"}, "READY"],
   ["nexus_handoff_claim", {handoff_id:"h",idempotency_key:"key"}, 1],
   ["nexus_handoff_complete", {handoff_id:"h",claim_epoch:1,result:{summary:"done"}}, "COMPLETED"],
@@ -107,7 +130,7 @@ if (!closed) throw new Error("wrong capability accepted");
             )
             out, err = await asyncio.wait_for(process.communicate(), 20)
             assert process.returncode == 0, (out, err)
-            assert [call[0] for call in backend.calls] == ["get", "claim", "complete"]
+            assert [call[0] for call in backend.calls] == ["message_create", "input_list", "input_respond", "get", "claim", "complete"]
             assert all(call[2] == "agent" for call in backend.calls)
         finally:
             await service.close()
@@ -175,3 +198,76 @@ def test_socket_rejects_malformed_mcp_and_wrong_scope_before_backend():
             await service.close()
 
     asyncio.run(run())
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node unavailable")
+@pytest.mark.parametrize("lost_reply", [False, True])
+def test_extension_preserves_confirmed_rejection_and_transport_uncertainty(lost_reply):
+    class RejectingBackend(Backend):
+        async def claim_handoff(self, request, context):
+            if lost_reply:
+                raise RuntimeError("response lost after possible commit")
+            raise CoreError("CONFLICT", "native_action", operation_id=request.operation_id)
+
+    script = r'''
+import { pathToFileURL } from "node:url";
+const { default: extension } = await import(pathToFileURL(process.argv[1]).href);
+const tools = new Map();
+extension({registerTool(tool) { tools.set(tool.name, tool); }});
+process.env.NEXUS_NATIVE_ACTION_PORT = process.argv[2];
+process.env.NEXUS_NATIVE_CAPABILITY_REF = "native-cap:session";
+process.env.NEXUS_NATIVE_SESSION_ID = "session";
+try {
+  await tools.get("nexus_handoff_claim").execute("claim-op", {handoff_id:"h",idempotency_key:"key"});
+  throw new Error("unexpected success");
+} catch (error) {
+  const expected = process.argv[3];
+  if (error.code !== expected || error.possible_effect !== (expected === "OUTCOME_UNKNOWN") ||
+      error.retry_safe !== false || error.operation_id !== "claim-op" || !error.message.startsWith(expected)) {
+    throw error;
+  }
+}
+'''
+
+    async def run():
+        service, _ = _service(RejectingBackend())
+        port = await service.start()
+        try:
+            process = await asyncio.create_subprocess_exec("node", "--input-type=module", "-e", script,
+                str(pi_extension_path()), str(port), "OUTCOME_UNKNOWN" if lost_reply else "CONFLICT",
+                stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            out, err = await asyncio.wait_for(process.communicate(), 20)
+            assert process.returncode == 0, (out, err)
+        finally:
+            await service.close()
+    asyncio.run(run())
+
+
+@pytest.mark.skipif(shutil.which("node") is None, reason="Node unavailable")
+def test_extension_does_not_trust_uncorrelated_or_malformed_error_replies():
+    script = r'''
+import { pathToFileURL } from "node:url";
+import { createServer } from "node:net";
+const { default: extension } = await import(pathToFileURL(process.argv[1]).href);
+const tools = new Map();
+extension({registerTool(tool) { tools.set(tool.name, tool); }});
+process.env.NEXUS_NATIVE_CAPABILITY_REF = "native-cap:session";
+process.env.NEXUS_NATIVE_SESSION_ID = "session";
+for (const patch of [{operation_id:"other"}, {code:"untrusted diagnostic"}, {possible_effect:"false"}]) {
+  const server = createServer(socket => socket.once("data", () => socket.end(JSON.stringify({
+    ok:false,code:"CONFLICT",possible_effect:false,retry_safe:false,operation_id:"claim-op",...patch
+  })+"\n")));
+  await new Promise(resolve => server.listen(0,"127.0.0.1",resolve));
+  process.env.NEXUS_NATIVE_ACTION_PORT = String(server.address().port);
+  try {
+    await tools.get("nexus_handoff_claim").execute("claim-op", {handoff_id:"h",idempotency_key:"key"});
+    throw new Error("unexpected success");
+  } catch (error) {
+    if (error.message !== "OUTCOME_UNKNOWN") throw error;
+  } finally { await new Promise(resolve => server.close(resolve)); }
+}
+'''
+    import subprocess
+    result = subprocess.run(['node', '--input-type=module', '-e', script, str(pi_extension_path())],
+                            capture_output=True, timeout=20)
+    assert result.returncode == 0, result.stderr

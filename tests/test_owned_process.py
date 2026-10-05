@@ -10,8 +10,8 @@ import pytest
 from nexus_connector_core.native.process import observe_owned_process, spawn_owned_process
 
 
-@pytest.mark.skipif(not (os.name == "nt" or sys.platform == "linux"),
-                    reason="backend is qualified only on Windows/Linux")
+@pytest.mark.skipif(not (os.name == "nt" or sys.platform in ("linux", "darwin")),
+                    reason="backend is qualified only on Windows/Linux/Darwin")
 def test_owned_process_handle_terminates_own_child(tmp_path):
     process = spawn_owned_process(
         (sys.executable, "-c", "import time; time.sleep(30)"),

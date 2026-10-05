@@ -34,6 +34,14 @@ class NativeAdapterError(Exception):
         self.details = details or {}
 
 
+class RuntimeCommandRejected(NativeAdapterError):
+    """An explicit correlated prompt rejection; transport loss is excluded."""
+
+    def __init__(self, message: str, *, failure_code: str):
+        super().__init__(ErrorCode.CONFLICT, message, {})
+        self.failure_code = failure_code
+
+
 class RuntimeCommandNotSent(EffectNotSent):
     """Native effect was rejected before a protocol write."""
 

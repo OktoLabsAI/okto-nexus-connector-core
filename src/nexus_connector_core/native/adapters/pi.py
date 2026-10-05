@@ -122,7 +122,7 @@ from ..adapter_types import (
     HarnessSession,
     new_harness_session_id,
 )
-from ..adapter_types import ErrorCode, NativeAdapterError
+from ..adapter_types import ErrorCode, NativeAdapterError, RuntimeCommandRejected
 
 __all__ = ["PiRpcConnector"]
 
@@ -237,8 +237,10 @@ class _PiTransport:
         on_reader_exit: Callable[[], None],
         native_action: PiNativeActionLaunch | None = None,
         dispatch_guards: "object | None" = None,
+        on_ui_request: Callable[[dict[str, Any]], bool] | None = None,
     ) -> None:
         self._dispatch_guards = dispatch_guards
+        self._on_ui_request = on_ui_request
         self._argv = list(argv)
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
@@ -595,6 +597,9 @@ class _PiTransport:
                 self._on_unmatched_response(msg)
             return
         if msg.get("type") == _TYPE_EXTENSION_UI_REQUEST:
+            handler = getattr(self, "_on_ui_request", None)
+            if handler is not None and handler(msg):
+                return
             self._reply_ui_request(msg.get("id"))
         self._on_push_event(msg)
 
@@ -697,6 +702,9 @@ class PiRpcConnector:
         # frontier (after its lock wait, before the first byte).
         from ..adapter_types import DispatchGuards
         self._dispatch_guards = DispatchGuards()
+        from ..pi_inputs import PiInputRequests
+        self._input_requests = PiInputRequests()
+        self.native_approvals_enabled = False
 
         self._session_lock = threading.Lock()
         self._session_id: str | None = None
@@ -740,6 +748,13 @@ class PiRpcConnector:
     # ------------------------------------------------------------------ #
     # HarnessConnector protocol
     # ------------------------------------------------------------------ #
+    def configuration_observation(self):
+        from ...harness_configuration import observe_transport_configuration
+        if self._transport is None:
+            raise RuntimeError('Pi transport is not initialized.')
+        return observe_transport_configuration('pi_rpc', self._transport,
+            version=self._compatibility_report.get('native_version'))
+
     def start(self, *, owning_agent_id: str) -> HarnessSession:
         with self._start_lock:
             if self._transport is not None:
@@ -770,6 +785,7 @@ class PiRpcConnector:
                 native_action=self._native_action,
                 dispatch_guards=self._dispatch_guards,
                 on_push_event=self._on_push_event,
+                on_ui_request=self._handle_ui_request,
                 on_unmatched_response=self._on_unmatched_response,
                 on_child_exit=self._on_child_exit,
                 on_malformed_line=self._on_malformed_line,
@@ -784,6 +800,7 @@ class PiRpcConnector:
                 # this audit is meant to find.
                 compatibility = pi_version_observation(self._version_command,
                     cwd=self._cwd, env=child_environment(self._env))
+                self._compatibility_report = compatibility
                 # The installed 0.87.1 protocol echoes command IDs. Keep the
                 # ID-less serialized fallback limited to earlier observations.
                 transport._response_ids_required = (
@@ -961,6 +978,13 @@ class PiRpcConnector:
 
     @staticmethod
     def _require_accepted(response: Mapping[str, Any], verb: str) -> None:
+        if (verb == _VERB_PROMPT and response.get("type") == _TYPE_RESPONSE
+                and response.get("command") == verb and response.get("success") is False
+                and isinstance(response.get("id"), str) and response["id"]):
+            from ..failure_codes import pi_prompt_failure_code
+            raise RuntimeCommandRejected(
+                "Pi rejected the prompt command before accepting it.",
+                failure_code=pi_prompt_failure_code(response))
         if response.get("success") is not True:
             # A protocol write happened. A rejection is not a confirmed
             # accepted control, but cannot be called a pre-write refusal.
@@ -1061,6 +1085,10 @@ class PiRpcConnector:
 
     def _on_push_event(self, msg: dict[str, Any]) -> None:
         native_type = msg.get("type")
+        if native_type == "agent_start":
+            self._input_requests.start_turn()
+        elif native_type == _TYPE_AGENT_SETTLED:
+            self._input_requests.end_turn()
         if not isinstance(native_type, str) or not native_type:
             native_type = "unknown"
         if native_type == _TYPE_AGENT_SETTLED:
@@ -1076,7 +1104,41 @@ class PiRpcConnector:
             with self._session_lock:
                 self._awaiting_settle_generation = None
         kind = _EVENT_KIND_BY_TYPE.get(native_type, _DEFAULT_EVENT_KIND)
+        if native_type == "message_update":
+            delta = msg.get("assistantMessageEvent")
+            # Thinking/tool deltas are not the assistant's reply text.
+            if not isinstance(delta, dict) or delta.get("type") != "text_delta":
+                kind = "tool_activity"
         self._push_event(kind, native_type, msg)
+
+    def _handle_ui_request(self, msg):
+        if not self.native_approvals_enabled:
+            return False
+        request = self._input_requests.capture(msg)
+        if request is None:
+            return False
+        self._push_event("tool_activity", _TYPE_EXTENSION_UI_REQUEST, {"native_approval": request})
+        return True
+
+    def native_approval_request(self, event):
+        request = event.payload.get("native_approval")
+        if (event.session_id == self._session_id and event.native_event == _TYPE_EXTENSION_UI_REQUEST and
+                self._input_requests.owns(request)):
+            return request
+        return None
+
+    def reply_native_approval(self, session_id, request, decision):
+        from ..adapter_types import RuntimeCommandNotSent
+        if self._closed_event.is_set() or session_id != self._session_id or self._transport is None:
+            raise RuntimeCommandNotSent("Pi question session is unavailable")
+        try:
+            response = self._input_requests.response(request, decision)
+        except (ValueError, TypeError, KeyError):
+            raise RuntimeCommandNotSent("Pi question requires a current matching answer") from None
+        self._transport._write(response)
+
+    def native_input_still_current(self, request):
+        return self._input_requests.current(request)
 
     def _on_unmatched_response(self, msg: dict[str, Any]) -> None:
         """A response envelope with no matching in-flight request. A late,
@@ -1086,6 +1148,7 @@ class PiRpcConnector:
         self._push_event("error", _TYPE_RESPONSE, msg)
 
     def _on_child_exit(self, returncode: int | None, stderr_tail: str) -> None:
+        self._input_requests.end_turn()
         with self._session_lock:
             self._ended = True
             self._awaiting_settle_generation = None
@@ -1225,8 +1288,10 @@ class PiRpcConnector:
 #    vocabulary: it is neither a `COMMAND_VERB` a supervisor would issue nor
 #    an occurrence a supervisor needs to react to, yet it MUST be answered on
 #    the wire or (per the protocol reference) it "queues up as noise". This
-#    connector auto-replies `{"type":"extension_ui_response","cancelled":
-#    true}` to every one, unconditionally, bypassing the request/response
+#    connector now captures supported dialogs during an active turn when the
+#    host enables native inputs. They retain their ID, local turn generation,
+#    deadline and exact response shape. Other UI requests retain the legacy
+#    cancellation fallback. Both response paths bypass the request/response
 #    correlation lock entirely (mismatch 3) since a ui-response expects no
 #    reply of its own and would deadlock against an in-flight `prompt`/
 #    `steer`/`abort` otherwise. It is ALSO forwarded as a

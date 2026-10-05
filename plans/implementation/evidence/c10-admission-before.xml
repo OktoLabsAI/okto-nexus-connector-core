@@ -1,0 +1,110 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="2" time="5.408" timestamp="2026-10-02T09:41:52.407420-03:00" hostname="Alienware_m15"><testcase classname="tests.regression.test_c10_recovery_controls" name="test_retained_ledger_does_not_delay_other_resource_force[0]" time="1.451" /><testcase classname="tests.regression.test_c10_recovery_controls" name="test_retained_ledger_does_not_delay_other_resource_force[0.35]" time="3.275"><failure message="AssertionError: assert SessionKey(server_id='srv', executor_id='exe', session_id='session') in {}&#10; +  where {} = &lt;nexus_connector_core.runtime.LocalRuntimeCore object at 0x0000029638DB07D0&gt;._release_obligations">tmp_path = WindowsPath('C:/Users/jpamb/AppData/Local/Temp/pytest-of-jpamb/pytest-4873/test_retained_ledger_does_not_1')
+admission_delay = 0.35
+
+    @pytest.mark.parametrize("admission_delay", [0, 0.35])
+    def test_retained_ledger_does_not_delay_other_resource_force(tmp_path, admission_delay):
+        """A blocked durable obligation for one stopped resource never
+        delays containment of ANOTHER live resource."""
+        async def run():
+            gate = threading.Event()
+            runtime, journal, ledger, native = _runtime(tmp_path, gate)
+            # Slow durable receipt lookup may precede native-factory admission.
+            # It must not move cancellation to a different lifecycle boundary.
+            original_existing = runtime._existing
+    
+            async def delayed_existing(*args):
+                await asyncio.sleep(admission_delay)
+                return await original_existing(*args)
+    
+            runtime._existing = delayed_existing
+            live = _StoppableNative()
+            live.native_id = "native-live"
+    
+            class _LiveFactory:
+                async def open(self, prepared, session_id, auth, *,
+                               stream_epoch):
+                    return live
+    
+            # resource 1: stopped with a BLOCKED durable obligation.
+            key = await _reach_stopped(runtime, native, ledger)
+            assert key in runtime._release_obligations
+    
+            # resource 2: a live owned session on the SAME runtime that
+            # must be forced even while the ledger is blocked.
+            auth = replace(context(), lease_deadline_monotonic=160.0)
+            prepared = await runtime.prepare(
+                LaunchIntent("agent", "ws", "codex_app_server"), auth)
+            runtime._native_factory = _LiveFactory()
+            await runtime.open(
+                OpenOperation("open-op-2", "session2", "epoch", prepared),
+                auth)
+            assert SessionKey("srv", "exe", "session2") in runtime._sessions
+    
+            started = time.monotonic()
+            await asyncio.wait_for(
+                runtime.shutdown(ShutdownPolicy(drain_seconds=0.0,
+                                                interrupt_seconds=0.05)),
+                timeout=10)
+            elapsed = time.monotonic() - started
+            assert live.stopped, (
+                "the live resource was not contained while the durable "
+                "obligation of another resource was blocked")
+            assert elapsed &lt; 5.0
+            assert key in runtime._release_obligations, (
+                "the blocked obligation was dropped without confirmation")
+            assert not ledger.cancel_received.is_set()
+            # Restored storage converges the exact reservation.
+            gate.set()
+            await asyncio.wait_for(
+                runtime.shutdown(ShutdownPolicy()), timeout=10)
+            assert key not in runtime._release_obligations
+            page = await journal.owned_slot_page()
+            assert [r for r in page.reservations
+                    if r.session_id == "session"] == []
+            journal.close()
+    
+&gt;       asyncio.run(run())
+
+tests\regression\test_c10_recovery_controls.py:296: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+C:\Python313\Lib\asyncio\runners.py:194: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+C:\Python313\Lib\asyncio\runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+C:\Python313\Lib\asyncio\base_events.py:720: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+tests\regression\test_c10_recovery_controls.py:259: in run
+    key = await _reach_stopped(runtime, native, ledger)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+runtime = &lt;nexus_connector_core.runtime.LocalRuntimeCore object at 0x0000029638DB07D0&gt;
+native = &lt;tests.regression.test_c10_audit._StoppableNative object at 0x0000029638DB0050&gt;
+ledger = &lt;tests.regression.test_c10_audit._LedgerPort object at 0x0000029638DB0CD0&gt;
+
+    async def _reach_stopped(runtime, native, ledger):
+        auth = replace(context(), lease_deadline_monotonic=160.0)
+        prepared = await runtime.prepare(
+            LaunchIntent("agent", "ws", "codex_app_server"), auth)
+        opening = asyncio.create_task(runtime.open(
+            OpenOperation("open-op", "session", "epoch", prepared), auth))
+        await asyncio.sleep(0.2)
+        opening.cancel()
+        try:
+            await opening
+        except BaseException:
+            pass
+        native.start_gate.set()
+        key = SessionKey("srv", "exe", "session")
+        deadline = time.monotonic() + 3
+        while (key not in runtime._release_obligations
+               and time.monotonic() &lt; deadline):
+            await asyncio.sleep(0.05)
+&gt;       assert key in runtime._release_obligations
+E       AssertionError: assert SessionKey(server_id='srv', executor_id='exe', session_id='session') in {}
+E        +  where {} = &lt;nexus_connector_core.runtime.LocalRuntimeCore object at 0x0000029638DB07D0&gt;._release_obligations
+
+tests\regression\test_c10_recovery_controls.py:67: AssertionError</failure></testcase></testsuite></testsuites>

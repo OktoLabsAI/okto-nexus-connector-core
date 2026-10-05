@@ -130,7 +130,8 @@ class NativeSecretRedactor:
         if event.kind == "output_delta":
             payload = self._withhold_raw_text(payload)
         if output is not None or final:
-            prior = "" if event.output_snapshot else self._pending.pop(key, "")
+            pending = self._pending.pop(key, "")
+            prior = "" if event.output_snapshot else pending
             if final and not prior and output is None:
                 tails = [self._pending.pop(other) for other in tuple(self._pending)
                          if other[0] == event.session_id]

@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="1.828" timestamp="2026-10-02T09:20:03.613996-03:00" hostname="Alienwarem15"><testcase classname="tests.regression.test_c2_regressions" name="test_r08_discovery_public_path_reuses_pi_layout_resolution" time="0.771"><failure message="AssertionError: the public path must surface the Pi release layouts&#10;assert {None, '0.87.1', '0.86.0'} == {'0.86.0', '0.87.1'}&#10;  &#10;  Extra items in the left set:&#10;  None&#10;  Use -v to get more diff">tmp_path = PosixPath('/tmp/pytest-of-jpbraga/pytest-34/test_r08_discovery_public_path0')
+
+    def test_r08_discovery_public_path_reuses_pi_layout_resolution(tmp_path):
+        from nexus_connector_core import DiscoveryRequest, LocalRuntimeCore
+    
+        async def run():
+            install = tmp_path / "piroot"
+            install.mkdir(parents=True)
+            node = install / "node.exe"
+            node.write_bytes(b"node-bytes")
+            node.chmod(0o755)  # POSIX selection requires the executable bit
+            for version in ("0.86.0", "0.87.1"):
+                release = install / "releases" / version
+                _write_pi_package(
+                    release / "node_modules" / "@earendil-works",
+                    cli=f"cli-{version}".encode(), version=version)
+            journal = SQLiteJournal(tmp_path / "journal.db")
+    
+            async def noop_open(prepared, session_id, context, *,
+                                stream_epoch):
+                raise AssertionError("discovery never opens")
+    
+            runtime = LocalRuntimeCore(
+                journal, noop_open, candidates={},
+                workspace_roots={"ws": str(tmp_path)},
+                trusted_discovery_roots=(tmp_path,),
+                pi_install_root=install, pi_node=node)
+            try:
+                inventory = await runtime.discover(
+                    DiscoveryRequest(("pi_rpc",)))
+                versions = {c.version for c in inventory.candidates}
+                assert versions == {"0.86.0", "0.87.1"}, (
+                    "the public path must surface the Pi release layouts")
+                assert inventory.candidates[0].version == "0.87.1"
+                assert all(c.launch_script.endswith("cli.js")
+                           for c in inventory.candidates)
+            finally:
+                journal.close()
+    
+&gt;       asyncio.run(run())
+
+tests/regression/test_c2_regressions.py:632: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/home/jpbraga/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:195: in run
+    return runner.run(main)
+           ^^^^^^^^^^^^^^^^
+/home/jpbraga/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/runners.py:118: in run
+    return self._loop.run_until_complete(task)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/home/jpbraga/.local/share/uv/python/cpython-3.12.13-linux-x86_64-gnu/lib/python3.12/asyncio/base_events.py:691: in run_until_complete
+    return future.result()
+           ^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+    async def run():
+        install = tmp_path / "piroot"
+        install.mkdir(parents=True)
+        node = install / "node.exe"
+        node.write_bytes(b"node-bytes")
+        node.chmod(0o755)  # POSIX selection requires the executable bit
+        for version in ("0.86.0", "0.87.1"):
+            release = install / "releases" / version
+            _write_pi_package(
+                release / "node_modules" / "@earendil-works",
+                cli=f"cli-{version}".encode(), version=version)
+        journal = SQLiteJournal(tmp_path / "journal.db")
+    
+        async def noop_open(prepared, session_id, context, *,
+                            stream_epoch):
+            raise AssertionError("discovery never opens")
+    
+        runtime = LocalRuntimeCore(
+            journal, noop_open, candidates={},
+            workspace_roots={"ws": str(tmp_path)},
+            trusted_discovery_roots=(tmp_path,),
+            pi_install_root=install, pi_node=node)
+        try:
+            inventory = await runtime.discover(
+                DiscoveryRequest(("pi_rpc",)))
+            versions = {c.version for c in inventory.candidates}
+&gt;           assert versions == {"0.86.0", "0.87.1"}, (
+                "the public path must surface the Pi release layouts")
+E               AssertionError: the public path must surface the Pi release layouts
+E               assert {None, '0.87.1', '0.86.0'} == {'0.86.0', '0.87.1'}
+E                 
+E                 Extra items in the left set:
+E                 None
+E                 Use -v to get more diff
+
+tests/regression/test_c2_regressions.py:624: AssertionError</failure></testcase></testsuite></testsuites>

@@ -11,11 +11,37 @@ imports neither application.
 - Distribution `nexus-connector-core`, import `nexus_connector_core`,
   Python ≥ 3.11, src-layout, `py.typed`, pure-Python runtime dependencies
   (`rfc8785`, `jsonschema`).
-- Status: `0.1.0.dev0` — an unpublished development build. Importing the
+- First release version: `0.0.1`. Importing the
   package opens no socket, spawns no thread/process, starts no event loop
   and reads no credentials.
 
 ## What the Core is
+
+### Automatic runtime operation
+
+`DEFAULT_RUNTIME_AUTOMATION` enables automatic message delivery and recovery.
+Portable connection configurations normalize the compatibility field
+`automatic_reply` to `true`, including configurations used by Connector CLI.
+Delivery still requires an enabled runtime, a recipient and current authority.
+
+Hosts use `RuntimeAutomation` for the shared supervision behavior:
+
+- `recover(...)` retries an initial failed reconciliation, with delays of
+  2, 4, 8, 16 and 30 seconds. An optional host setting can suspend recovery;
+  turning it back on resets the retry budget. Pending work for independent
+  executors may progress while the current owner remains blocked.
+- `supervise_connection(...)` owns automatic Connector reconnects and bounds
+  recovery failures separately from transport reconnects. Exhaustion is exposed
+  as `RECOVERY_ATTENTION_REQUIRED`; restarting the daemon starts a new budget.
+- Both methods join in-flight callbacks on cooperative stop. They never retry
+  a submitted native operation, invent an ownership proof or bypass approval.
+
+The host callbacks verify Core journal/resource/event proofs and commit current
+authority before declaring readiness. Nexus owns inboxes, routing, transactional
+claims and durable pending messages; Connector owns its authenticated connection
+and dispatch lanes. Core owns the common defaults, retry scheduling and budgets.
+This split keeps the same behavior on a Nexus host and on the CLI machine without
+making Core depend on either application's database or transport.
 
 | Area | Delivered by |
 | --- | --- |
@@ -59,6 +85,11 @@ tools/                  # build/verify/probe and campaign scripts
 ```
 
 ## Managed adapters and production qualification
+
+To implement another harness, follow
+[Adding a native harness runtime](docs/adding-a-runtime.md). It covers the
+registry, discovery, native transport, configuration/JSON import, Nexus tools,
+human input, qualification tests, and rollout to Server and Connector.
 
 Qualification is **exact**: native kind, observed version, real platform,
 parsed architecture and the selected file fingerprint (for Pi, a composite

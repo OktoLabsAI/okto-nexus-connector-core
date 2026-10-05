@@ -36,6 +36,14 @@ QUALIFIED_CONTROL_BUILDS: set[tuple[str, str, str, str, str]] = set()
 # promise that every model task succeeds, not resume/deduplication, not the
 # Pi work bridge, and not native approval traffic.
 _QUALIFIED_PRODUCTION_BUILDS = {
+    # 2026-10-03: real Windows handshake, turn, targeted steer and interrupt.
+    # See plans/implementation/evidence/codex-alpha-20261003.md.
+    ("codex", "0.159.0-alpha.12.1", "win32", "x86_64",
+     "sha256:1722907aa64401bcc9b34467ef5c2af43f6aef9a5045ef04d11d19dfae4589fb"),
+    # 2026-09-30 Windows real turn, steer and interrupt campaign.
+    # Scope: conversation and controls only; no native approval grant.
+    ("codex", "0.159.0", "win32", "x86_64",
+     "sha256:0e2a4cd6ac1b329e64ec74745e38b71a3d4fa701102c86f49cf605d23a02c4df"),
     ("codex", "0.157.0", "win32", "x86_64",
      "sha256:ed1c7b36e44536809c868864c833af8a857f56599a7a7fe23b908a1ba1093b1f"),
     ("pi", "0.87.1", "win32", "x86_64",
@@ -83,6 +91,10 @@ def qualified_build(kind, version, platform, architecture, fingerprint,
 #: approves the *local binding* separately; this set never authorizes a
 #: path, only conserves qualification of identical bytes.
 QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
+    ("codex", "0.159.0-alpha.12.1", "win32", "x86_64",
+     "sha256:ae7e2bc6f390e2c8bb2258d0665c7c02e189bc2b414283b1e588a56ef20621a6"),
+    ("codex", "0.159.0", "win32", "x86_64",
+     "sha256:ac0413e2cd18e80561c8e1e50511f7e05465630dc16bf60656e04d7fff2e994c"),
     # Portable content digests of the same three authorized builds above
     # (PC09): identical bytes in a different directory conserve the
     # qualification; the local binding approval still applies separately.
@@ -94,6 +106,11 @@ QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
      "sha256:b9c8e2e61cc523f4d78630d6141e843c41fbe530cd297e7d4af8acd44841bed9"),
 }
 QUALIFIED_CONTROL_BUILD_IDENTITIES = set(QUALIFIED_BUILD_IDENTITIES)
+
+# 2026-10-03 isolated real handshake, conversation and authenticated Nexus MCP
+# call. Controls and native approval replies were not exercised for this build.
+QUALIFIED_BUILDS.add(("claude_code", "2.1.288", "win32", "x86_64",
+    "sha256:84304f7d4b0cd0ebcbe8318695a260151b48991a6659c3366fdd5da290c0ab91"))
 
 
 def qualified_capabilities(kind, substrate, report):
@@ -120,6 +137,10 @@ def qualified_capabilities(kind, substrate, report):
 # claimed as an actual model-generated request by this allowlist.
 # This is a protocol-contract allowlist, never a semver range or permission.
 CODEX_NATIVE_REQUEST_CONTRACTS = {
+    # Exact local build: default-mode questions answered through Nexus UI.
+    # See codex-native-questions-0-159-alpha-20261003.md; other methods remain
+    # unqualified for this build.
+    "0.159.0-alpha.12.1": ("item/tool/requestUserInput",),
     "0.156.1": (
         "item/commandExecution/requestApproval", "item/fileChange/requestApproval",
         "item/tool/requestUserInput", "mcpServer/elicitation/request",
@@ -137,6 +158,9 @@ CODEX_NATIVE_REQUEST_CONTRACTS = {
 # campaigns recorded in P09. This does not assert sandbox or general capability
 # verification, nor support for any other can_use_tool shape.
 CLAUDE_NATIVE_REQUEST_CONTRACTS = {
+    # Real operator question answered through Nexus UI on 2026-10-03;
+    # native continuation returned the exact chosen value (Green).
+    "2.1.288": ("control_request:can_use_tool/AskUserQuestion",),
     "2.1.280": tuple("control_request:can_use_tool/" + tool
                      for tool in ("Write", "Edit", "Bash", "AskUserQuestion")),
     # Only the two flows actually qualified after the local binary updated.
@@ -190,17 +214,29 @@ def pi_version_observation(command, *, cwd, env):
     output = _version_output(command, cwd=cwd, env=env)
     match = re.fullmatch(rb"(\d{1,4}\.\d{1,4}\.\d{1,4})\r?\n?", output) if len(output) <= 1024 else None
     version = match.group(1).decode("ascii") if match else None
+    # Real UI round trips and native tool results in
+    # evidence/pi-native-questions-0-87-1-20261003.md.
+    contracts = ["extension_ui_request/" + method for method in
+                 ("select", "confirm", "input", "editor")] if version == "0.87.1" else []
     return {"schema_version": 1, "native_version": version,
         "observation": "executable_version" if version else "version_not_observed",
-        "capabilities_verified": False, "compatible_native_requests": [],
-        "native_request_basis": "unverified", **control_observation("pi", version)}
+        "capabilities_verified": False, "compatible_native_requests": contracts,
+        "native_request_basis": "tested_version_contract" if contracts else "unverified",
+        **control_observation("pi", version)}
+
+
+# Preserve prerelease/build identifiers: an alpha must never inherit a stable
+# build's exact qualification or native request contracts.
+_CODEX_VERSION = (r"\d{1,4}\.\d{1,4}\.\d{1,4}"
+                  r"(?:-[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
+                  r"(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?")
 
 
 def codex_version_observation(command, *, cwd, env):
     """Observe only the selected CLI's version; do not qualify app-server."""
     output = _version_output(command, cwd=cwd, env=env)
     match = re.fullmatch(
-        rb"codex-cli (\d{1,4}\.\d{1,4}\.\d{1,4})\r?\n?", output,
+        (r"codex-cli (" + _CODEX_VERSION + r")\r?\n?").encode("ascii"), output,
     ) if len(output) <= 1024 else None
     version = match.group(1).decode("ascii") if match else None
     contracts = CODEX_NATIVE_REQUEST_CONTRACTS.get(version, ())
@@ -251,7 +287,7 @@ def codex_initialize_observation(result, *, client_name):
     """Retain only the CLI version from this client's user-agent prefix."""
     user_agent = result.get("userAgent") if isinstance(result, dict) else None
     prefix = client_name + "/"
-    match = (re.match(r"^(\d{1,4}\.\d{1,4}\.\d{1,4})(?: |$)",
+    match = (re.match(r"^(" + _CODEX_VERSION + r")(?: |$)",
                       user_agent[len(prefix):])
              if isinstance(user_agent, str) and len(user_agent) <= 1024
              and user_agent.startswith(prefix) else None)
