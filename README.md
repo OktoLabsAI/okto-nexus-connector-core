@@ -244,10 +244,7 @@ Implementation gates, the acceptance matrix and the evidence log live in
 
 ## License
 
-Elastic License 2.0 with the *SaaS and Competing Service Definition*
-addendum — Copyright 2026 Okto Labs. The text is based on the
-`okto-pulse-core` license by licensor decision; internal use, single-tenant
-deployment and integration with your own agents and harnesses are
-permitted, while offering the software as a hosted/managed or competing
-service is not. See [LICENSE](LICENSE); commercial clarification at
-dev@oktolabs.ai.
+Elastic License 2.0 with the Okto Labs SaaS/Branding Addendum —
+Copyright 2026 Okto Labs. The full [LICENSE](LICENSE) is identical to
+the Okto Nexus license and is authoritative. Commercial clarification:
+dev@oktolabs.ai. See [CONTRIBUTING.md](CONTRIBUTING.md) for branch and review rules.
