@@ -167,3 +167,19 @@ def test_http_template_rejects_provider_or_canonical_ref_namespace():
                 entry_name="okto-nexus", harness_is_local=False,
                 approved_origins={"https://nexus.example.test"},
                 format_qualified=True)
+
+
+@pytest.mark.parametrize('adapter', ['claude_stream', 'codex_app_server'])
+def test_remote_http_requires_explicit_host_approval_through_process_rendering(adapter):
+    from nexus_connector_core.harness_config import process_http_arguments
+    kwargs = dict(entry_name='nexus', harness_is_local=False,
+                  approved_origins={'http://192.168.0.146:8202'}, format_qualified=True)
+    url = 'http://192.168.0.146:8202/mcp'
+    with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+        harness_http_template(adapter, url, 'mcp-cap:one', **kwargs)
+    template = harness_http_template(adapter, url, 'mcp-cap:one',
+                                     allow_remote_http=True, **kwargs)
+    assert url in ' '.join(process_http_arguments(adapter, (template,), {'mcp-cap:one'}))
+    with pytest.raises(CoreError, match='BINDING_NOT_AUTHORIZED'):
+        harness_http_template(adapter, 'http://other.test/mcp', 'mcp-cap:one',
+                              allow_remote_http=True, **kwargs)
