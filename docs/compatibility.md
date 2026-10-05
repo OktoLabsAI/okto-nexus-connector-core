@@ -7,8 +7,10 @@ is allowed. Replacing the root, redirecting its link, or changing launch
 artifacts still fails with `PROFILE_DRIFT`. The artifact revalidation frontiers
 are unchanged; these checks do not provide an atomic filesystem snapshot.
 
-This project is `0.2.61.dev0`, an unpublished development build. Its API and
-contract bundle can still change. The historical R3 revision is
+The first release is `0.0.1`, renumbered from the pre-release development
+series. Consumers must pin this release explicitly; it sorts below the old
+`0.2.x.dev0` builds. This version reset does not change protocol revisions.
+The historical R3 revision is
 `nxl-1-agent-centric-http-only-2026-09-25-r3` with protocol major `1`.
 Negotiation rejects a different major or revision with
 `VERSION_INCOMPATIBLE`; there is no implicit r1/r2 upgrade or fallback. The

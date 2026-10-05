@@ -1,4 +1,12 @@
-# Core API (`0.2.61.dev0`)
+# Core API (`0.0.1`)
+
+## Runtime automation
+
+`DEFAULT_RUNTIME_AUTOMATION` supplies the shared defaults for automatic message
+delivery and runtime recovery. `RuntimeAutomationPolicy` describes those settings
+and the bounded retry policy. `RuntimeAutomation` supervises host recovery and
+Connector reconnections through callbacks, without replaying submitted native
+operations or bypassing the host's ownership and authorization checks.
 
 ## Harness configuration and native input
 
