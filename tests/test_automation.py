@@ -78,19 +78,21 @@ def test_reenable_opens_new_budget_and_stop_does_not_start_work():
     asyncio.run(run())
 
 
-def test_connector_network_reconnects_and_reconciliation_have_separate_budgets():
+def test_connector_retries_network_and_reconciliation_until_stopped():
     async def run():
         stop, calls, delays = asyncio.Event(), 0, []
         async def cycle():
             nonlocal calls
             calls += 1
+            if calls == 20:
+                stop.set()
             raise RuntimeError('network' if calls <= 7 else 'recovery')
         async def failed(error): return str(error) == 'recovery'
-        async def exhausted(): stop.set()
+        async def exhausted(): raise AssertionError('Connection retries must not exhaust')
         async def pause(delay): delays.append(delay)
         await RuntimeAutomation().supervise_connection(cycle=cycle, stop=stop,
             failed=failed, exhausted=exhausted, wait=pause)
-        assert calls == 12 and max(delays) == 30
+        assert calls == 20 and delays == [2, 4, 8, 16] + [30] * 15
     asyncio.run(run())
 
 

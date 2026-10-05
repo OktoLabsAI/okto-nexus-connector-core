@@ -32,6 +32,7 @@ class HarnessHTTPTemplate:
     bearer_env_name: str
     capability_ref: str = field(repr=False)
     always_allow_tools: bool = False
+    allow_remote_http: bool = False
 
     def entry(self) -> dict[str, object]:
         if self.adapter_id == "codex_app_server":
@@ -90,14 +91,17 @@ def _origin(url: str) -> tuple[str, bool]:
 def direct_http_config(server_url: str, capability_ref: str, *,
                        harness_is_local: bool, supports_http: bool,
                        approved_origins: Collection[str] | None,
-                       loopback_reachable: bool = False) -> DirectHTTPClientConfig:
+                       loopback_reachable: bool = False,
+                       allow_remote_http: bool = False) -> DirectHTTPClientConfig:
+    if type(allow_remote_http) is not bool:
+        raise CoreError("VALIDATION_ERROR", "mcp_client_configuration")
     if not supports_http:
         raise CoreError("CAPABILITY_UNSUPPORTED", "mcp_client_configuration")
     origin, loopback = _origin(server_url)
     if (approved_origins is None or isinstance(approved_origins, str) or
             origin not in approved_origins):
         raise CoreError("BINDING_NOT_AUTHORIZED", "mcp_client_configuration")
-    if origin.startswith("http://") and not (harness_is_local and loopback
+    if origin.startswith("http://") and not allow_remote_http and not (harness_is_local and loopback
                                              and loopback_reachable):
         raise CoreError("PROFILE_DRIFT", "mcp_client_configuration")
     if loopback and not (harness_is_local and loopback_reachable):
@@ -113,12 +117,15 @@ def harness_http_template(adapter_id: str, server_url: str,
                           approved_origins: Collection[str] | None,
                           loopback_reachable: bool = False,
                           format_qualified: bool = False,
-                          always_allow_tools: bool = False) -> HarnessHTTPTemplate:
+                          always_allow_tools: bool = False,
+                          allow_remote_http: bool = False) -> HarnessHTTPTemplate:
     """Plan a native client's direct HTTP entry without a token or proxy.
 
     ``format_qualified`` is a trusted host assertion about the selected
     native build, not a value received from the Server/model. Pi has no
     built-in MCP HTTP client and cannot use this template.
+    ``allow_remote_http`` is the host's transport policy for the explicitly
+    approved origin. It never relaxes origin or loopback reachability checks.
     """
     if type(always_allow_tools) is not bool:
         raise CoreError("VALIDATION_ERROR", "mcp_client_configuration")
@@ -130,13 +137,14 @@ def harness_http_template(adapter_id: str, server_url: str,
     config = direct_http_config(
         server_url, capability_ref, harness_is_local=harness_is_local,
         supports_http=True, approved_origins=approved_origins,
-        loopback_reachable=loopback_reachable)
+        loopback_reachable=loopback_reachable, allow_remote_http=allow_remote_http)
     if not capability_ref.startswith("mcp-cap:") or len(capability_ref) <= len("mcp-cap:"):
         raise CoreError("BINDING_NOT_AUTHORIZED", "mcp_client_configuration")
     env_name = _token_env_name(capability_ref)
     section = "mcp_servers" if adapter_id == "codex_app_server" else "mcpServers"
     return HarnessHTTPTemplate(adapter_id, section, entry_name,
-                               config.server_url, env_name, capability_ref, always_allow_tools)
+                               config.server_url, env_name, capability_ref, always_allow_tools,
+                               allow_remote_http)
 
 
 def render_codex_toml_fragment(template: HarnessHTTPTemplate) -> str:
@@ -163,6 +171,7 @@ def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[s
     for template in templates:
         if (type(template) is not HarnessHTTPTemplate or template.adapter_id != adapter_id
                 or type(template.always_allow_tools) is not bool
+                or type(template.allow_remote_http) is not bool
                 or template.section != ('mcp_servers' if adapter_id == 'codex_app_server' else 'mcpServers')
                 or type(template.entry_name) is not str
                 or not re.fullmatch(r'[A-Za-z][A-Za-z0-9_-]{0,63}', template.entry_name, re.ASCII)
@@ -172,7 +181,7 @@ def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[s
                 or type(template.server_url) is not str or len(template.server_url) > 2048):
             raise CoreError('BINDING_NOT_AUTHORIZED', 'mcp_client_configuration')
         origin, loopback = _origin(template.server_url)
-        if origin.startswith('http://') and not loopback:
+        if origin.startswith('http://') and not loopback and not template.allow_remote_http:
             raise CoreError('PROFILE_DRIFT', 'mcp_client_configuration')
         entries[template.entry_name] = template.entry()
     if adapter_id == 'claude_stream':
