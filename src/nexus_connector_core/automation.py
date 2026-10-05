@@ -92,7 +92,7 @@ class RuntimeAutomation:
 
     async def supervise_connection(self, *, cycle, stop, failed, exhausted,
                                    wait=None, enabled=None):
-        """Reconnect transport automatically; bound consecutive recovery failures.
+        """Reconnect transport and retry reconciliation until explicitly stopped.
 
         ``cycle`` owns negotiation, automatic message dispatch and cleanup.
         ``failed`` records a sanitized error and returns True only for a
@@ -107,9 +107,7 @@ class RuntimeAutomation:
             if active and not previous:
                 recoveries = 0
             previous = active
-            if recoveries and (not active or recoveries >= self.policy.recovery_attempts):
-                if recoveries >= self.policy.recovery_attempts:
-                    await exhausted()
+            if recoveries and not active:
                 await pause(self.policy.delay(max(failures, 1)))
                 continue
             try:
