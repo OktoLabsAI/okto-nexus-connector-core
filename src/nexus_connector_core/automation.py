@@ -8,6 +8,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 import math
+import random
 
 
 @dataclass(frozen=True)
@@ -16,13 +17,18 @@ class RuntimeAutomationPolicy:
     retry_delays: tuple[float, ...] = (2, 4, 8, 16, 30)
     recovery_attempts: int = 5
     message_interval: float = 1
+    # Connection supervision only. A connection that stayed up this long
+    # starts a fresh backoff; jitter spreads reconnects of many executors.
+    stable_seconds: float = 60
+    retry_jitter: float = 0
 
     def __post_init__(self):
         if (type(self.automatic_recovery) is not bool
                 or type(self.recovery_attempts) is not int or self.recovery_attempts < 1
+                or type(self.retry_jitter) not in (int, float) or not 0 <= self.retry_jitter < 1
                 or not self.retry_delays
                 or any(type(n) not in (int, float) or not math.isfinite(n) or n <= 0
-                       for n in (*self.retry_delays, self.message_interval))):
+                       for n in (*self.retry_delays, self.message_interval, self.stable_seconds))):
             raise ValueError('Invalid runtime automation policy.')
 
     @property
@@ -32,6 +38,10 @@ class RuntimeAutomationPolicy:
 
     def delay(self, failures: int) -> float:
         return self.retry_delays[min(max(0, failures - 1), len(self.retry_delays) - 1)]
+
+    def reconnect_delay(self, failures: int, rand=random.random) -> float:
+        base = self.delay(failures)
+        return base * (1 + self.retry_jitter * (2 * rand() - 1)) if self.retry_jitter else base
 
 
 DEFAULT_RUNTIME_AUTOMATION = RuntimeAutomationPolicy()
@@ -91,15 +101,19 @@ class RuntimeAutomation:
         return False
 
     async def supervise_connection(self, *, cycle, stop, failed, exhausted,
-                                   wait=None, enabled=None):
+                                   wait=None, enabled=None, clock=None, rand=random.random):
         """Reconnect transport and retry reconciliation until explicitly stopped.
 
         ``cycle`` owns negotiation, automatic message dispatch and cleanup.
         ``failed`` records a sanitized error and returns True only for a
         reconciliation failure. Network reconnects have independent backoff.
         No submitted operation is replayed by this supervisor.
+        A cycle that ran for ``stable_seconds`` before failing restarts the
+        backoff, so a long-lived connection does not inherit old failures.
         """
         pause = wait or (lambda delay: _wait(stop, delay))
+        now = clock or asyncio.get_running_loop().time
+        delay = lambda failures: self.policy.reconnect_delay(max(failures, 1), rand)
         failures = recoveries = 0
         previous = self.policy.automatic_recovery
         while not stop.is_set():
@@ -108,16 +122,19 @@ class RuntimeAutomation:
                 recoveries = 0
             previous = active
             if recoveries and not active:
-                await pause(self.policy.delay(max(failures, 1)))
+                await pause(delay(failures))
                 continue
+            started = now()
             try:
                 await cycle()
                 failures = recoveries = 0
             except Exception as error:
+                if now() - started >= self.policy.stable_seconds:
+                    failures = recoveries = 0
                 failures += 1
                 if await failed(error):
                     recoveries += 1
                 else:
                     recoveries = 0
             if not stop.is_set():
-                await pause(self.policy.delay(max(failures, 1)))
+                await pause(delay(failures))
