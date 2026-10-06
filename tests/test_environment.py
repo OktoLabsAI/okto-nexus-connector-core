@@ -230,3 +230,61 @@ def test_discovered_configuration_directory_is_used_directly(tmp_path, adapter, 
         assert env[variable] == str(state.resolve())
         assert not (state / state_name).exists()
     asyncio.run(run())
+
+
+def _claude_prepared(tmp_path):
+    binary = tmp_path / ('claude.exe' if os.name == 'nt' else 'claude')
+    binary.write_bytes(b'test')
+    if os.name != 'nt':
+        binary.chmod(0o755)
+    return prepare_launch(LaunchIntent('ag', 'ws', 'claude_stream'),
+                          candidate('claude_stream', binary, explicit=True), tmp_path)
+
+
+def test_default_claude_state_keeps_account_home_and_keychain_lookup(tmp_path, monkeypatch):
+    # Claude Code finds its macOS Keychain login only with the real HOME,
+    # $USER and no CLAUDE_CONFIG_DIR; redirecting any of them logs it out.
+    async def run():
+        account = tmp_path / 'account'
+        (account / '.claude').mkdir(parents=True)
+        monkeypatch.setenv('HOME', str(account))
+        monkeypatch.setenv('USERPROFILE', str(account))
+        monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
+        monkeypatch.setenv('USER', 'operator')
+        monkeypatch.setenv('LOGNAME', 'operator')
+        env = await child_environment(_claude_prepared(tmp_path), Resolver(),
+                                      provider_home=account / '.claude', trusted_home=True)
+        assert env['HOME'] == str(account.resolve())
+        assert env['USERPROFILE'] == env['HOME']
+        assert 'CLAUDE_CONFIG_DIR' not in env
+        assert env['USER'] == env['LOGNAME'] == 'operator'
+    asyncio.run(run())
+
+
+def test_custom_claude_state_is_still_bound_through_config_dir(tmp_path, monkeypatch):
+    async def run():
+        account = tmp_path / 'account'
+        (account / '.claude').mkdir(parents=True)
+        custom = tmp_path / 'other-claude'
+        custom.mkdir()
+        monkeypatch.setenv('HOME', str(account))
+        monkeypatch.delenv('CLAUDE_CONFIG_DIR', raising=False)
+        env = await child_environment(_claude_prepared(tmp_path), Resolver(),
+                                      provider_home=custom, trusted_home=True)
+        assert env['HOME'] == str(custom.resolve())
+        assert env['CLAUDE_CONFIG_DIR'] == str(custom.resolve())
+    asyncio.run(run())
+
+
+def test_daemon_claude_config_override_is_not_treated_as_default(tmp_path, monkeypatch):
+    async def run():
+        account = tmp_path / 'account'
+        state = account / '.claude'
+        state.mkdir(parents=True)
+        monkeypatch.setenv('HOME', str(account))
+        monkeypatch.setenv('CLAUDE_CONFIG_DIR', str(state))
+        env = await child_environment(_claude_prepared(tmp_path), Resolver(),
+                                      provider_home=state, trusted_home=True)
+        assert env['CLAUDE_CONFIG_DIR'] == str(state.resolve())
+    asyncio.run(run())
+
