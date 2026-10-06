@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "okto-nexus-connector-core"
-version = "0.0.1"
+version = "0.0.2"
 description = "Shared native harness runtime contracts for Okto Nexus"
 readme = "README.md"
 requires-python = ">=3.11"

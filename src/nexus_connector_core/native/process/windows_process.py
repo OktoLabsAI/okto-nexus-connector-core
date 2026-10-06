@@ -10,6 +10,7 @@ import inspect
 import os
 import subprocess
 import threading
+import uuid
 
 SIZE_T = ctypes.c_size_t
 
@@ -76,8 +77,14 @@ class OwnedWindowsPopen(subprocess.Popen):
     def __init__(self, *args, **kwargs):
         self._job_lock = threading.Lock()
         self._kernel = _kernel()
-        self._job = self._kernel.CreateJobObjectW(None, None)
+        self._job_name = "Global\\nexus-core-" + uuid.uuid4().hex
+        ctypes.set_last_error(0)
+        self._job = self._kernel.CreateJobObjectW(None, self._job_name)
         _check(self._job)
+        if ctypes.get_last_error() == 183:
+            self._kernel.CloseHandle(self._job)
+            self._job = None
+            raise RuntimeError("Owned process container already exists")
         try:
             limits = _ExtendedLimits()
             limits.basic.flags = 0x2000  # JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE

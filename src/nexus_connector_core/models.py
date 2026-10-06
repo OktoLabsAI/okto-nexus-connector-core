@@ -189,6 +189,7 @@ class ProcessBirthEvidence:
     pid: int
     birth_token: str
     containment: str
+    container_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

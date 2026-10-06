@@ -180,6 +180,8 @@ class CopiedAdapterSession:
         """Historical birth token, only for a Core-owned child container."""
         process = getattr(self._connector, "_proc", None)
         if process is None:
+            process = getattr(getattr(self._connector, "_transport", None), "_proc", None)
+        if process is None:
             return None  # External attach has no Core-owned process.
         return snapshot_owned_process_birth(process)
 
