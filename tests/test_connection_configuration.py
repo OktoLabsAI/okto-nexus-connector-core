@@ -57,3 +57,31 @@ def test_portable_import_rejects_host_fields_and_credentials():
 ])
 def test_reject_invalid_and_credential_fields(changes):
     with pytest.raises(CoreError): parse_connection_configuration(configuration() | changes)
+
+
+@pytest.mark.parametrize('limits,expected', [
+    ({'minutes':None,'actions':None}, {'minutes':0,'actions':0,'no_expiry':True,'unlimited_actions':True}),
+    ({'minutes':60,'actions':20}, {'minutes':60,'actions':20,'no_expiry':False,'unlimited_actions':False}),
+    ({'minutes':0,'actions':5,'no_expiry':True,'unlimited_actions':False},
+     {'minutes':0,'actions':5,'no_expiry':True,'unlimited_actions':False}),
+])
+def test_authorization_zero_means_unlimited_with_server_flags(limits, expected):
+    value=configuration()
+    value['authorization']=limits
+    assert parse_connection_configuration(value)['authorization']==expected
+    assert json.loads(export_connection_configuration(value))['authorization']==expected
+
+
+@pytest.mark.parametrize('limits', [
+    {'minutes':0,'actions':20},
+    {'minutes':0,'actions':5,'no_expiry':False,'unlimited_actions':False},
+    {'minutes':60,'actions':5,'no_expiry':True,'unlimited_actions':False},
+    {'minutes':1441,'actions':5,'no_expiry':False,'unlimited_actions':False},
+    {'minutes':60,'actions':5,'no_expiry':'yes','unlimited_actions':False},
+    {'minutes':60,'actions':5,'no_expiry':False},
+])
+def test_authorization_flags_must_match_limits(limits):
+    value=configuration()
+    value['authorization']=limits
+    with pytest.raises(CoreError):
+        parse_connection_configuration(value)
