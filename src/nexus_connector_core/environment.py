@@ -12,8 +12,11 @@ from .models import CoreError, PreparedLaunch
 from .ports import SecretResolver
 from .harness_config import HarnessHTTPTemplate, _token_env_name
 
+# USER/LOGNAME are account identity, not secrets: Claude Code keys its macOS
+# Keychain login on $USER and reports "Not logged in" without it.
 _ESSENTIALS = frozenset({"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
-                         "PATH", "TEMP", "TMP", "LANG", "LC_ALL", "TERM"})
+                         "PATH", "TEMP", "TMP", "LANG", "LC_ALL", "TERM",
+                         "USER", "LOGNAME"})
 _NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
 _RESTRICTED = frozenset({"HOME", "USERPROFILE", "CODEX_HOME",
                          "CLAUDE_CONFIG_DIR", "PI_CODING_AGENT_DIR",
@@ -80,9 +83,16 @@ async def child_environment(
             # HOME alone would make Pi append .pi/agent a second time.
             env["PI_CODING_AGENT_DIR"] = env["HOME"]
         if prepared.intent.adapter_id == "claude_stream":
-            # Preserve legacy user-home configurations as well as exact state dirs.
-            claude_state = home / '.claude' if (home / '.claude').is_dir() else home
-            env["CLAUDE_CONFIG_DIR"] = str(claude_state.resolve(strict=True))
+            if _is_default_claude_state(home):
+                # The account's own ~/.claude: keep the real HOME and leave
+                # CLAUDE_CONFIG_DIR unset. Either redirect makes Claude Code
+                # look up a different macOS Keychain entry and global config.
+                env["HOME"] = str(Path(env["HOME"]).parent)
+                env["USERPROFILE"] = env["HOME"]
+            else:
+                # Preserve legacy user-home configurations as well as exact state dirs.
+                claude_state = home / '.claude' if (home / '.claude').is_dir() else home
+                env["CLAUDE_CONFIG_DIR"] = str(claude_state.resolve(strict=True))
         if prepared.intent.adapter_id == "codex_app_server":
             # Codex may resolve the Windows account home independently of HOME
             # and USERPROFILE. Bind its state to the explicitly approved home.
@@ -126,6 +136,18 @@ async def child_environment(
             raise CoreError("AGENT_AUTH_REQUIRED", "environment")
         env[name] = value
     return ProcessHTTPEnvironment(env, http_templates) if process_http else env
+
+
+def _is_default_claude_state(home: Path) -> bool:
+    """True only for the host account's default Claude state directory."""
+    if os.environ.get("CLAUDE_CONFIG_DIR"):
+        return False
+    try:
+        default = Path.home() / ".claude"
+        return (default.is_dir() and
+                home.resolve(strict=True) == default.resolve(strict=True))
+    except (OSError, RuntimeError):
+        return False
 
 
 def _check_name(name: str) -> None:
