@@ -1863,8 +1863,14 @@ def test_lease_renewal_fences_old_generation_and_expiry_closes(tmp_path):
         await asyncio.sleep(0.03)
         assert (await runtime.inspect(session)).lease_state == "EXPIRED"
         clock.advance(2.1)
-        await asyncio.sleep(0.03)
-        snapshot = await runtime.inspect(session)
+        # Physical stop and durable lease/slot release are asynchronous. Wait
+        # for their observable result rather than a 30 ms scheduler assumption.
+        async with asyncio.timeout(3):
+            while True:
+                snapshot = await runtime.inspect(session)
+                if snapshot.lease_state == 'CLOSED' and snapshot.ownership == 'released':
+                    break
+                await asyncio.sleep(.01)
         assert factory.native.stopped
         assert snapshot.lease_state == "CLOSED"
         assert snapshot.ownership == "released"

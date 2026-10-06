@@ -270,9 +270,14 @@ def test_x02_late_stop_keeps_failed_slot_release_recoverable(tmp_path):
                 runtime.shutdown(ShutdownPolicy()), timeout=10)
             await asyncio.wait_for(
                 runtime.shutdown(ShutdownPolicy()), timeout=10)
-            page = await journal.owned_slot_page()
-            reservations = [r for r in page.reservations
-                            if r.session_id == "session"]
+            deadline = time.monotonic() + 3
+            while True:
+                page = await journal.owned_slot_page()
+                reservations = [r for r in page.reservations
+                                if r.key.session_id == "session"]
+                if not reservations or time.monotonic() >= deadline:
+                    break
+                await asyncio.sleep(.01)
             assert reservations == [], (
                 "the failed slot release obligation was forgotten")
         finally:
