@@ -8,6 +8,32 @@ from .automation import DEFAULT_RUNTIME_AUTOMATION
 CONNECTION_CONFIGURATION_FORMAT = 'okto-nexus-connection'
 
 
+_AUTHORIZATION_LIMITS = (('minutes', 'no_expiry', 1440), ('actions', 'unlimited_actions', 1000))
+
+
+def _authorization_limits(limits):
+    """Normalize to the Server shape: 0 plus its flag means unlimited.
+
+    Legacy documents carry only minutes/actions, with null for unlimited.
+    """
+    if not isinstance(limits, dict):
+        raise CoreError('VALIDATION_ERROR', 'connection_configuration')
+    legacy = set(limits) == {'minutes', 'actions'}
+    if not legacy and set(limits) != {'minutes', 'actions', 'no_expiry', 'unlimited_actions'}:
+        raise CoreError('VALIDATION_ERROR', 'connection_configuration')
+    result = {}
+    for key, flag, maximum in _AUTHORIZATION_LIMITS:
+        amount = limits[key]
+        unlimited = amount is None if legacy else limits[flag]
+        if legacy and amount is None:
+            amount = 0
+        if (type(unlimited) is not bool or type(amount) is not int or
+                not 0 <= amount <= maximum or (amount == 0) != unlimited):
+            raise CoreError('VALIDATION_ERROR', 'connection_configuration')
+        result[key], result[flag] = amount, unlimited
+    return result
+
+
 def parse_connection_configuration(value):
     if isinstance(value, str):
         if len(value.encode('utf-8')) > 65536:
@@ -28,12 +54,7 @@ def parse_connection_configuration(value):
     home = value['provider_home']
     if home is not None and (type(home) is not str or len(home) > 4096 or '\x00' in home):
         raise CoreError('VALIDATION_ERROR', 'connection_configuration')
-    limits = value['authorization']
-    if not isinstance(limits, dict) or set(limits) != {'minutes','actions'}:
-        raise CoreError('VALIDATION_ERROR', 'connection_configuration')
-    for key, maximum in [('minutes',1440),('actions',1000)]:
-        if limits[key] is not None and (type(limits[key]) is not int or not 1 <= limits[key] <= maximum):
-            raise CoreError('VALIDATION_ERROR', 'connection_configuration')
+    value = {**value, 'authorization': _authorization_limits(value['authorization'])}
     import re
     refs = value['secret_bindings']
     if not isinstance(refs, dict) or len(refs) > 64 or any(
