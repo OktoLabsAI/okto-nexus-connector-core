@@ -30,7 +30,7 @@ def test_plain_subprocess_cannot_claim_core_birth_identity():
         process.communicate(timeout=10)
 
 
-@pytest.mark.skipif(sys.platform not in {"win32", "linux"},
+@pytest.mark.skipif(sys.platform not in {"win32", "linux", "darwin"},
                     reason="owned process backend unqualified")
 def test_owned_process_birth_token_is_stable_for_one_handle_and_distinct_between_births():
     def born():
@@ -42,7 +42,7 @@ def test_owned_process_birth_token_is_stable_for_one_handle_and_distinct_between
             assert snapshot_owned_process_birth(process) == first
             assert first.pid == process.pid
             assert first.platform == sys.platform
-            assert first.containment in {"windows_job", "linux_guardian"}
+            assert first.containment in {"windows_job", "linux_guardian", "darwin_launchd_coalition"}
             assert observe_recorded_process_birth(first) == "MATCHING_LIVE"
             assert observe_recorded_process_birth(replace(
                 first, birth_token=first.birth_token + "-other")) == "DIFFERENT_BIRTH"
@@ -65,13 +65,15 @@ def test_foreign_platform_birth_is_not_observed_as_local():
         foreign, 1234, "foreign", containment)) == "UNKNOWN"
 
 
-def test_birth_record_is_immutable_scoped_and_survives_reopen(tmp_path):
+@pytest.mark.parametrize('platform,containment', [
+    ('linux', 'linux_guardian'), ('darwin', 'darwin_launchd_coalition'), ('win32', 'windows_job')])
+def test_birth_record_is_immutable_scoped_and_survives_reopen(tmp_path, platform, containment):
     async def run():
         path = tmp_path / "birth.db"
         key = OperationKey("server", "executor", "open")
         session = SessionKey("server", "executor", "session")
-        evidence = ProcessBirthEvidence("linux", 1234,
-                                        "boot-start:boot-1:123", "linux_guardian")
+        evidence = ProcessBirthEvidence(platform, 1234,
+                                        "boot-start:boot-1:123", containment)
         journal = SQLiteJournal(path)
         await journal.admit(key, "intent", session.session_id,
                             claim_session=True)
@@ -83,8 +85,8 @@ def test_birth_record_is_immutable_scoped_and_survives_reopen(tmp_path):
             key, session.session_id, evidence) == expected
         with pytest.raises(CoreError, match="PROCESS_BIRTH_CONFLICT"):
             await journal.record_process_birth(key, session.session_id,
-                ProcessBirthEvidence("linux", 1235,
-                                     "boot-start:boot-1:124", "linux_guardian"))
+                ProcessBirthEvidence(platform, 1235,
+                                     "boot-start:boot-1:124", containment))
         with pytest.raises(CoreError, match="SESSION_CONFLICT"):
             await journal.record_process_birth(
                 OperationKey("server", "executor", "other"),
@@ -147,6 +149,8 @@ def test_birth_insert_failure_rolls_back_without_phantom_record(tmp_path):
     ProcessBirthEvidence("linux", True, "token", "linux_guardian"),
     ProcessBirthEvidence("linux", 1234, "", "linux_guardian"),
     ProcessBirthEvidence("linux", 1234, "token", "windows_job"),
+    ProcessBirthEvidence("darwin", 1234, "token", "linux_guardian"),
+    ProcessBirthEvidence("linux", 1234, "token", "darwin_launchd_coalition"),
 ])
 def test_birth_record_rejects_malformed_evidence_before_storage(tmp_path, evidence):
     async def run():

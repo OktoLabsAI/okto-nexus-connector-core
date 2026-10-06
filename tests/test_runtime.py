@@ -2431,11 +2431,13 @@ def test_observed_stop_with_unknown_method_releases_slot_without_claiming_force(
     asyncio.run(run())
 
 
-def test_runtime_persists_owned_birth_as_history_not_restarted_ownership(tmp_path):
+@pytest.mark.parametrize('platform,containment', [
+    ('linux', 'linux_guardian'), ('darwin', 'darwin_launchd_coalition')])
+def test_runtime_persists_owned_birth_as_history_not_restarted_ownership(tmp_path, platform, containment):
     async def run():
         runtime, journal, factory = make_runtime(tmp_path)
-        evidence = ProcessBirthEvidence("linux", 4321,
-                                        "boot-start:boot-1:123", "linux_guardian")
+        evidence = ProcessBirthEvidence(platform, 4321,
+                                        "boot-start:boot-1:123", containment)
         factory.native.owned_process_birth = lambda: evidence
         prepared = await runtime.prepare(LaunchIntent("agent", "ws", "codex_app_server"),
                                          context())
