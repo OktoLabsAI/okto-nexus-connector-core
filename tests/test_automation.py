@@ -12,7 +12,8 @@ def test_defaults_enable_messages_and_recovery():
 
 
 @pytest.mark.parametrize('changes', [dict(recovery_attempts=True), dict(retry_delays=()),
-    dict(retry_delays=(float('nan'),)), dict(message_interval=0), dict(automatic_recovery=1)])
+    dict(retry_delays=(float('nan'),)), dict(message_interval=0), dict(automatic_recovery=1),
+    dict(stable_seconds=0), dict(retry_jitter=1), dict(retry_jitter=-0.1)])
 def test_invalid_policy(changes):
     with pytest.raises(ValueError):
         RuntimeAutomationPolicy(**changes)
@@ -125,3 +126,30 @@ def test_shutdown_during_pending_delivery_prevents_new_reconciliation():
         async def attempt(): raise AssertionError('Stopped hosts must not start new recovery.')
         assert not await RuntimeAutomation().recover(attempt=attempt, pending=pending, stop=stop, wait=pause)
     asyncio.run(run())
+
+
+def test_stable_connection_restarts_backoff():
+    async def run():
+        stop, delays, time = asyncio.Event(), [], [0.0]
+        # Three quick failures, one connection that stayed up, then quick again.
+        durations = iter([0, 0, 0, 120, 0, 0])
+        async def cycle():
+            time[0] += next(durations)
+            if len(delays) == 5:
+                stop.set()
+            raise RuntimeError('network')
+        async def failed(error): return False
+        async def exhausted(): raise AssertionError('Connection retries must not exhaust')
+        async def pause(delay): delays.append(delay)
+        await RuntimeAutomation().supervise_connection(cycle=cycle, stop=stop,
+            failed=failed, exhausted=exhausted, wait=pause, clock=lambda: time[0])
+        assert delays == [2, 4, 8, 2, 4]
+    asyncio.run(run())
+
+
+def test_reconnect_jitter_is_bounded_and_off_by_default():
+    assert RuntimeAutomationPolicy().reconnect_delay(5, rand=lambda: 0.0) == 30
+    policy = RuntimeAutomationPolicy(retry_jitter=0.2)
+    assert policy.reconnect_delay(1, rand=lambda: 0.0) == pytest.approx(1.6)
+    assert policy.reconnect_delay(1, rand=lambda: 1.0) == pytest.approx(2.4)
+    assert policy.reconnect_delay(5, rand=lambda: 0.5) == pytest.approx(30)
