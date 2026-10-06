@@ -131,7 +131,8 @@ def validate_claim_namespace(server_id: str, executor_id: str) -> None:
 
 def validate_process_birth(evidence: ProcessBirthEvidence) -> None:
     valid_kinds = {("win32", "windows_job"),
-                   ("linux", "linux_guardian")}
+                   ("linux", "linux_guardian"),
+                   ("darwin", "darwin_launchd_coalition")}
     if (not isinstance(evidence, ProcessBirthEvidence) or
             type(evidence.platform) is not str or
             type(evidence.containment) is not str or
