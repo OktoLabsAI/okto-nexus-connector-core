@@ -195,6 +195,7 @@ def build_schema() -> dict:
         "sequence", "category", "payload"))
     frames = [
         frame("hello", {
+            "resume_connection_id": ID, "resume_connection_generation": REV,
             "link_attempt_id": ID, "server_id": ID, "executor_id": ID,
             "core_version": ID, "management_revision": {"const": MANAGEMENT},
             "supported_nxl": {"type": "array", "items": {"const": REVISION},
@@ -206,6 +207,7 @@ def build_schema() -> dict:
             "management_revision", "supported_nxl", "snapshot_formats",
             "control_capabilities")),
         frame("welcome", {
+            "resumed": {"type": "boolean"},
             "link_attempt_id": ID, "server_id": ID, "executor_id": ID,
             **CONNECTION, "management_revision": {"const": MANAGEMENT},
             "accepted_nxl": {"const": REVISION},
@@ -347,6 +349,16 @@ def build_schema() -> dict:
         }, (*SCOPE_REQUIRED, *CONNECTION, "canonical_request_id",
             "decision_id", "decision_revision", "decision",
             "request_hash")),
+        frame("connection.renew", {
+            "server_id": ID, "executor_id": ID, **CONNECTION,
+            "request_id": ID,
+        }, ("server_id", "executor_id", *CONNECTION, "request_id")),
+        frame("connection.renewed", {
+            "server_id": ID, "executor_id": ID, **CONNECTION,
+            "request_id": ID,
+            "expires_in": {"type": "integer", "minimum": 1, "maximum": 600},
+            "binding_ids": {"type": "array", "items": ID, "maxItems": 256, "uniqueItems": True},
+        }, ("server_id", "executor_id", *CONNECTION, "request_id", "expires_in", "binding_ids")),
         frame("heartbeat", {
             "server_id": ID, "executor_id": ID, **CONNECTION,
         }, ("server_id", "executor_id", *CONNECTION)),
@@ -365,6 +377,11 @@ def build_schema() -> dict:
                                    "maxLength": 256},
         }, ("server_id", "executor_id", *CONNECTION, "code", "reason")),
     ]
+    hello = next(item for item in frames if item['title'] == 'hello')
+    hello['dependentRequired'] = {
+        'resume_connection_id': ['resume_connection_generation'],
+        'resume_connection_generation': ['resume_connection_id'],
+    }
     approval_request = next(item for item in frames if item["title"] == "approval.request")
     approval_request["allOf"] = [{
         "if": {"properties": {"kind": {"enum": ["native_approval", "native_input"]}}},

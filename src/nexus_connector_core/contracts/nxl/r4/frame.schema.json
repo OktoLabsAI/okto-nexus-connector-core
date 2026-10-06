@@ -4,6 +4,14 @@
   "oneOf": [
     {
       "additionalProperties": false,
+      "dependentRequired": {
+        "resume_connection_generation": [
+          "resume_connection_id"
+        ],
+        "resume_connection_id": [
+          "resume_connection_generation"
+        ]
+      },
       "properties": {
         "contract_revision": {
           "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
@@ -38,6 +46,16 @@
         },
         "protocol_major": {
           "const": 1
+        },
+        "resume_connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resume_connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
         },
         "server_id": {
           "maxLength": 160,
@@ -124,6 +142,9 @@
         },
         "protocol_major": {
           "const": 1
+        },
+        "resumed": {
+          "type": "boolean"
         },
         "server_id": {
           "maxLength": 160,
@@ -2683,6 +2704,125 @@
         "request_hash"
       ],
       "title": "approval.decision",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "connection.renew"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "connection_id",
+        "connection_generation",
+        "request_id"
+      ],
+      "title": "connection.renew",
+      "type": "object"
+    },
+    {
+      "additionalProperties": false,
+      "properties": {
+        "binding_ids": {
+          "items": {
+            "maxLength": 160,
+            "minLength": 1,
+            "type": "string"
+          },
+          "maxItems": 256,
+          "type": "array",
+          "uniqueItems": true
+        },
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "executor_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "expires_in": {
+          "maximum": 600,
+          "minimum": 1,
+          "type": "integer"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "server_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "type": {
+          "const": "connection.renewed"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "server_id",
+        "executor_id",
+        "connection_id",
+        "connection_generation",
+        "request_id",
+        "expires_in",
+        "binding_ids"
+      ],
+      "title": "connection.renewed",
       "type": "object"
     },
     {
