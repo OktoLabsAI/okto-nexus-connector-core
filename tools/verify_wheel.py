@@ -142,7 +142,9 @@ guardian_globals = runpy.run_path(str(guardian))
 assert guardian_globals['load_abi']() is macos_abi
 assert macos_abi.__name__ == 'nexus_connector_core.native.process.macos_abi'
 from nexus_connector_core import RuntimeCore, LocalRuntimeCore, OperationReceipt, RuntimeEvent, submit_frame_intent_hash
-from nexus_connector_core.native.adapters import codex, pi, claude_code_stream, claude_code_attach
+from nexus_connector_core.native.adapters import codex, pi, claude_code_stream
+from importlib.util import find_spec
+assert find_spec('nexus_connector_core.native.adapters.claude_code_attach') is None
 from nexus_connector_core.native.runtime_bridge import CopiedAdapterFactory
 from nexus_connector_core.native.redaction import NativeSecretRedactor
 from nexus_connector_core.receipt_reducer import receipt_frame, reduce_receipt
@@ -170,7 +172,7 @@ frame = fixtures['frames']['valid'][0]
 assert decode_frame(encode_frame(frame)) == frame
 submit = next(item for item in fixtures['frames']['valid'] if item['type'] == 'operation.submit')
 assert submit_frame_intent_hash(submit) == submit['intent_hash']
-assert len(adapter_specs()) == 4
+assert {spec.adapter_id for spec in adapter_specs()} == {'codex_app_server', 'pi_rpc', 'claude_stream'}
 assert pi_extension_path().is_file()
 assert NativeSecretRedactor().clean('nxs_opaque') == '[REDACTED]'
 receipt = receipt_frame(OperationReceipt(
