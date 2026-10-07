@@ -1,6 +1,8 @@
 # Version and platform compatibility
 
-Current package version: `0.0.3`. This release adds optional global MCP configuration
+Current package version: `0.0.4`. Claude result-only responses retain their final
+text, and stale native decisions have durable no-effect refusals. This release
+retains optional global MCP configuration
 inheritance with scoped credentials, alongside the runtime recovery fixes from
 `0.0.2`. It fixes Codex/Pi process identity capture,
 persists Windows Job container identities for recovery after owner failure, and
