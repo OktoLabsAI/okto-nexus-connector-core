@@ -1,6 +1,8 @@
 # Version and platform compatibility
 
-Current package version: `0.0.2`. This patch fixes Codex/Pi process identity capture,
+Current package version: `0.0.3`. This release adds optional global MCP configuration
+inheritance with scoped credentials, alongside the runtime recovery fixes from
+`0.0.2`. It fixes Codex/Pi process identity capture,
 persists Windows Job container identities for recovery after owner failure, and
 adds opt-in continuous reconciliation after the initial retry budget. Legacy
 records without container identities still require independently verified stop.
