@@ -12,7 +12,7 @@ def test_metadata_is_fixed_and_does_not_import_connectors(monkeypatch):
                         lambda *args, **kwargs: calls.append((args, kwargs)))
     specs = registry.adapter_specs()
     assert {spec.adapter_id for spec in specs} == {
-        "codex_app_server", "pi_rpc", "claude_stream", "claude_attach"}
+        "codex_app_server", "pi_rpc", "claude_stream"}
     assert all(spec.module.startswith(".adapters.") for spec in specs)
     assert calls == []
 
@@ -41,11 +41,13 @@ def test_platform_rejected_before_import_and_known_module_loaded_lazily(monkeypa
 
     monkeypatch.setattr(registry, "import_module", importer)
     with pytest.raises(CoreError, match="NATIVE_PLATFORM_UNSUPPORTED"):
-        registry.load_adapter("claude_attach", platform="win32")
+        registry.load_adapter("pi_rpc", platform="freebsd14")
     assert calls == []
     assert registry.load_adapter("pi_rpc", platform=sys.platform) is StubModule.PiRpcConnector
     assert calls == [(".adapters.pi", "nexus_connector_core.native")]
-    assert registry.adapter_spec("claude_attach", platform="freebsd14").mode == "attach"
+    for platform in ("win32", "linux", "darwin", "freebsd14"):
+        with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
+            registry.load_adapter("claude_attach", platform=platform)
 
 
 def test_missing_fixed_adapter_class_is_typed_unqualified(monkeypatch):

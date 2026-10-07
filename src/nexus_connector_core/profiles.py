@@ -29,10 +29,8 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
             len(intent.model) > 200):
         raise CoreError("VALIDATION_ERROR", "prepare")
     if intent.mode == "attach":
-        # PC12: attach is a distinct lifecycle. The public types exist
-        # (AttachTarget/AttachPolicy), but the substrate qualification is
-        # not demonstrated in any supported environment - preparing an
-        # attach launch fails prescriptively instead of via a flag.
+        # External-session attach was removed. Refuse historical requests
+        # before any launch or process access.
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare",
                         retry_safe=True)
     if intent.mode != "managed":

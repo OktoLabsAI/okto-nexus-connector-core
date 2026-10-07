@@ -50,7 +50,7 @@ making Core depend on either application's database or transport.
 | --- | --- |
 | Discovery & selection | Trusted-path/explicit candidate selection, bounded PE/ELF/Mach-O architecture parsing, sealed read-only version probes (`--version`-class, secret-free) |
 | Profiles & launch | Typed argv realization (spaces/Unicode safe, no shell), workspace/root validation, drift revalidation between prepare and open, composite Pi Node+CLI fingerprinting |
-| Managed adapters | Codex app-server (JSON-RPC), Pi RPC (JSONL over stdio), Claude Code stream-json, Claude attach (external, POSIX substrate) |
+| Managed adapters | Codex app-server (JSON-RPC), Pi RPC (JSONL over stdio), Claude Code stream-json |
 | Process ownership | Windows Job Objects and Linux guardian/pidfd backends, birth records and read-only observation, kill-on-close containment, per-tree process limits and census |
 | Journal & kernel | SQLite technical journal (admissions, effect markers, receipts, events, ACK/compaction, quotas, hard WAL bound), minimal effect-admission kernel with honest uncertainty |
 | Session governance | Durable session-ID claims with opening generations, durable lease fence (journal CAS), lease renewal/revocation, inspect/reconcile |
@@ -74,7 +74,7 @@ making Core depend on either application's database or transport.
 ```text
 src/nexus_connector_core/
   contracts/nxl/v1/     # generated schema bundle, manifest, fixtures, vectors
-  native/adapters/      # codex.py, pi.py, claude_code_stream.py, claude_code_attach.py
+  native/adapters/      # codex.py, pi.py, claude_code_stream.py
   native/process/       # owned process backends, birth records, census
   journal.py kernel.py  # SQLite technical journal + effect-admission kernel
   runtime.py            # LocalRuntimeCore: the async public facade
@@ -106,7 +106,6 @@ version string or synthetic peer grants nothing. The allowlist lives in
 | `codex_app_server` | 0.157.0, win32/x86_64, exact `codex.exe` fingerprint | steer + interrupt with expected native turn ID; concurrent threads verified | `item/commandExecution/requestApproval` (decline + tardy refusal verified) |
 | `pi_rpc` | 0.87.1, win32/x86_64, composite Node+CLI fingerprint | ID-less queued steer (next-turn-boundary) + abort; settle-before-ack wire order verified | extension UI auto-cancel contract (see docs/adapters.md) |
 | `claude_stream` | 2.1.282, win32/x86_64, exact `claude.exe` fingerprint | interrupt while generating (no steer vocabulary — refused honestly) | `can_use_tool/Write` (forged-kind refusal + decline verified) |
-| `claude_attach` | — (unqualified; POSIX substrate) | attach lifecycle gated | — |
 
 All qualification evidence (real campaigns, contained peers, fault cuts)
 is recorded under `plans/implementation/evidence/`; the acceptance matrix

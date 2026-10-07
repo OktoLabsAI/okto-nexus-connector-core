@@ -17,8 +17,8 @@ Three concepts stay separated (the plan's contract):
    canonical identity.
 
 ``READY``-style states do NOT appear here: a registered adapter is not
-an available one, and an installed one is not a qualified one. The
-attach entry is exposed as ``support_status="registered_unqualified"``.
+an available one, and an installed one is not a qualified one. Only managed
+connections are supported; external-session attach has been removed.
 """
 
 from __future__ import annotations
@@ -38,16 +38,12 @@ _SUPPORT_STATUS = {
     "codex_app_server": "managed_supported",
     "pi_rpc": "managed_supported",
     "claude_stream": "managed_supported",
-    # attach: registered for type completeness, NOT qualified (the
-    # standing attach gap); never eligible merely by existing.
-    "claude_attach": "registered_unqualified",
 }
 
 _DISPLAY_NAMES = {
     "codex_app_server": "Codex (app-server)",
     "pi_rpc": "Pi (Node RPC)",
     "claude_stream": "Claude Code (stream)",
-    "claude_attach": "Claude Code (attach)",
 }
 
 _HARNESS_FAMILIES = {
