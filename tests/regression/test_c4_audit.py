@@ -1,4 +1,4 @@
-"""C4 audit seeds — reaudit findings T01-T07 against 8677145.
+"""C4 audit seeds â€” reaudit findings T01-T07 against 8677145.
 
 Mirrors FIX_UPDATE_PLAN (01_RELATORIO_REAVALIACAO / 03_MATRIZ_ACEITE,
 cases C4T-01..C4T-10). Each seed starts authorized, crosses a real wait,
@@ -551,19 +551,21 @@ def test_t06_present_production_dependencies_are_covered(tmp_path, relation):
     node, package, helper = _pi_optional_fixture(tmp_path, relation)
     base = pi_build_identity(node, package)
     helper_index = helper / "index.js"
+    # Process startup on shared Windows runners can exceed ten seconds.
+    # This checks dependency identity, not launch latency; keep a bounded wait.
     # Real Node proves the layout loads this file (audit's v1 -> v2).
     if NODE:
         script = package / "dist" / "bundle" / "cli.js"
         out1 = subprocess.run(
             [NODE, str(script)], capture_output=True, text=True,
-            cwd=str(package), timeout=10).stdout.strip()
+            cwd=str(package), timeout=60, check=True).stdout.strip()
         assert out1 == "v1"
     helper_index.write_bytes(b'module.exports = "v2";')
     if NODE:
         script = package / "dist" / "bundle" / "cli.js"
         out2 = subprocess.run(
             [NODE, str(script)], capture_output=True, text=True,
-            cwd=str(package), timeout=10).stdout.strip()
+            cwd=str(package), timeout=60, check=True).stdout.strip()
         assert out2 == "v2", "fixture must actually load the helper"
     changed = pi_build_identity(node, package)
     assert changed != base, (
