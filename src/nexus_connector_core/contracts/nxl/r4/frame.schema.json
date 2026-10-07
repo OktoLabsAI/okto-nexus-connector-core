@@ -1289,6 +1289,13 @@
                       "minLength": 1,
                       "type": "string"
                     },
+                    "inherit_global_mcps": {
+                      "enum": [
+                        "enabled",
+                        "disabled"
+                      ],
+                      "type": "string"
+                    },
                     "permission_mode": {
                       "maxLength": 200,
                       "minLength": 1,

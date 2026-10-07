@@ -47,7 +47,8 @@ def test_claude_uses_observed_cli_choices_not_latest_documentation():
 ''')
     assert result['parameters'][1]['values'] == ['low','medium','high']
     assert result['parameters'][2]['values'] == ['default','auto']
-    assert all(p['availability'] == 'observed' for p in result['parameters'])
+    assert all(p['availability'] == 'observed' for p in result['parameters'] if p['name'] != 'inherit_global_mcps')
+    assert next(p for p in result['parameters'] if p['name'] == 'inherit_global_mcps')['availability'] == 'core_contract'
 
 
 @pytest.mark.parametrize('kwargs', [

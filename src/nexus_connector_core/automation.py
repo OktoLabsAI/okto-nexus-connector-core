@@ -66,12 +66,14 @@ class RuntimeAutomation:
         self.policy = policy
 
     async def recover(self, *, attempt, stop, enabled=None, pending=None,
-                      exhausted=None, wait=None):
+                      exhausted=None, wait=None, continuous=False):
         """Retry an unsuccessful initial reconciliation with bounded backoff.
 
         Disabled/exhausted supervisors stay observable until stopped. Toggling
         recovery off then on explicitly opens a new retry budget. Independent
         pending deliveries can progress even while this owner is blocked.
+        Hosts opting into continuous recovery keep checking at the capped
+        backoff after the initial budget, without replaying native operations.
         """
         pause = wait or (lambda delay: _wait(stop, delay))
         async def is_enabled():
@@ -92,7 +94,7 @@ class RuntimeAutomation:
                 await pending()
             if stop.is_set():
                 break
-            if attempts < self.policy.recovery_attempts:
+            if attempts < self.policy.recovery_attempts or continuous:
                 attempts += 1
                 if await attempt():
                     return True

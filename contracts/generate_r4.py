@@ -71,7 +71,7 @@ OPEN = obj({
         "properties": {
             name: {"type": "string", "minLength": 1, "maxLength": 200}
             for name in ("approval_policy", "effort", "permission_mode", "provider", "sandbox", "user_input")
-        },
+        } | {"inherit_global_mcps": {"type": "string", "enum": ["enabled", "disabled"]}},
     },
 }, ("adapter_id", "candidate_ref", "inventory_revision", "realization_ref",
     "realization_revision", "profile_revision", "mode"))

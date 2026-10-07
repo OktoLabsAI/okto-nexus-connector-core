@@ -11,6 +11,7 @@ imports neither application.
 - Distribution `okto-nexus-connector-core`, import `nexus_connector_core`,
   Python ≥ 3.11, src-layout, `py.typed`, pure-Python runtime dependencies
   (`rfc8785`, `jsonschema`).
+- Current version: `0.0.2`.
 - First release version: `0.0.1`. Importing the
   package opens no socket, spawns no thread/process, starts no event loop
   and reads no credentials.
@@ -250,3 +251,8 @@ Elastic License 2.0 with the Okto Labs SaaS/Branding Addendum —
 Copyright 2026 Okto Labs. The full [LICENSE](LICENSE) is identical to
 the Okto Nexus license and is authoritative. Commercial clarification:
 dev@oktolabs.ai. See [CONTRIBUTING.md](CONTRIBUTING.md) for branch and review rules.
+
+## Global harness MCPs
+
+See [MCP inheritance](docs/mcp-inheritance.md) for host-local MCP configuration,
+agent/global policy inheritance and version requirements.

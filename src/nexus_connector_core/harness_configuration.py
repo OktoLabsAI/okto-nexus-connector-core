@@ -18,10 +18,12 @@ _CHOICES = {
         'effort': ('none', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max', 'ultra'),
         'approval_policy': ('on-request', 'never', 'untrusted', 'on-failure'),
         'sandbox': ('read-only', 'workspace-write', 'danger-full-access'),
-        'user_input': ('enabled', 'disabled')},
+        'user_input': ('enabled', 'disabled'),
+        'inherit_global_mcps': ('enabled', 'disabled')},
     'claude_stream': {
         'effort': ('low', 'medium', 'high', 'xhigh', 'max'),
-        'permission_mode': ('default', 'manual', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions')},
+        'permission_mode': ('default', 'manual', 'acceptEdits', 'plan', 'auto', 'dontAsk', 'bypassPermissions'),
+        'inherit_global_mcps': ('enabled', 'disabled')},
     'pi_rpc': {'effort': ('off', 'minimal', 'low', 'medium', 'high', 'xhigh', 'max'), 'provider': ()},
 }
 
@@ -255,6 +257,11 @@ def discover_harness_configuration(adapter_id, *, version=None, candidate_ref=No
             seen_fields.add(name)
             field.update(type=kind, values=list(dict.fromkeys(values)), availability='observed')
 
+    if adapter_id in ('codex_app_server', 'claude_stream'):
+        fields.append(dict(name='inherit_global_mcps', label='Include global harness MCPs',
+            type='enum', native_parameter='core.mcp_inheritance', core_applies=True,
+            scope='session', default=None, default_source='nexus_policy',
+            values=['enabled', 'disabled'], availability='core_contract'))
     value = dict(schema_version=CONFIGURATION_SCHEMA_VERSION, adapter_id=adapter_id,
                  version=version, candidate_ref=candidate_ref, parameters=fields,
                  models=models, constraints=constraints, discovery_methods=discovery,

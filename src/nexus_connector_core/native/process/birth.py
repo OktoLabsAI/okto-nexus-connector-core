@@ -65,7 +65,7 @@ def snapshot_owned_process_birth(process: subprocess.Popen) -> ProcessBirthEvide
 
         return ProcessBirthEvidence(
             "win32", process.pid, _windows_birth_token(process._handle),
-            "windows_job")
+            "windows_job", process._job_name)
 
     if sys.platform == "linux":
         from .linux_process import OwnedLinuxPopen

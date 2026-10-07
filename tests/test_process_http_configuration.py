@@ -29,11 +29,15 @@ def prepared(adapter, root=None):
                           identity,'profile',intent.auth_refs)
 
 
+@pytest.mark.parametrize('inherit', [False, True])
 @pytest.mark.parametrize('adapter',['codex_app_server','claude_stream'])
-def test_factory_keeps_home_and_supplies_only_environment_reference_in_argv(adapter,tmp_path,monkeypatch):
+def test_factory_keeps_home_and_supplies_only_environment_reference_in_argv(adapter,tmp_path,monkeypatch,inherit):
     import nexus_connector_core.native.runtime_bridge as bridge
     item=template(adapter)
     launch=prepared(adapter, tmp_path)
+    if inherit:
+        from nexus_connector_core import HarnessSettings
+        launch=replace(launch,intent=replace(launch.intent,harness_settings=HarnessSettings(inherit_global_mcps='enabled')))
     seen=[]
     class Resolver:
         async def resolve(self,ref):
@@ -68,11 +72,12 @@ def test_factory_keeps_home_and_supplies_only_environment_reference_in_argv(adap
         assert [p.name for p in tmp_path.iterdir()] == ['.codex']
         assert not list((tmp_path / '.codex').iterdir())
         assert options['env']['CODEX_HOME'] == str((tmp_path / '.codex').resolve())
+        assert argv[-1].startswith('mcp_servers=')
         entry=tomllib.loads(argv[-1])['mcp_servers']['nexus_session']
         assert entry['bearer_token_env_var']==item.bearer_env_name
     else:
         assert not list(tmp_path.iterdir())
-        assert argv[-3]=='--strict-mcp-config'
+        assert ('--strict-mcp-config' in argv) is (not inherit)
         entry=json.loads(argv[-1])['mcpServers']['nexus_session']
         assert entry['headers']['Authorization']=='Bearer ${'+item.bearer_env_name+'}'
     assert entry['url']=='https://nexus.test/mcp'

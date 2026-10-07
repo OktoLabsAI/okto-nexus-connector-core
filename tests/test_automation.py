@@ -33,6 +33,21 @@ def test_recovery_retries_proofs_and_drains_only_host_pending_work():
     asyncio.run(run())
 
 
+def test_continuous_recovery_observes_late_resolution_without_operator_action():
+    async def scenario():
+        stop = asyncio.Event()
+        attempts, delays = [], []
+        async def attempt():
+            attempts.append(True)
+            return len(attempts) == 7
+        async def pause(delay):
+            delays.append(delay)
+        assert await RuntimeAutomation().recover(attempt=attempt, stop=stop, wait=pause, continuous=True)
+        assert len(attempts) == 7
+        assert delays[-3:] == [30, 30, 30]
+    asyncio.run(scenario())
+
+
 def test_exhaustion_preserves_independent_deliveries_without_extra_attempts():
     async def run():
         stop, attempts, pending_count, notices = asyncio.Event(), 0, 0, 0

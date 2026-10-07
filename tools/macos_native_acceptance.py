@@ -185,9 +185,18 @@ def wait_census(backend, process, count, timeout=8.0):
     return backend['owned_tree_census'](process)
 
 
-def label_registered(backend, label):
-    query = backend['launchctl']('print', f'gui/{os.getuid()}/{label}')
-    return query.returncode == 0
+def label_registered(backend, label, timeout=5.0):
+    # launchd may return from bootout before its service registration disappears.
+    # Bound that observation separately from the native tree-stop proof.
+    deadline = time.monotonic() + timeout
+    while True:
+        query = backend['launchctl']('print', f'gui/{os.getuid()}/{label}')
+        if query.returncode != 0:
+            return False
+        if time.monotonic() >= deadline:
+            print(f'launchd label still registered: {query.stdout}', file=sys.stderr)
+            return True
+        time.sleep(0.05)
 
 
 def fd_count():

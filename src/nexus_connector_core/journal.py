@@ -141,6 +141,11 @@ def validate_process_birth(evidence: ProcessBirthEvidence) -> None:
             type(evidence.birth_token) is not str or
             not 1 <= len(evidence.birth_token) <= 160):
         raise ValueError("invalid owned process birth evidence")
+    if evidence.container_id is not None:
+        import re
+        if (evidence.platform != 'win32' or type(evidence.container_id) is not str or
+                re.fullmatch(r'Global\\nexus-core-[0-9a-f]{32}', evidence.container_id) is None):
+            raise ValueError("invalid owned process container")
 
 
 def _sqlite_full(error: BaseException) -> bool:
@@ -483,6 +488,14 @@ class SQLiteJournal:
                     (key.server_id, key.executor_id, session_id)).fetchone()
                 identity = (evidence.platform, evidence.pid,
                             evidence.birth_token, evidence.containment)
+                db.execute('CREATE TABLE IF NOT EXISTS process_containers ('
+                    'server_id TEXT, executor_id TEXT, session_id TEXT, container_id TEXT NOT NULL, '
+                    'PRIMARY KEY(server_id,executor_id,session_id))')
+                container = db.execute('SELECT container_id FROM process_containers '
+                    'WHERE server_id=? AND executor_id=? AND session_id=?',
+                    (key.server_id, key.executor_id, session_id)).fetchone()
+                if old is not None and (container[0] if container else None) != evidence.container_id:
+                    raise CoreError("PROCESS_BIRTH_CONFLICT", "process_birth")
                 if old is not None and tuple(old) != identity:
                     raise CoreError("PROCESS_BIRTH_CONFLICT", "process_birth")
                 if old is None:
@@ -494,6 +507,9 @@ class SQLiteJournal:
                         "INSERT INTO process_births VALUES (?,?,?,?,?,?,?,?)",
                         (key.server_id, key.executor_id, session_id,
                          key.operation_id, *identity))
+                    if evidence.container_id is not None:
+                        db.execute('INSERT INTO process_containers VALUES(?,?,?,?)',
+                            (key.server_id,key.executor_id,session_id,evidence.container_id))
                 db.execute("COMMIT")
             except BaseException as exc:
                 self._rollback_if_active(db)
@@ -515,8 +531,13 @@ class SQLiteJournal:
                  session.session_id)).fetchone()
             if row is None:
                 return None
+            container = None
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='process_containers'").fetchone():
+                container = db.execute('SELECT container_id FROM process_containers '
+                    'WHERE server_id=? AND executor_id=? AND session_id=?',
+                    (session.server_id,session.executor_id,session.session_id)).fetchone()
             return ProcessBirthRecord(
-                session, row[0], ProcessBirthEvidence(*row[1:]))
+                session, row[0], ProcessBirthEvidence(*row[1:], container_id=container[0] if container else None))
         return await self._run(_worker_impl, urgent=False)
 
     async def get_session_lease(self, session: SessionKey) -> SessionLeaseState | None:
