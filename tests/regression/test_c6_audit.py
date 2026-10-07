@@ -1,4 +1,4 @@
-"""C6 audit seeds — reaudit findings V01-V03 (+M01) against df3baaf.
+"""C6 audit seeds â€” reaudit findings V01-V03 (+M01) against df3baaf.
 
 Mirrors FIX_UPDATE_PLAN (01_RELATORIO_REAVALIACAO / 03_MATRIZ_ACEITE).
 Six new seeds fail on the audited code; M01 tightens the original C5 u07
@@ -201,10 +201,12 @@ def test_v02_late_open_force_is_independent_of_hung_close(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
         native = _HungCloseNative()
+        open_entered = asyncio.Event()
 
         class _Factory:
             async def open(self, prepared, session_id, auth, *,
                            stream_epoch):
+                open_entered.set()
                 await asyncio.to_thread(native.start_gate.wait, 5)
                 return native
 
@@ -227,7 +229,8 @@ def test_v02_late_open_force_is_independent_of_hung_close(tmp_path):
             opening = asyncio.create_task(runtime.open(
                 OpenOperation("open-op", "session", "epoch", prepared),
                 auth))
-            await asyncio.sleep(0.2)
+            # Cancel only once the native factory actually owns the opening.
+            await asyncio.wait_for(open_entered.wait(), timeout=5)
             opening.cancel()
             try:
                 await opening
