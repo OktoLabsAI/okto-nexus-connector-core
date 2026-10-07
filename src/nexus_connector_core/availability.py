@@ -266,11 +266,8 @@ def evaluate_runtime_availability(
         if host not in descriptor.implementation_platforms:
             reasons.append(f"platform_not_implemented:{host}")
 
-        # 2. Attach is registered, never qualified by existing.
-        if descriptor.connection_mode == "attach":
-            reasons.append("attach_not_qualified")
-            qualification = "unqualified"
-        elif (candidate.version is not None
+        # 2. Qualify the managed installation.
+        if (candidate.version is not None
                 and candidate.architecture is not None):
             qualified = qualified_build(
                 descriptor.native_kind, candidate.version, host,
@@ -355,7 +352,7 @@ def evaluate_runtime_availability(
 
 _STATE_PREFIX = {
     UNSUPPORTED_PLATFORM: "platform_not_implemented:",
-    UNQUALIFIED_BUILD: ("attach_not_qualified", "build_not_qualified"),
+    UNQUALIFIED_BUILD: ("build_not_qualified",),
     NOT_PROBED: ("no_build_observation",),
     CONTAINMENT_UNAVAILABLE: ("containment_unavailable:",
                               "containment_unverified:"),

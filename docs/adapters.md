@@ -6,7 +6,7 @@ This page records migration history; current qualification gates live in
 documented in [Harness configuration discovery](harness-configuration.md).
 
 Core owns adapted copies of `codex.py`, `pi.py`,
-`claude_code_stream.py` and `claude_code_attach.py` under
+`claude_code_stream.py` under
 `src/nexus_connector_core/native/adapters/`. It also owns the neutral helper
 and process backend code they use. Runtime imports resolve within this wheel;
 there is no import, editable dependency or runtime file lookup into the
@@ -15,7 +15,7 @@ adaptation decisions and deliberately excluded application domain/ports are
 recorded in the [extraction inventory](../plans/implementation/evidence/extraction-provenance-2026-09-25.md).
 
 The static Core registry maps only `codex_app_server`, `pi_rpc`,
-`claude_stream` and `claude_attach` to classes and allowed platforms. Peer
+`claude_stream` to classes and allowed platforms. Peer
 data may select an ID, never a module path or factory. Metadata inspection
 does not import the adapter module; the selected class loads lazily after
 registry/platform checks. Exact native qualification is still empty, so

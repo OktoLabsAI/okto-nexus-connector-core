@@ -24,7 +24,7 @@ resolution remain on the producing host.
 Core `0.2.24.dev0` publishes `control_targeting` per catalog runtime and
 `qualified_control_actions` per candidate. Codex steer requires a native turn
 ID; Pi steer forbids it and reports `NEXT_TURN_BOUNDARY`. Claude stream does
-not support steer; attach remains registered and unqualified. Control facts
+not support steer; external-session attach is not supported. Control facts
 come from the same registry used by runtime validation. Qualification uses
 the exact build and execution platform; an unknown build has no qualified
 control actions even when its adapter implements the action.

@@ -50,8 +50,8 @@ Record the native protocol before implementing it:
 
 Existing ID suffixes record the transport/lifetime mode: `_rpc` for
 request/response RPC over stdio, `_stream` for stream-json protocols,
-`_app_server` for long-lived app-server processes, and `_attach` for
-attaching to a process Core does not own. Pick the closest mode. The
+`_app_server` for long-lived app-server processes. Only managed
+process connections are supported. The
 `adapter_id` → `native_kind` pair is declared once in `AdapterSpec` and
 constrains the `harness_kind` values accepted by
 [`adapter_types.py`](../src/nexus_connector_core/native/adapter_types.py).

@@ -9,15 +9,15 @@ from pathlib import Path
 
 import rfc8785
 
-# C9/C01: the adapter enums derive from the SINGLE registry source -
-# never a second hand-maintained list. The generated JSON contains
-# copies of the values; it is not another edited authority.
+# Active adapter enums derive from the registry. This frozen wire revision
+# also retains its retired identifier for historical record decoding only.
+# Schema acceptance never grants execution; the native registry rejects it.
 _SRC = Path(__file__).resolve().parents[1] / "src"
 if str(_SRC) not in sys.path:
     sys.path.insert(0, str(_SRC))
 from nexus_connector_core.native.registry import adapter_specs  # noqa: E402
 
-ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()]
+ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()] + ["claude_attach"]
 
 REVISION = "nxl-1-agent-centric-http-only-2026-09-25-r3"
 DESTINATION = Path(__file__).resolve().parents[1] / "src/nexus_connector_core/contracts/nxl/v1"

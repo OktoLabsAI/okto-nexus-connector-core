@@ -149,24 +149,13 @@ def test_two_candidates_same_family_never_merge(monkeypatch):
     # No selection by display_name: identity is the opaque ref.
 
 
-def test_attach_is_never_ready_and_not_discovered():
-    # On a platform the attach IMPLEMENTATION covers, registration
-    # still never qualifies it merely by existing.
-    report = evaluate_runtime_availability(
-        [_candidate(adapter_id="claude_attach", version="1.0",
-                    architecture="x86_64")],
-        platform="linux")
-    row = report.availability[0]
-    assert row.state == UNQUALIFIED_BUILD
-    assert "attach_not_qualified" in row.reasons
-    assert row.connection_mode == "attach"
-    # On an UNCOVERED execution platform the restriction is even
-    # stronger - and still never READY.
-    win = evaluate_runtime_availability(
-        [_candidate(adapter_id="claude_attach", version="1.0",
-                    architecture="x86_64")],
-        platform="win32")
-    assert win.availability[0].state == UNSUPPORTED_PLATFORM
+@pytest.mark.parametrize("platform", ["linux", "win32", "darwin"])
+def test_removed_attach_is_rejected(platform):
+    with pytest.raises(CoreError) as error:
+        evaluate_runtime_availability(
+            [_candidate(adapter_id="claude_attach", version="1.0", architecture="x86_64")],
+            platform=platform)
+    assert error.value.code == "CAPABILITY_UNSUPPORTED"
 
 
 def test_missing_installations_stay_visible():

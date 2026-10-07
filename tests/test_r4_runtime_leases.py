@@ -203,8 +203,11 @@ def test_expired_r4_negative_reply_preserves_request_identity_and_revocation(tmp
             with pytest.raises(CoreError, match='AGENT_REVOKED'):
                 runtime.r4_operation_context(frame, connection_id='connection', connection_generation=1)
             assert len(factory.native.replies) == 1
-            for operation_id in ('positive','negative-with-content','wrong-turn'):
+            for operation_id in ('positive','negative-with-content'):
                 assert await journal.get_receipt(OperationKey('srv','exe',operation_id)) is None
+            refused = await journal.get_receipt(OperationKey('srv','exe','wrong-turn'))
+            assert refused.stage == 'FAILED' and refused.retry_safe and not refused.possible_effect
+            assert refused.error_code == 'NATIVE_REQUEST_NOT_OBSERVED'
         finally:
             await runtime.shutdown(ShutdownPolicy(0, 0))
             journal.close()

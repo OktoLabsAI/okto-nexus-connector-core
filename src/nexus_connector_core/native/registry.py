@@ -44,12 +44,7 @@ _SPECS = {
         frozenset({"win32", "linux", "darwin"}),
         (ControlTargeting("turn.steer", False, "forbidden", False),
          ControlTargeting("turn.interrupt", True, "forbidden", True))),
-    "claude_attach": AdapterSpec(
-        "claude_attach", "claude_code", ".adapters.claude_code_attach",
-        "ClaudeCodeAttachConnector", "attach", None,
-        frozenset({"linux", "darwin", "freebsd"}),
-        (ControlTargeting("turn.steer", False, "forbidden", False),
-         ControlTargeting("turn.interrupt", False, "forbidden", False))),
+
 }
 
 

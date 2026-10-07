@@ -24,8 +24,7 @@ def test_public_catalog_states_targeting_without_granting_build_readiness():
     assert pi.native_turn_id == "forbidden" and pi.requires_active_run
     assert pi.steer_timing == "NEXT_TURN_BOUNDARY"
     assert not get_control_targeting("claude_stream", "turn.steer").supported
-    assert by_id["claude_attach"].support_status == "registered_unqualified"
-    assert all(not c.supported for c in by_id["claude_attach"].control_targeting)
+    assert "claude_attach" not in by_id
     for descriptor in catalog.runtimes:
         for contract in descriptor.control_targeting:
             assert get_control_targeting(descriptor.adapter_id, contract.action) == contract

@@ -2196,8 +2196,11 @@ def test_native_approval_is_authorized_deduped_and_journals_no_answer(tmp_path):
                 await runtime.decide_native_approval(
                     NativeApprovalOperation("unobserved", "session", request,
                                             "decline"), authority)
-            assert await journal.get_receipt(
-                OperationKey("srv", "exe", "unobserved")) is None
+            refused = await journal.get_receipt(
+                OperationKey("srv", "exe", "unobserved"))
+            assert refused.stage == "FAILED" and refused.retry_safe
+            assert not refused.possible_effect
+            assert refused.error_code == "NATIVE_REQUEST_NOT_OBSERVED"
             await _emit_durable_native_request(runtime, factory.native, request)
             altered = {**request, "params": {**request["params"],
                                             "itemId": "other"}}
@@ -2205,8 +2208,11 @@ def test_native_approval_is_authorized_deduped_and_journals_no_answer(tmp_path):
                 await runtime.decide_native_approval(
                     NativeApprovalOperation("altered", "session", altered,
                                             "decline"), authority)
-            assert await journal.get_receipt(
-                OperationKey("srv", "exe", "altered")) is None
+            refused = await journal.get_receipt(
+                OperationKey("srv", "exe", "altered"))
+            assert refused.stage == "FAILED" and refused.retry_safe
+            assert not refused.possible_effect
+            assert refused.error_code == "NATIVE_REQUEST_NOT_OBSERVED"
             decision = NativeApprovalOperation("decision", "session", request,
                                                "decline")
             receipt = await runtime.decide_native_approval(decision, authority)
@@ -2217,8 +2223,11 @@ def test_native_approval_is_authorized_deduped_and_journals_no_answer(tmp_path):
                 await runtime.decide_native_approval(
                     NativeApprovalOperation("second-decision", "session",
                                             request, "decline"), authority)
-            assert await journal.get_receipt(
-                OperationKey("srv", "exe", "second-decision")) is None
+            refused = await journal.get_receipt(
+                OperationKey("srv", "exe", "second-decision"))
+            assert refused.stage == "FAILED" and refused.retry_safe
+            assert not refused.possible_effect
+            assert refused.error_code == "NATIVE_REQUEST_NOT_OBSERVED"
             with pytest.raises(CoreError, match="OPERATION_CONFLICT"):
                 await runtime.decide_native_approval(
                     replace(decision, decision="accept"), authority)
@@ -2310,8 +2319,11 @@ def test_native_terminal_forgets_pending_approval_before_decision(tmp_path):
                 await runtime.decide_native_approval(
                     NativeApprovalOperation("late", "session", request,
                                             "decline"), authority)
-            assert await journal.get_receipt(
-                OperationKey("srv", "exe", "late")) is None
+            refused = await journal.get_receipt(
+                OperationKey("srv", "exe", "late"))
+            assert refused.stage == "FAILED" and refused.retry_safe
+            assert not refused.possible_effect
+            assert refused.error_code == "NATIVE_REQUEST_NOT_OBSERVED"
         finally:
             await runtime.shutdown(ShutdownPolicy(0.01, 0.01))
             journal.close()
@@ -2363,8 +2375,11 @@ def test_native_approval_stale_refusal_and_write_failure_are_distinct(tmp_path):
                 await runtime.decide_native_approval(
                     NativeApprovalOperation("after-uncertain", "session",
                                             request, "decline"), authority)
-            assert await journal.get_receipt(
-                OperationKey("srv", "exe", "after-uncertain")) is None
+            refused = await journal.get_receipt(
+                OperationKey("srv", "exe", "after-uncertain"))
+            assert refused.stage == "FAILED" and refused.retry_safe
+            assert not refused.possible_effect
+            assert refused.error_code == "NATIVE_REQUEST_NOT_OBSERVED"
         finally:
             await runtime.shutdown(ShutdownPolicy(0.01, 0.01))
             journal.close()

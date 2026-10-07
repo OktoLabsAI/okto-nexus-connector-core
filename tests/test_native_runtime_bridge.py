@@ -367,8 +367,11 @@ def test_codex_peer_approval_decision_is_durable_authorized_and_correlated(
                     NativeApprovalOperation("late", "session", request,
                                             decision, response), authority)
             assert stale.value.retry_safe and not stale.value.possible_effect
-            assert await journal.get_receipt(
-                OperationKey("srv", "exe", "late")) is None
+            refused = await journal.get_receipt(
+                OperationKey("srv", "exe", "late"))
+            assert refused.stage == "FAILED" and refused.retry_safe
+            assert not refused.possible_effect
+            assert refused.error_code == "NATIVE_REQUEST_NOT_OBSERVED"
         finally:
             await runtime.shutdown(ShutdownPolicy(1, 1))
             journal.close()
