@@ -773,8 +773,15 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             if not callable(reply):
                 raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
             if binding.pending_native_requests.get(request_key) != encoded_request:
-                raise CoreError("NATIVE_REQUEST_NOT_OBSERVED", "approval_decide",
-                                retry_safe=True)
+                # The host may have admitted this answer immediately before
+                # the native terminal event removed the request. Persist the
+                # exact no-effect refusal so receipt recovery can settle only
+                # this decision instead of containing a healthy session.
+                async def refuse_stale_request() -> None:
+                    raise EffectNotSent("Native request is no longer pending",
+                                        code="NATIVE_REQUEST_NOT_OBSERVED")
+                return await self._kernel.execute(semantic, context,
+                    refuse_stale_request, containment=kernel_containment)
 
             async def effect() -> None:
                 self._check_r4_context(context, action, operation.session_id,
