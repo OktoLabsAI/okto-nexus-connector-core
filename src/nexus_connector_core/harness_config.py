@@ -157,12 +157,14 @@ def render_codex_toml_fragment(template: HarnessHTTPTemplate) -> str:
             ('default_tools_approval_mode = "approve"\n' if template.always_allow_tools else ''))
 
 
-def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[str, ...]:
+def process_http_arguments(adapter_id: str, templates, approved_refs, *, inherit_global_mcps=False, disabled_mcp_names=()) -> tuple[str, ...]:
     """Render bounded process-only MCP options without bearer material.
 
     The host supplies validated templates, never arbitrary argv or a config
     pathname from an execution request. Existing provider login stays in HOME.
     """
+    if type(inherit_global_mcps) is not bool:
+        raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
     if adapter_id not in ('codex_app_server', 'claude_stream'):
         raise CoreError('CAPABILITY_UNSUPPORTED', 'mcp_client_configuration')
     if type(templates) is not tuple or not 1 <= len(templates) <= 8:
@@ -185,11 +187,20 @@ def process_http_arguments(adapter_id: str, templates, approved_refs) -> tuple[s
             raise CoreError('PROFILE_DRIFT', 'mcp_client_configuration')
         entries[template.entry_name] = template.entry()
     if adapter_id == 'claude_stream':
-        return ('--strict-mcp-config', '--mcp-config',
+        return (*(() if inherit_global_mcps else ('--strict-mcp-config',)), '--mcp-config',
                 json.dumps({'mcpServers': entries}, separators=(',', ':')),
                 *(('--allowedTools', ','.join('mcp__'+t.entry_name+'__*' for t in templates if t.always_allow_tools))
                   if any(t.always_allow_tools for t in templates) else ()))
+    if any(not isinstance(name, str) or not name or len(name) > 256 or any(ord(c) < 32 for c in name)
+           for name in disabled_mcp_names):
+        raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
+    # Codex recursively merges this table with native configuration. Render one
+    # table, including opt-out flags, so arbitrary TOML entry names stay intact
+    # (CLI dotted paths split literal dots and do not unquote path components).
+    combined = ({name: {'enabled': False} for name in disabled_mcp_names if name not in entries}
+                if not inherit_global_mcps else {})
+    combined.update(entries)
     fields = ','.join(json.dumps(name) + '={' + ','.join(
         key + '=' + json.dumps(value) for key, value in entry.items()) + '}'
-        for name, entry in entries.items())
+        for name, entry in combined.items())
     return ('-c', 'mcp_servers={' + fields + '}')

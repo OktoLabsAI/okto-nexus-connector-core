@@ -910,8 +910,10 @@ def test_shutdown_interrupt_refusal_records_safe_failure_and_closes(tmp_path):
                                          context())
         await runtime.open(OpenOperation("open", "session", "epoch", prepared),
                            context())
+        # This verifies the durable refusal receipt and subsequent close, not
+        # sub-100 ms filesystem scheduling on a loaded Windows runner.
         report = await runtime.shutdown(ShutdownPolicy(
-            drain_seconds=0.01, interrupt_seconds=0.1))
+            drain_seconds=0.01, interrupt_seconds=5))
         assert report.session_outcomes[SessionKey("srv", "exe", "session")] == "graceful"
         assert journal._run_sync(lambda db: db.execute(
             "SELECT stage,possible_effect,retry_safe,error_code FROM operations_v2 WHERE operation_id LIKE 'core.internal.shutdown_interrupt.%'"
@@ -1975,6 +1977,9 @@ def test_revocation_does_not_report_success_during_old_native_effect(tmp_path):
             release.set()
             assert (await asyncio.wait_for(pending, timeout=2)).stage == "SUBMITTED"
 
+        # The 50 ms fence above tests a held native effect. Restore the normal
+        # budget before requiring the durable SQLite revocation to complete.
+        runtime._reconnect_fence_seconds = 5.0
         await runtime.revoke_lease(
             session, revoked, expected_connection_generation=3)
         assert (await runtime.inspect(session)).lease_state == "REVOKED"

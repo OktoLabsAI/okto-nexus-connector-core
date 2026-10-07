@@ -189,6 +189,7 @@ class ProcessBirthEvidence:
     pid: int
     birth_token: str
     containment: str
+    container_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -283,6 +284,7 @@ class HarnessSettings:
     sandbox: str | None = None
     permission_mode: str | None = None
     user_input: str | None = None
+    inherit_global_mcps: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

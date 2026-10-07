@@ -29,9 +29,10 @@ class ProcessHTTPEnvironment(Mapping[str, str]):
     Values are immutable and omitted from repr. This object is not a wire DTO
     and is never persisted in a prepared launch or receipt.
     """
-    def __init__(self, values, templates):
+    def __init__(self, values, templates, disabled_mcp_names=()):
         self._values = MappingProxyType(dict(values))
         self.http_templates = tuple(templates)
+        self.disabled_mcp_names = tuple(disabled_mcp_names)
 
     def __getitem__(self, name):
         return self._values[name]
@@ -62,12 +63,22 @@ async def child_environment(
     The returned mapping is for process creation only. Hosts must not put it in
     a receipt, NXL frame, event, log, or central persistence.
     """
+    inherit_mcps = prepared.intent.harness_settings.inherit_global_mcps == 'enabled'
+    if inherit_mcps and (provider_home is None or not trusted_home):
+        raise CoreError('WORKSPACE_UNAVAILABLE', 'mcp_client_configuration',
+                        message='An approved harness configuration directory is required to include global MCPs.')
+    if inherit_mcps and http_templates and not process_http:
+        raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
     if type(process_http) is not bool:
         raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
-    if process_http:
+    # A session config file alone does not suppress workspace MCP sources.
+    # Always carry process-level isolation when injecting managed HTTP tools.
+    render_http = process_http or bool(http_templates)
+    if render_http:
         from .harness_config import process_http_arguments
         http_templates = tuple(http_templates)
-        process_http_arguments(prepared.intent.adapter_id, http_templates, prepared.secret_refs)
+        process_http_arguments(prepared.intent.adapter_id, http_templates, prepared.secret_refs,
+                               inherit_global_mcps=inherit_mcps)
     env = {name: value for name, value in os.environ.items()
            if name.upper() in _ESSENTIALS}
     if provider_home is not None:
@@ -106,6 +117,10 @@ async def child_environment(
                 env["CODEX_HOME"] = str(codex_state.resolve(strict=True))
             except OSError:
                 raise CoreError("WORKSPACE_UNAVAILABLE", "environment") from None
+    if inherit_mcps:
+        import asyncio
+        from .mcp_inheritance import global_mcp_environment
+        env.update(await asyncio.to_thread(global_mcp_environment, prepared.intent.adapter_id, env))
     for name, value in (public_overrides or {}).items():
         _check_name(name)
         _check_value(value)
@@ -135,7 +150,12 @@ async def child_environment(
                 "nxs_" in value or "nxsept_" in value):
             raise CoreError("AGENT_AUTH_REQUIRED", "environment")
         env[name] = value
-    return ProcessHTTPEnvironment(env, http_templates) if process_http else env
+    disabled_mcps = ()
+    if render_http and not inherit_mcps and prepared.intent.adapter_id == 'codex_app_server':
+        import asyncio
+        from .mcp_inheritance import codex_mcp_names
+        disabled_mcps = await asyncio.to_thread(codex_mcp_names, env, prepared.cwd)
+    return ProcessHTTPEnvironment(env, http_templates, disabled_mcps) if render_http else env
 
 
 def _is_default_claude_state(home: Path) -> bool:

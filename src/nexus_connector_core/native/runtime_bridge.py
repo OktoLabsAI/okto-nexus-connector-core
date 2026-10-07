@@ -180,6 +180,8 @@ class CopiedAdapterSession:
         """Historical birth token, only for a Core-owned child container."""
         process = getattr(self._connector, "_proc", None)
         if process is None:
+            process = getattr(getattr(self._connector, "_transport", None), "_proc", None)
+        if process is None:
             return None  # External attach has no Core-owned process.
         return snapshot_owned_process_birth(process)
 
@@ -770,7 +772,9 @@ class CopiedAdapterFactory:
         if isinstance(environment, ProcessHTTPEnvironment):
             templates = environment.http_templates
             command = (*command, *process_http_arguments(
-                prepared.intent.adapter_id, templates, prepared.secret_refs))
+                prepared.intent.adapter_id, templates, prepared.secret_refs,
+                inherit_global_mcps=prepared.intent.harness_settings.inherit_global_mcps == 'enabled',
+                disabled_mcp_names=environment.disabled_mcp_names))
             if any(template.bearer_env_name not in env for template in templates):
                 raise CoreError('PROVIDER_AUTH_REQUIRED', 'mcp_client_configuration')
         _revalidate_launch("environment")
