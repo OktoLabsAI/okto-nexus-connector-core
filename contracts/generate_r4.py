@@ -24,7 +24,9 @@ from nexus_connector_core.native.registry import adapter_specs  # noqa: E402
 from nexus_connector_core.executor_inventory import SNAPSHOT_FORMAT_VERSION  # noqa: E402
 from nexus_connector_core.catalog import CATALOG_FORMAT_VERSION  # noqa: E402
 
-ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()]
+# Retain the retired identifier in this frozen wire revision so historical
+# frames remain readable. The native registry still rejects its execution.
+ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()] + ["claude_attach"]
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REV = {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
 HASH = {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}

@@ -10,7 +10,7 @@ from .models import (
     OperationReceipt,
     OperationKey,
     SessionKey,
-    AttachPolicy, AttachTarget, ClaimedSession,
+    ClaimedSession,
     SessionClaimPage,
     SessionLeaseState,
     OwnedSlotReservation, OwnedSlotState,
@@ -103,7 +103,7 @@ from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.0.3"
+__version__ = "0.0.4"
 
 __all__ = [
     "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",
@@ -132,7 +132,7 @@ __all__ = [
     "r4_event_ack_frame",
     "R4ApprovalProjection", "reduce_r4_approval_request",
     "reduce_r4_approval_decision",
-    "OperationReceipt", "OperationKey", "SessionKey", "AttachPolicy", "AttachTarget", "ClaimedSession", "SessionClaimPage", "SessionLeaseState", "OwnedSlotReservation", "OwnedSlotState", "r4_resource_release_digest", "project_r4_resource_release", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
+    "OperationReceipt", "OperationKey", "SessionKey", "ClaimedSession", "SessionClaimPage", "SessionLeaseState", "OwnedSlotReservation", "OwnedSlotState", "r4_resource_release_digest", "project_r4_resource_release", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
     "InstallationCandidate", "LaunchIntent", "PreparedLaunch",
     "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ReconcileRequest",

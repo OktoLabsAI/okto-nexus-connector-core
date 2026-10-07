@@ -11,7 +11,6 @@ from nexus_connector_core.native.adapter_types import (
     NativeAdapterError,
 )
 from nexus_connector_core.native.adapters.claude_code_stream import ClaudeCodeStreamConnector
-from nexus_connector_core.native.adapters.claude_code_attach import ClaudeCodeAttachConnector
 from nexus_connector_core.native.adapters.pi import PiRpcConnector
 
 
@@ -72,12 +71,3 @@ def test_claude_stream_refuses_unstarted_and_full_queue_before_write():
     assert full.value.details["not_sent"] is True
 
 
-@pytest.mark.skipif(os.name == "nt", reason="Claude attach uses a POSIX socket")
-def test_claude_attach_refuses_unstarted_session_before_socket_write(tmp_path):
-    connector = ClaudeCodeAttachConnector(12345, sessions_dir=tmp_path)
-    session = _session(connector, "claude_code")
-    command = HarnessCommand(session.session_id, "send_turn", {"content": "hello"})
-    with pytest.raises(NativeAdapterError) as unstarted:
-        connector.send(session, command)
-    assert unstarted.value.code == ErrorCode.NOT_FOUND
-    assert unstarted.value.details["not_sent"] is True

@@ -60,12 +60,10 @@ def test_catalog_single_source_and_projection_safety():
     assert catalog.core_version
 
 
-def test_catalog_attach_is_never_ready():
+def test_catalog_does_not_offer_removed_attach():
     catalog = get_runtime_catalog()
-    attach = {d.adapter_id: d for d in catalog.runtimes}["claude_attach"]
-    assert attach.support_status == "registered_unqualified"
-    assert attach.connection_mode == "attach"
-    assert attach.discoverable is False
+    assert "claude_attach" not in {d.adapter_id for d in catalog.runtimes}
+    assert all(d.connection_mode == "managed" for d in catalog.runtimes)
 
 
 def test_discovery_request_none_asks_the_catalog(tmp_path):
@@ -117,4 +115,7 @@ def test_contract_enums_match_the_registry():
                     yield from find_enums(value)
 
         enums = list(find_enums(schema))
-        assert enums and all(e == expected for e in enums), (name, enums)
+        # Frozen wire schemas still decode historical identifiers. They do not
+        # grant native execution: the active registry excludes retired attach.
+        assert enums and all([adapter for adapter in e if adapter != 'claude_attach'] == expected
+                             for e in enums), (name, enums)

@@ -1000,6 +1000,11 @@ class ClaudeCodeStreamConnector:
             interrupted = self._pending_turns.popleft() if self._pending_turns else False
             self._turn_in_flight = bool(self._pending_turns)
         self._turn_generating.clear()
+        # A result can be the only text frame, or replace earlier deltas.
+        # Publish its snapshot before the terminal fence so redaction and
+        # operation correlation use the same path as assistant snapshots.
+        if isinstance(obj.get("result"), str):
+            self._emit("output_delta", "result:output", {"text": obj["result"], "final": True})
         payload = {**obj, "interrupted_by_connector": interrupted}
         if is_success or interrupted:
             # A result caused by THIS connector's own interrupt is a
@@ -1098,7 +1103,7 @@ class ClaudeCodeStreamConnector:
             payload=payload,
             # The assistant message repeats the complete streamed text.
             # Preserve replacement semantics through redaction and NXL.
-            output_snapshot=kind == "output_delta" and native_event == "assistant",
+            output_snapshot=kind == "output_delta" and native_event in {"assistant", "result:output"},
         )
         # Append and nonblocking fanout share one ordering lock. Overflow
         # stops the owned process; every affected reader observes an explicit gap.
