@@ -251,3 +251,8 @@ Elastic License 2.0 with the Okto Labs SaaS/Branding Addendum —
 Copyright 2026 Okto Labs. The full [LICENSE](LICENSE) is identical to
 the Okto Nexus license and is authoritative. Commercial clarification:
 dev@oktolabs.ai. See [CONTRIBUTING.md](CONTRIBUTING.md) for branch and review rules.
+
+## Global harness MCPs
+
+See [MCP inheritance](docs/mcp-inheritance.md) for host-local MCP configuration,
+agent/global policy inheritance and version requirements.

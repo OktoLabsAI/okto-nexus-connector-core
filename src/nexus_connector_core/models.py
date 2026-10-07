@@ -284,6 +284,7 @@ class HarnessSettings:
     sandbox: str | None = None
     permission_mode: str | None = None
     user_input: str | None = None
+    inherit_global_mcps: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
