@@ -1977,6 +1977,9 @@ def test_revocation_does_not_report_success_during_old_native_effect(tmp_path):
             release.set()
             assert (await asyncio.wait_for(pending, timeout=2)).stage == "SUBMITTED"
 
+        # The 50 ms fence above tests a held native effect. Restore the normal
+        # budget before requiring the durable SQLite revocation to complete.
+        runtime._reconnect_fence_seconds = 5.0
         await runtime.revoke_lease(
             session, revoked, expected_connection_generation=3)
         assert (await runtime.inspect(session)).lease_state == "REVOKED"
