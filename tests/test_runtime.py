@@ -1928,6 +1928,9 @@ def test_reconnect_cas_waits_for_old_native_effect(tmp_path, verb):
             release.set()
             assert (await asyncio.wait_for(pending, timeout=2)).stage == "SUBMITTED"
 
+        # The short budget above proves the busy fence. Once the old effect
+        # drains, use the normal budget for durable SQLite CAS on CI disks.
+        runtime._reconnect_fence_seconds = 5.0
         snapshot = await runtime.renew_lease(
             session, renewed, expected_connection_generation=3)
         assert snapshot.connection_generation == 4
