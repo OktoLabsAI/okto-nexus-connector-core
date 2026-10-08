@@ -238,7 +238,7 @@ def test_concurrent_shutdown_retry_coalesces_the_current_force_producer(
         native = _ThreadForceNative()
         runtime, journal = _late_open_runtime(tmp_path, native)
         try:
-            await _cancel_open_late(runtime, FakeClock(100.0))
+            await _cancel_open_late(runtime, FakeClock(100.0), native)
             first = asyncio.create_task(runtime.shutdown(
                 ShutdownPolicy(drain_seconds=0.05,
                                interrupt_seconds=0.05)))
