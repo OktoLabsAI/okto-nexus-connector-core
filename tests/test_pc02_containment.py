@@ -231,19 +231,17 @@ def test_rc_02_08_unconfirmed_force_keeps_slot_and_reports_unknown(tmp_path):
 
 
 def test_rc_02_10_expiry_of_external_attach_never_signals_target(tmp_path):
-    """RC-02-10: attach-shaped native (no force_stop) gets close only."""
+    """RC-02-10: a native without force support gets control-channel close only.
+
+    External attach is retired. This retains the generic no-force contract;
+    defining a force_stop method would advertise managed containment support.
+    """
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
         clock = FakeClock()
 
         class AttachLike(ContainNative):
-            def __init__(self):
-                super().__init__()
-                self.signalled = False
-
-            async def force_stop(self):  # pragma: no cover - must not run
-                self.signalled = True
-                raise AssertionError("attach target must never be signalled")
+            force_stop = None
 
         native = AttachLike()
         runtime = _runtime(tmp_path, journal, Factory(native), clock)
@@ -255,7 +253,7 @@ def test_rc_02_10_expiry_of_external_attach_never_signals_target(tmp_path):
                 OpenOperation("open", "session", "epoch", prepared), authority)
             clock.advance(30)
             await runtime.shutdown(ShutdownPolicy(0.1, 0.1))
-            assert not native.signalled
+            assert not native.forced
             assert native.close_calls >= 1  # control channel closed only
         finally:
             await runtime.shutdown(ShutdownPolicy(0.1, 0.1))
