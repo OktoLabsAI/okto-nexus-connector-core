@@ -1,4 +1,4 @@
-# Core API (`0.0.2`)
+# Core API (`0.0.9`)
 
 ## Runtime automation
 
@@ -56,6 +56,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `OwnedSlotReservation`, `OwnedSlotPage` | Bounded read-only inventory of unresolved reservations and their original open operation IDs; it is not process-liveness or release authority. |
 | `ShutdownPolicy`, `ShutdownReport` | Bounded drain/interrupt observation and per-session outcome. `unknown` retains ownership. |
 | `CoreError` | Typed failure with `code`, `stage`, `possible_effect`, `retry_safe` and optional `operation_id`. C3/S07: `code` is a stable machine-readable enum; human diagnostics (redacted by the raiser) travel in the separate `message` field (`str(exc)` shows the message). |
+| `OperationNotAdmitted` | A `CoreError` raised when productive quota refuses a turn before any native effect. Its correlated `refusal` is **not durable in Core**. The host must persist that fact in its publication obligation before publishing it, retain its own replay identity, and reconcile normally if it crashes before persistence. No reserved interrupt/close rows are consumed. |
 | `CONTRACT_REVISION` | Exact NXL revision required by development negotiation; see [compatibility](compatibility.md). |
 
 `LocalRuntimeCore` implements `discover`, `prepare`, `open`, `submit`,
