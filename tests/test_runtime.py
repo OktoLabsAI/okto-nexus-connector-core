@@ -780,14 +780,17 @@ def test_slow_close_does_not_block_other_sessions_during_shutdown(tmp_path):
                            context())
         try:
             report = await asyncio.wait_for(runtime.shutdown(
-                ShutdownPolicy(drain_seconds=0.02, interrupt_seconds=0.02)),
-                timeout=1)
+                # The slow session stays blocked on its event regardless of
+                # this budget. Allow the independent fast close to durably
+                # release its SQLite slot even on a busy Windows CI runner.
+                ShutdownPolicy(drain_seconds=1, interrupt_seconds=1)),
+                timeout=10)
             assert report.session_outcomes[SessionKey("srv", "exe", "slow")] == "unknown"
             assert report.session_outcomes[SessionKey("srv", "exe", "fast")] == "graceful"
             assert fast.stopped and not slow.stopped
         finally:
             release.set()
-            await asyncio.wait_for(runtime.shutdown(ShutdownPolicy()), timeout=2)
+            await asyncio.wait_for(runtime.shutdown(ShutdownPolicy()), timeout=10)
             journal.close()
 
     asyncio.run(run())
@@ -1928,6 +1931,9 @@ def test_reconnect_cas_waits_for_old_native_effect(tmp_path, verb):
             release.set()
             assert (await asyncio.wait_for(pending, timeout=2)).stage == "SUBMITTED"
 
+        # The short budget above proves the busy fence. Once the old effect
+        # drains, use the normal budget for durable SQLite CAS on CI disks.
+        runtime._reconnect_fence_seconds = 5.0
         snapshot = await runtime.renew_lease(
             session, renewed, expected_connection_generation=3)
         assert snapshot.connection_generation == 4
