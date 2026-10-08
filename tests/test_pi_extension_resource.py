@@ -21,6 +21,11 @@ class Backend:
         self.calls.append(("get", request.handoff_id, context.agent_id))
         return {"handoff_id": request.handoff_id, "status": "READY"}
 
+    async def read_discovery(self, request, context):
+        self.calls.append(('discovery', type(request).__name__, context.agent_id))
+        assert context.agent_id == 'agent' and context.workspace_id == 'ws'
+        return {'status': 'DISCOVERED'}
+
     async def claim_handoff(self, request, context):
         self.calls.append(("claim", request.idempotency_key, context.agent_id))
         return {"handoff_id": request.handoff_id, "claim_epoch": 1}
@@ -46,7 +51,8 @@ class Backend:
 
 def _service(backend=None, context_override=None):
     backend = backend or Backend()
-    actions = frozenset({"handoff.get", "handoff.claim", "handoff.complete", "runtime.input.list", "runtime.input.respond", "message.create"})
+    actions = frozenset({"handoff.get", "handoff.claim", "handoff.complete", "runtime.input.list", "runtime.input.respond", "message.create",
+                         "agent.list", "agent.get", "capability.list", "coordination.health"})
     expiry = time.monotonic() + 60
     grant = NativeActionGrant("native-cap:session", "srv", "exe", "bind",
                               "agent", "ws", "session", 6, 4, 5, expiry, actions)
@@ -84,7 +90,7 @@ import { pathToFileURL } from "node:url";
 const { default: extension } = await import(pathToFileURL(process.argv[1]).href);
 const tools = new Map();
 extension({registerTool(tool) { tools.set(tool.name, tool); }});
-if (tools.size !== 7 || !tools.has("nexus_ask_user") || !tools.has("nexus_runtime_input_respond")) throw new Error("unexpected action set");
+if (tools.size !== 11 || !tools.has("nexus_ask_user") || !tools.has("nexus_runtime_input_respond")) throw new Error("unexpected action set");
 const ask = tools.get("nexus_ask_user");
 for (const [method, value] of [["select", "Blue"], ["confirm", false], ["input", "custom"], ["editor", ""]]) {
   const ui = {[method]: async () => value};
@@ -99,6 +105,10 @@ process.env.NEXUS_NATIVE_ACTION_PORT = process.argv[2];
 process.env.NEXUS_NATIVE_CAPABILITY_REF = "native-cap:session";
 process.env.NEXUS_NATIVE_SESSION_ID = "session";
 for (const [name, params, expected] of [
+  ["nexus_agent_list", {}, "DISCOVERED"],
+  ["nexus_agent_get", {agent_id:"other"}, "DISCOVERED"],
+  ["nexus_capability_list", {}, "DISCOVERED"],
+  ["nexus_coordination_health", {window:"1h"}, "DISCOVERED"],
   ["nexus_message_create", {message:{subject:"Test",body:"Hello",target:{strategy:"direct",agent_id:"other"}}}, "CREATED"],
   ["nexus_runtime_input_list", {}, "READY"],
   ["nexus_runtime_input_respond", {request:{decision:"deny"}}, "CONFIRMED"],
@@ -130,7 +140,7 @@ if (!closed) throw new Error("wrong capability accepted");
             )
             out, err = await asyncio.wait_for(process.communicate(), 20)
             assert process.returncode == 0, (out, err)
-            assert [call[0] for call in backend.calls] == ["message_create", "input_list", "input_respond", "get", "claim", "complete"]
+            assert [call[0] for call in backend.calls] == ["discovery"] * 4 + ["message_create", "input_list", "input_respond", "get", "claim", "complete"]
             assert all(call[2] == "agent" for call in backend.calls)
         finally:
             await service.close()
