@@ -39,7 +39,9 @@ def test_catalog_is_public_side_effect_free():
                          capture_output=True, text=True, timeout=30,
                          env=env, cwd=str(Path(tmp if False else ".")))
     assert out.returncode == 0, out.stderr
-    assert "4" in out.stdout
+    catalog = get_runtime_catalog()
+    assert out.stdout.split() == [catalog.core_version, str(catalog.format_version),
+                                  str(len(catalog.runtimes))]
 
 
 def test_catalog_single_source_and_projection_safety():
