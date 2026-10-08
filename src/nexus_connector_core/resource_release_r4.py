@@ -41,7 +41,7 @@ def project_r4_resource_release(binding, claim, slot, receipt):
     # The released owned slot is the stop proof; an uncertain opening receipt
     # preserves that uncertainty rather than making containment unrecoverable.
     if (projected["session_id"] != claim.key.session_id
-            or projected["stage"] not in ("SUBMISSION_STARTED", "SUBMITTED", "RUNNING", "OUTCOME_UNKNOWN", "SUCCEEDED")
+            or projected["stage"] not in ("SUBMISSION_STARTED", "SUBMITTED", "RUNNING", "OUTCOME_UNKNOWN", "SUCCEEDED", "FAILED")
             or not projected['possible_effect']):
         raise CoreError("RECONCILIATION_REQUIRED", "r4_resource_release")
     digest = r4_resource_release_digest(server_id=key.server_id, executor_id=key.executor_id,

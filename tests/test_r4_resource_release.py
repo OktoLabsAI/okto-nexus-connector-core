@@ -58,7 +58,7 @@ def test_unrelated_or_unproven_release_is_refused(release,fault):
         project_r4_resource_release(binding,claim,slot,receipt)
 
 
-@pytest.mark.parametrize('stage', ['SUBMISSION_STARTED', 'RUNNING', 'OUTCOME_UNKNOWN'])
+@pytest.mark.parametrize('stage', ['SUBMISSION_STARTED', 'RUNNING', 'OUTCOME_UNKNOWN', 'FAILED'])
 @pytest.mark.parametrize('released', [False, True])
 def test_uncertain_opening_requires_independent_owned_slot_release(release, stage, released):
     binding, claim, slot, receipt = release
