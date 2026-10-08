@@ -162,6 +162,7 @@ class CopiedAdapterSession:
         self._end_attempted = False
         self._end_sent = False
         self._active_operation_id: str | None = None
+        self._replacement_operations: deque[str] = deque()
         self._active_turn_id: str | None = None
         self._pi_started_for_active = False
         self._last_outcome: str | None = None
@@ -222,8 +223,14 @@ class CopiedAdapterSession:
             self._pi_started_for_active = False
             self._last_outcome = None
             self._last_failure_code = None
+        replacement = verb == "steer" and self._session.harness_kind == "claude_code"
+        if replacement:
+            # Claude emits results in submission order. Keep the old operation
+            # active through its interrupted result, including when that result
+            # arrives before the blocking replacement write returns.
+            self._replacement_operations.append(operation_id)
         native_payload = dict(payload)
-        if verb == "send_turn" and self._session.harness_kind == "claude_code":
+        if verb in {"send_turn", "steer"} and self._session.harness_kind == "claude_code":
             native_payload = {"content": native_payload["text"]}
         command = HarnessCommand(self._session.session_id, verb, native_payload,
                                  operation_id=operation_id,
@@ -256,12 +263,16 @@ class CopiedAdapterSession:
                 await asyncio.to_thread(self._connector.send,
                                         self._session, command)
         except RuntimeCommandNotSent:
+            if replacement:
+                self._discard_replacement(operation_id)
             if verb == "send_turn":
                 self._active_operation_id = None
                 self._active_turn_id = None
                 self._pi_started_for_active = False
             raise
         except RuntimeCommandRejected as exc:
+            if replacement:
+                self._discard_replacement(operation_id)
             if verb == "send_turn":
                 self._active_operation_id = None
                 self._active_turn_id = None
@@ -275,11 +286,24 @@ class CopiedAdapterSession:
             # durable safe failure. A write/flush error remains uncertain.
             if exc.details.get("not_sent") is not True:
                 raise
+            if replacement:
+                self._discard_replacement(operation_id)
             if verb == "send_turn":
                 self._active_operation_id = None
                 self._active_turn_id = None
                 self._pi_started_for_active = False
             raise RuntimeCommandNotSent(exc.message, code=exc.code.value) from exc
+
+    def _discard_replacement(self, operation_id: str) -> None:
+        if operation_id in self._replacement_operations:
+            self._replacement_operations.remove(operation_id)
+        elif self._active_operation_id == operation_id:
+            # The preceding result may already have advanced the FIFO while
+            # the native adapter refused this replacement before its write.
+            self._active_operation_id = None
+            self._active_turn_id = None
+            self._last_outcome = None
+            self._last_failure_code = None
 
     async def reply_native_approval(
             self, request: Mapping[str, object], decision: str,
@@ -487,7 +511,8 @@ class CopiedAdapterSession:
                                  delivery_phase="terminal", delivery_outcome=settled_outcome)
                 if native.harness_kind == "codex":
                     self._remember_codex_turn(native.turn_id)
-                self._active_operation_id = None
+                self._active_operation_id = (self._replacement_operations.popleft()
+                    if native.harness_kind == "claude_code" and self._replacement_operations else None)
                 self._active_turn_id = None
                 self._pi_started_for_active = False
                 self._last_outcome = None

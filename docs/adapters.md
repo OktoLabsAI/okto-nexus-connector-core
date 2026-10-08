@@ -85,16 +85,14 @@ template loads no extensions by default; a host that allows user
 extensions keeps this auto-cancel contract, and text is never parsed as a
 Nexus action.
 
-Claude stream has no steer vocabulary: public `turn.steer` is refused for
-`claude_stream`, and adapter-level steer/interrupt during the fatal
-requesting window are refused before the native write (a durable safe
-failure). The honest control semantics are therefore queue-free:
-interrupt while generating lands a native `control_request` interrupt and
-the turn ends with its real result subtype (`error_during_execution` when
-interrupted, verified against real Claude 2.1.282), and any follow-up is a
-new `send_turn` reprompt on the same stream-json process — interrupt-then-
-reprompt, never steering. Requesting-phase refusal itself remains covered
-by synthetic pre-write tests.
+Claude stream implements public `turn.steer` as interrupt followed by a new
+user prompt on the same process. It has no native steer verb or native turn
+ID target. The original interrupted result and the replacement result retain
+their distinct operation IDs in native FIFO order. Steer and interrupt in
+the fatal requesting window are refused before writing. The interrupt wire
+shape and result subtype were verified against real Claude 2.1.282; composite
+replacement correlation and requesting-phase refusal are covered by synthetic
+native peers and the Nexus REST/MCP integration tests.
 
 Native approval/input handling is disabled by default in the copied Codex
 and Claude stream adapters. An explicitly opted-in factory can expose their

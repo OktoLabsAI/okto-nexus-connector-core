@@ -42,7 +42,7 @@ _SPECS = {
         "claude_stream", "claude_code", ".adapters.claude_code_stream",
         "ClaudeCodeStreamConnector", "managed", "claude",
         frozenset({"win32", "linux", "darwin"}),
-        (ControlTargeting("turn.steer", False, "forbidden", False),
+        (ControlTargeting("turn.steer", True, "forbidden", True, "IMMEDIATE"),
          ControlTargeting("turn.interrupt", True, "forbidden", True))),
 
 }

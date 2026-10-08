@@ -256,12 +256,12 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
                         (key[0], key[1], key[2], "aarch64", *key[4:]),
                         (key[0], key[1], key[2], key[3], "sha256:" + "0" * 64)):
             assert not compatibility.qualified_build(*drifted)
-    # Claude advertises interrupt only: it has no steer vocabulary, while
-    # Codex and Pi advertise steer plus interrupt from their campaigns.
+    # Claude's replacement composes the qualified interrupt and prompt shapes;
+    # the Core bridge preserves separate operation/result correlation.
     assert compatibility.control_observation(
         "claude_code", claude[1], platform=claude[2],
         architecture=claude[3], fingerprint=claude[4]
-    )["compatible_controls"] == ["interrupt"]
+    )["compatible_controls"] == ["steer", "interrupt"]
     assert compatibility.control_observation(
         "pi", pi[1], platform=pi[2], architecture=pi[3],
         fingerprint=pi[4],
@@ -298,7 +298,7 @@ def test_native_request_contracts_advertise_only_campaign_proven_shapes():
         "compatible_controls": ["interrupt"],
     })
     assert claude_caps.conversation and claude_caps.approvals
-    # Claude has no steer vocabulary: timing stays None, interrupt stands.
+    # This supplied observation qualifies interrupt only; it cannot grant steer.
     assert claude_caps.steer_timing is None and claude_caps.interrupt
     assert not compatibility.qualified_capabilities("claude_code", "managed", {
         "native_version": "2.1.282", "platform": sys.platform,
