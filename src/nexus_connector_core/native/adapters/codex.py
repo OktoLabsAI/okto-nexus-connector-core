@@ -635,6 +635,7 @@ class CodexAppServerConnector:
         self._thread_start_overrides = dict(thread_start_overrides or {})
 
         self._transport: _CodexTransport | None = None
+        self._startup_close_outcome = "unknown"
         # C4/T03: thread-scoped operation guard consulted by the transport
         # after its write-lock wait, at the zero-byte frontier.
         from ..adapter_types import DispatchGuards
@@ -862,7 +863,7 @@ class CodexAppServerConnector:
     # Lifecycle helpers (not part of the port; connector-owned resources)
     # ------------------------------------------------------------------ #
     def close(self) -> str:
-        outcome = self._transport.close() if self._transport is not None else "unknown"
+        outcome = self._transport.close() if self._transport is not None else self._startup_close_outcome
         self._closed_event.set()
         return outcome
 
@@ -1041,6 +1042,10 @@ class CodexAppServerConnector:
             on_dispatch_error=self._on_dispatch_error,
             on_server_request=self._on_server_request,
         )
+        # Initialization owns a transport before it can publish a ready one.
+        # Preserve its observed containment result for the factory's failure
+        # normalization; never carry that proof into another startup attempt.
+        self._startup_close_outcome = "unknown"
         try:
             transport.start()
             initialize_result = transport.request(
@@ -1048,7 +1053,7 @@ class CodexAppServerConnector:
             )
             transport.notify("initialized", {})
         except BaseException:
-            transport.close()  # reap the child; nothing else references it yet
+            self._startup_close_outcome = transport.close()
             self._closed_event.set()
             raise
         # RES-A4 fix, second-order (mismatch note 14c): a PRIOR failed
