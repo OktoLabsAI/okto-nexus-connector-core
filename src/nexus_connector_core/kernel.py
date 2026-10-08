@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 
 from .clock import RollbackFencedClock, SystemClock
 from .journal import SQLiteJournal
-from .models import CoreError, EffectNotSent, EffectRejected, ExecutionContext, Operation, OperationKey, OperationReceipt
+from .models import CoreError, EffectNotSent, EffectRejected, ExecutionContext, Operation, OperationKey, OperationReceipt, OperationNotAdmitted
 from .ports import Journal, Clock
 from .protocol import intent_hash
 
@@ -69,21 +69,16 @@ class OperationKernel:
             receipt, fresh = await self.journal.admit(
                 key, digest, operation.session_id, **admission)
         except CoreError as error:
-            # Normal journal pressure can refuse a turn before its effect
-            # marker exists. Use the bounded critical reserve to retain that
-            # refusal; otherwise a host can wait forever for a missing receipt.
-            # Opening and containment retain their separate resource contracts.
+            # Productive refusals must not consume the capacity reserved for
+            # interrupt/close. Give the host a correlated no-effect fact to
+            # persist in its already-reserved publication obligation instead.
             if (operation.action not in {'turn.submit', 'turn.steer'} or
-                    error.code != 'JOURNAL_FULL' or error.possible_effect or
+                    error.code != 'JOURNAL_FULL' or error.stage != 'admission' or error.possible_effect or
                     not error.retry_safe):
                 raise
-            receipt, fresh = await self.journal.admit(
-                key, digest, operation.session_id, **(admission | {'critical': True}))
-            if not fresh:
-                return receipt
-            return await self.journal.record_receipt(key, OperationReceipt(
+            raise OperationNotAdmitted(OperationReceipt(
                 operation.operation_id, digest, 'FAILED', False, True,
-                operation.session_id, error_code=error.code))
+                operation.session_id, error_code=error.code)) from error
         if not fresh:
             return receipt
         if _expired():

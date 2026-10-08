@@ -1,17 +1,17 @@
-"""Quota refusals retain no-effect receipts without productive admission."""
+"""Quota refusals are correlated without consuming containment capacity."""
 import asyncio
 from dataclasses import replace
 
 import pytest
 
-from nexus_connector_core import CoreError, Operation, OperationKey
+from nexus_connector_core import CoreError, Operation, OperationKey, OperationNotAdmitted
 from nexus_connector_core.journal import JournalLimits, SQLiteJournal
 from nexus_connector_core.kernel import OperationKernel
 from test_kernel import context
 
 
 @pytest.mark.parametrize('action', ['turn.submit', 'turn.steer'])
-def test_quota_refusal_survives_restart_and_never_replays(tmp_path, action):
+def test_quota_refusal_leaves_the_complete_containment_reserve_available(tmp_path, action):
     async def run():
         path = tmp_path / 'quota.db'
         limits = JournalLimits(max_operation_rows=3, reserved_operation_rows=2)
@@ -22,16 +22,26 @@ def test_quota_refusal_survives_restart_and_never_replays(tmp_path, action):
         async def effect():
             calls.append('native')
         await journal.admit(OperationKey('srv', 'exe', 'existing'), 'existing', 'session')
-        first = await OperationKernel(journal).execute(operation, auth, effect)
-        assert first.stage == 'FAILED' and first.error_code == 'JOURNAL_FULL'
-        assert first.retry_safe and not first.possible_effect and calls == []
+        for index in range(8):
+            with pytest.raises(OperationNotAdmitted) as failure:
+                await OperationKernel(journal).execute(
+                    replace(operation, operation_id=f'refused-{index}'), auth, effect)
+            refusal = failure.value.refusal
+            assert refusal.operation_id == f'refused-{index}'
+            assert refusal.stage == 'FAILED' and refusal.error_code == 'JOURNAL_FULL'
+            assert refusal.retry_safe and not refusal.possible_effect and calls == []
+            assert await journal.get_receipt(OperationKey('srv', 'exe', refusal.operation_id)) is None
+        # Both reserved rows remain usable even after repeated refusals.
+        for name in ('interrupt', 'close'):
+            _, fresh = await journal.admit(OperationKey('srv', 'exe', name), name, 'session', critical=True)
+            assert fresh
         await journal.aclose()
         journal = SQLiteJournal(path)
         try:
             kernel = OperationKernel(journal)
-            assert await kernel.execute(operation, auth, effect) == first
-            assert calls == []
-            following = await kernel.execute(replace(operation, operation_id='new'), auth, effect)
+            # No Core admission existed; a direct caller may retry once there
+            # is capacity. Hosts retain their own terminal refusal instead.
+            following = await kernel.execute(operation, auth, effect)
             assert following.stage == 'SUBMITTED' and calls == ['native']
         finally:
             await journal.aclose()

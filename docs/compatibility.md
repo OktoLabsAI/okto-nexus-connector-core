@@ -6,10 +6,12 @@ containment after abrupt owner death without signalling historical process IDs.
 Missing, incomplete or untrusted receipts remain unknown, including externally
 killed guardians. Receipt files must remain available across owner restarts.
 
-When productive journal admission is full, submit and steer operations use the
-bounded critical reserve to persist a no-effect refusal. A healthy native session
-stays usable once capacity returns, and replaying the refused operation returns
-the same failure. If the reserve itself is exhausted, no receipt is fabricated.
+When productive journal admission is full, submit and steer raise
+`OperationNotAdmitted` with a correlated no-effect refusal. This is not a durable
+Core receipt: the host must persist the refusal in its publication obligation
+before publishing it. Refusals leave interrupt/close capacity intact. The host
+retains replay identity while the healthy native session stays available after
+capacity returns. A crash before host persistence requires ordinary reconciliation.
 
 Codex initialization failures preserve observed
 process containment, allowing a terminal startup failure without indefinite
