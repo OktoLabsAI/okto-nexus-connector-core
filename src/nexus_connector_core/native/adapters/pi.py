@@ -278,6 +278,7 @@ class _PiTransport:
         self._next_request_id = itertools.count(1)
         self._stderr_tail = _StderrTail()
         self._closed = threading.Event()
+        self._termination_requested = threading.Event()
 
     # ------------------------------------------------------------------ #
     def start(self) -> None:
@@ -603,10 +604,10 @@ class _PiTransport:
             self._reply_ui_request(msg.get("id"))
         self._on_push_event(msg)
 
-    def close(self, *, grace_s: float = 5.0) -> None:
+    def close(self, *, grace_s: float = 5.0) -> str:
         self._closed.set()
         if self._proc is None:
-            return
+            return "unknown"
         if self._proc.poll() is None:
             self._terminate_group()
             try:
@@ -619,10 +620,14 @@ class _PiTransport:
                     pass  # gave it every reasonable chance; move on
         # Unblock anyone parked in request(): fail every still-pending call.
         self._fail_all_pending("connector closed")
+        if not observe_owned_process(self._proc)["stop_observed"]:
+            return "unknown"
+        return "forced" if self._termination_requested.is_set() else "graceful"
 
     def _terminate_group(self) -> None:
         if self._proc is None:
             return
+        self._termination_requested.set()
         try:
             self._proc.terminate()
         except OSError:
@@ -631,6 +636,7 @@ class _PiTransport:
     def _kill_group(self) -> None:
         if self._proc is None:
             return
+        self._termination_requested.set()
         try:
             self._proc.kill()
         except OSError:
@@ -792,6 +798,9 @@ class PiRpcConnector:
                 on_line_processing_error=self._on_line_processing_error,
                 on_reader_exit=self._on_reader_exit,
             )
+            # Retain process ownership even if readiness negotiation fails;
+            # Core must be able to confirm cleanup and retry containment.
+            self._transport = transport
             try:
                 # transport.start() is INSIDE this try too (C3 audit): a
                 # Popen failure (e.g. the binary is not on PATH) raises
@@ -831,8 +840,6 @@ class PiRpcConnector:
                 # itself raises - still leaves events() terminable.
                 self._closed_event.set()
                 raise
-
-            self._transport = transport
 
         return HarnessSession(
             session_id=session_id,
@@ -899,15 +906,16 @@ class PiRpcConnector:
     # ------------------------------------------------------------------ #
     # Lifecycle helpers (not part of the port; connector-owned resources)
     # ------------------------------------------------------------------ #
-    def close(self) -> None:
-        if self._transport is not None:
-            self._transport.close()
+    def close(self) -> str:
+        outcome = self._transport.close() if self._transport is not None else "unknown"
         self._closed_event.set()
+        return outcome
 
     def force_stop(self) -> None:
         """Kill only this connector's Core-owned process tree."""
         transport = self._transport
         if transport is not None and transport._proc is not None:
+            transport._termination_requested.set()
             transport._proc.kill()
 
     def observe_lifecycle(self, session):
