@@ -1265,9 +1265,9 @@
               "additionalProperties": false,
               "properties": {
                 "adapter_id": {
-                  "type": "string",
+                  "maxLength": 160,
                   "minLength": 1,
-                  "maxLength": 160
+                  "type": "string"
                 },
                 "candidate_ref": {
                   "pattern": "^nexus-install-v1:[0-9a-f]{64}$",

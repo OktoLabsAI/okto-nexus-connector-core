@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mappin
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-from ..models import (CoreError, ExecutionContext, PreparedLaunch,
+from ..models import (CoreError, EffectNotSent, ExecutionContext, PreparedLaunch,
                       ProcessBirthEvidence, RuntimeEvent)
 from ..harness_config import _token_env_name
 from ..pi_extension_resource import PiNativeActionLaunch
@@ -169,6 +169,39 @@ class CopiedAdapterSession:
         self._last_failure_code: str | None = None
         self._recent_codex_turn_ids: deque[str] = deque()
         self._recent_codex_turn_set: set[str] = set()
+        self.context_observation_contract = None
+
+    async def observe_context(self, envelope: Mapping, guard) -> None:
+        """Optional host-owned context storage, never a native send/turn."""
+        method = getattr(self._connector, 'observe_context', None)
+        if self.context_observation_contract != 1 or not callable(method):
+            raise EffectNotSent('Context observation is not qualified', code='CAPABILITY_UNSUPPORTED')
+        def checked():
+            guard()
+            if self._close_started:
+                raise EffectNotSent('Session closed', code='SESSION_CLOSED')
+            fence = getattr(self, 'effect_fence', None)
+            if fence is not None:
+                fence.check('observe_context')
+        def write():
+            checked()
+            guards = getattr(self._connector, '_dispatch_guards', None)
+            if guards is None:
+                raise EffectNotSent('Context guard unavailable', code='CAPABILITY_UNSUPPORTED')
+            guards.set(checked)
+            try:
+                method(self._session, envelope)
+            except RuntimeCommandNotSent as error:
+                raise EffectNotSent(str(error), code=error.code) from error
+            finally:
+                guards.clear()
+        task = asyncio.create_task(asyncio.to_thread(write))
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Cancellation cannot release ownership of a still-running writer.
+            await task
+            raise
 
     def _remember_codex_turn(self, turn_id: str) -> None:
         if len(self._recent_codex_turn_ids) >= 256:
@@ -952,9 +985,17 @@ class CopiedAdapterFactory:
                 _revalidate_launch('configuration_discovery')
                 return value
             connector.configuration_observation = observe_configuration
-        return CopiedAdapterSession(connector, native_session,
+        result = CopiedAdapterSession(connector, native_session,
                                     session_id=session_id,
                                     stream_epoch=stream_epoch, context=context,
                                     redactor=redactor,
                                     control_executor=self._control_executor,
                                     force_executor=self._force_executor)
+        if (registered is not None and type(registered.context_observation_contract) is int
+                and registered.context_observation_contract == 1
+                and type(observed.get('context_observation_contract')) is int
+                and observed['context_observation_contract'] == 1
+                and callable(getattr(connector, 'observe_context', None))
+                and getattr(connector, '_dispatch_guards', None) is not None):
+            result.context_observation_contract = 1
+        return result

@@ -27,6 +27,7 @@ class ProcesslessConnector:
     def __init__(self, *, command, cwd, env):
         self.closed = False
         self.sent = []
+        self.contexts = []
         self.queue = queue.Queue()
         self._dispatch_guards = DispatchGuards()
         self.instances.append(self)
@@ -49,6 +50,10 @@ class ProcesslessConnector:
     def events(self):
         while (item := self.queue.get()) is not None:
             yield item
+
+    def observe_context(self, session, envelope):
+        self._dispatch_guards.check()
+        self.contexts.append(envelope)
 
     def close(self):
         self.closed = True
@@ -105,6 +110,54 @@ def test_registered_processless_factory_checks_its_own_contract(tmp_path, monkey
                 assert receipt.stage == 'FAILED', receipt
                 assert ProcesslessConnector.instances[0].closed
                 assert not ProcesslessConnector.instances[0].sent
+        finally:
+            await runtime.shutdown(ShutdownPolicy(1, 1))
+            factory.close()
+            journal.close()
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('contract', [None, True, 1])
+def test_context_storage_requires_observed_contract_scope_and_final_host_guard(tmp_path, monkeypatch, contract):
+    from nexus_connector_core.models import SessionKey, EffectNotSent
+    monkeypatch.setitem(registry._SPECS, ADAPTER, registry.AdapterSpec(
+        ADAPTER, ADAPTER, __name__, 'ProcesslessConnector', 'managed', None,
+        frozenset({sys.platform}), (), managed_contract=1, transport_binding_contract=1,
+        context_observation_contract=1))
+    monkeypatch.setattr(ProcesslessConnector, 'instances', [])
+    monkeypatch.setattr(ProcesslessConnector, 'protocol', dict(managed_contract=1,
+        transport_binding_contract=1, context_observation_contract=contract))
+    async def run():
+        candidate = InstallationCandidate(ADAPTER, sys.executable, fingerprint(Path(sys.executable)), 'explicit', 'selected')
+        async def environment(prepared):
+            return {}
+        factory = CopiedAdapterFactory(environment)
+        journal = SQLiteJournal(tmp_path / 'context.db')
+        runtime = LocalRuntimeCore(journal, factory, candidates={ADAPTER: candidate}, workspace_roots={'ws': str(tmp_path)})
+        ctx = context()
+        key = SessionKey(ctx.server_id, ctx.executor_id, 'session')
+        envelope = dict(intent='information', response_requested=False,
+                        recipient_agent_id=ctx.agent_id, workspace_id=ctx.workspace_id, content=['context'])
+        try:
+            prepared = await runtime.prepare(LaunchIntent('agent', 'ws', ADAPTER), ctx)
+            await runtime.open(OpenOperation('context-open', 'session', 'epoch', prepared), ctx)
+            peer = ProcesslessConnector.instances[0]
+            qualified = type(contract) is int and contract == 1
+            assert runtime.context_observation_supported(key) is qualified
+            if not qualified:
+                with pytest.raises(EffectNotSent):
+                    await runtime.observe_context(key, envelope, guard=lambda: None)
+            else:
+                def revoked():
+                    raise EffectNotSent('Host authority revoked')
+                with pytest.raises(EffectNotSent):
+                    await runtime.observe_context(key, envelope, guard=revoked)
+                with pytest.raises(EffectNotSent):
+                    await runtime.observe_context(key, dict(envelope, workspace_id='another'), guard=lambda: None)
+                assert peer.contexts == []
+                await runtime.observe_context(key, envelope, guard=lambda: None)
+                assert peer.contexts == [envelope] and peer.contexts[0] is not envelope
+            assert peer.sent == []
         finally:
             await runtime.shutdown(ShutdownPolicy(1, 1))
             factory.close()

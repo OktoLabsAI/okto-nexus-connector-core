@@ -76,6 +76,19 @@ The local constructor's `reconnect_fence_seconds` bounds the wait for pending
 session native sends before `renew_lease`/`revoke_lease` can report a
 successful generation or revocation update; a busy error leaves that update
 unapplied.
+
+`context_observation_supported(SessionKey)` reports optional, observed support
+on a live owned session. `observe_context(SessionKey, envelope, guard=...)` is a
+trusted-host context-storage port, not an execution command or a remote R4 action.
+Only a registered connector that confirms context-observation contract 1 and
+implements the guarded method qualifies. The host must first commit a durable
+send intent, bound its physical workers, and never replay an uncertain call.
+Its mandatory guard revalidates the source audience, credential, approved
+observer endpoint and host owner at the native write frontier. Core additionally
+checks the live lease, session scope and containment fence. The envelope must
+request information without a response. Success proves only the method returned:
+it creates no turn, inference, execution grant or runtime result. This port does
+not add observation support to remote executors or to built-in harnesses.
 `decide_native_approval` requires `approval.decide` or `input.provide` in the
 host-issued `ExecutionContext` and in the active binding. The Core first
 requires an exact matching native request event that its own journal has

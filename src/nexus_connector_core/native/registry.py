@@ -29,6 +29,7 @@ class AdapterSpec:
     managed_contract: int | None = None
     launch_arguments: tuple[str, ...] = ()
     transport_binding_contract: int | None = None
+    context_observation_contract: int | None = None
 
 
 _SPECS = {
