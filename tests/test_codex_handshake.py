@@ -101,6 +101,45 @@ def test_client_identity_is_trusted_and_user_agent_is_scoped():
         client_name="core_test_host")["native_version"] is None
 
 
+def test_failed_initialize_retains_containment_for_factory_and_retry(tmp_path, monkeypatch):
+    from nexus_connector_core.native.adapters import codex
+    marker = tmp_path / 'first-start'
+    script = tmp_path / 'retry_peer.py'
+    script.write_text(
+        'import json,sys,time\nfrom pathlib import Path\n'
+        f'marker=Path({str(marker)!r})\n'
+        'if not marker.exists():\n'
+        ' marker.touch()\n sys.stdin.readline()\n time.sleep(60)\n'
+        'for line in sys.stdin:\n'
+        ' request=json.loads(line)\n'
+        ' if request.get("method")=="initialize":\n'
+        '  print(json.dumps({"id":request["id"],"result":{}}),flush=True)\n'
+        ' elif request.get("method")=="thread/start":\n'
+        '  print(json.dumps({"id":request["id"],"result":{"thread":{"id":"retry-thread"}}}),flush=True)\n',
+        encoding='utf-8')
+    transports = []
+    original = codex._CodexTransport.start
+    def start(transport):
+        transports.append(transport)
+        return original(transport)
+    monkeypatch.setattr(codex._CodexTransport, 'start', start)
+    connector = CodexAppServerConnector(command=[sys.executable, str(script)], cwd=str(tmp_path), env={}, handshake_timeout_s=1)
+    assert connector.close() == 'unknown'
+    try:
+        with pytest.raises(NativeAdapterError):
+            connector.start(owning_agent_id='subject')
+        assert len(transports) == 1 and transports[0]._proc.poll() is not None
+        assert connector.close() in ('graceful', 'forced', 'already_closed')
+        session = connector.start(owning_agent_id='subject')
+        assert session.metadata['thread_id'] == 'retry-thread'
+        assert len(transports) == 2 and transports[1]._proc.poll() is None
+        assert connector._startup_close_outcome == 'unknown'
+        assert connector.close() in ('graceful', 'forced', 'already_closed')
+        assert transports[1]._proc.poll() is not None
+    finally:
+        connector.close()
+
+
 def test_pinned_turn_notification_shapes():
     schema = _codex_schema()
     turn = {"id": "turn-1", "items": [], "status": "inProgress"}

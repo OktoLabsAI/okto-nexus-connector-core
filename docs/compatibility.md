@@ -1,6 +1,10 @@
 # Version and platform compatibility
 
-Current package version: `0.0.7`. Native turn-start events retain their phase
+Current package version: `0.0.8`. Codex initialization failures preserve observed
+process containment, allowing a terminal startup failure without indefinite
+recovery. A later startup attempt cannot inherit the earlier containment proof.
+
+Native turn-start events retain their phase
 and current operation identity; foreign or idle starts are refused.
 
 Pi native tools include agent list/get,
