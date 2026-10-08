@@ -49,10 +49,27 @@ def test_unrelated_or_unproven_release_is_refused(release,fault):
     elif fault == "operation": slot = replace(slot,opening_operation_id="foreign")
     elif fault == "receipt_hash": receipt = replace(receipt,intent_hash="sha256:"+"f"*64)
     elif fault == "receipt_session": receipt = replace(receipt,session_id="foreign")
-    elif fault == "receipt_stage": receipt = replace(receipt,stage="OUTCOME_UNKNOWN")
+    elif fault == "receipt_stage": receipt = replace(receipt,stage="RECEIVED_DURABLE",possible_effect=False,retry_safe=True)
     elif fault == "generation": claim = replace(claim,opening_owner_generation=None)
     elif fault == "action":
         body={k:v for k,v in binding.items() if k!="digest"} | dict(action="turn.submit")
         binding=body | dict(digest="sha256:"+hashlib.sha256(canonical_json(body)).hexdigest())
     with pytest.raises(CoreError):
         project_r4_resource_release(binding,claim,slot,receipt)
+
+
+@pytest.mark.parametrize('stage', ['SUBMISSION_STARTED', 'RUNNING', 'OUTCOME_UNKNOWN'])
+@pytest.mark.parametrize('released', [False, True])
+def test_uncertain_opening_requires_independent_owned_slot_release(release, stage, released):
+    binding, claim, slot, receipt = release
+    receipt = replace(receipt, stage=stage)
+    slot = replace(slot, released=released)
+    if not released:
+        with pytest.raises(CoreError):
+            project_r4_resource_release(binding, claim, slot, receipt)
+    else:
+        fact = project_r4_resource_release(binding, claim, slot, receipt)
+        assert fact['process_state'] == 'EXITED'
+        assert fact['session_id'] == claim.key.session_id
+    # A resource proof never rewrites the uncertain operation into success.
+    assert receipt.stage == stage and receipt.possible_effect

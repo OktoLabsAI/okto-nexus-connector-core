@@ -6,6 +6,11 @@ containment after abrupt owner death without signalling historical process IDs.
 Missing, incomplete or untrusted receipts remain unknown, including externally
 killed guardians. Receipt files must remain available across owner restarts.
 
+Historical owned-slot release also reconciles openings interrupted before their
+success receipt committed. Matching binding, claim, original operation and
+released slot remain mandatory. Intermediate/unknown operation outcomes are not
+rewritten as success and never authorize replay.
+
 When productive journal admission is full, submit and steer raise
 `OperationNotAdmitted` with a correlated no-effect refusal. This is not a durable
 Core receipt: the host must persist the refusal in its publication obligation

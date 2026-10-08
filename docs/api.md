@@ -283,8 +283,10 @@ After restart, read `Journal.get_receipt(OperationKey(...))` and call `project_r
 `OwnedSlotState` records the historical session reservation and release fact;
 it never grants authority over a live process. `project_r4_resource_release`
 requires matching receipt binding, claimed session, released owned slot and
-opening receipt before projecting an EXITED resource proof. It rejects mismatched
-scope and unresolved opening outcomes. `r4_resource_release_digest` computes the
+opening receipt before projecting an EXITED resource proof. An effect-capable
+intermediate or unknown opening outcome is retained unchanged: the independently
+released owned slot proves containment, not operation success. Mismatched scope,
+unreleased slots and unstarted admission receipts are refused. `r4_resource_release_digest` computes the
 scoped proof digest; a digest alone is not evidence that a process stopped.
 
 `DiscoveryCancelled` reports that the host stopped passive observation before
