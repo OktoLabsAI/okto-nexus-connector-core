@@ -77,8 +77,14 @@ def test_registered_processless_factory_checks_its_own_contract(tmp_path, monkey
     monkeypatch.setattr(ProcesslessConnector, 'instances', [])
     monkeypatch.setattr(ProcesslessConnector, 'protocol',
         {'managed_contract': observed, 'transport_binding_contract': 1})
+    real_popen = subprocess.Popen
     def no_process(*args, **kwargs):
+        # Both inventory and opening inspect the macOS containment domain.
+        # Permit only that exact read-only host query, never an adapter launch.
+        if sys.platform == 'darwin' and args and args[0] == ['/bin/launchctl', 'managername']:
+            return real_popen(*args, **kwargs)
         raise AssertionError('The processless connector must not execute the selected anchor')
+    monkeypatch.setattr(subprocess, 'Popen', no_process)
 
     async def run():
         candidate = InstallationCandidate(ADAPTER, sys.executable, fingerprint(Path(sys.executable)),
@@ -86,10 +92,6 @@ def test_registered_processless_factory_checks_its_own_contract(tmp_path, monkey
         snapshot = build_executor_inventory_snapshot((candidate,), server_id='srv', executor_id='exe',
             producer_instance_id='fixture', publication_sequence=1)
         verify_executor_inventory_snapshot(snapshot)
-        # Inventory may inspect the host containment service (launchctl on
-        # macOS). The no-spawn contract concerns preparing/using the selected
-        # processless adapter, after that independent host inspection.
-        monkeypatch.setattr(subprocess, 'Popen', no_process)
         async def environment(prepared):
             return {}
         factory = CopiedAdapterFactory(environment)
