@@ -1,6 +1,10 @@
 # Version and platform compatibility
 
-Current package version: `0.0.4`. Claude result-only responses retain their final
+Current package version: `0.0.5`. Pi startup failures retain process ownership
+and report confirmed containment, allowing a terminal protocol failure instead
+of unnecessary recovery. Unknown containment remains unknown.
+
+Claude result-only responses retain their final
 text, and stale native decisions have durable no-effect refusals. This release
 retains optional global MCP configuration
 inheritance with scoped credentials, alongside the runtime recovery fixes from
