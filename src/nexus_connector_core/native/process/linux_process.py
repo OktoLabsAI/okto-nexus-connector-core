@@ -67,8 +67,12 @@ class OwnedLinuxPopen(subprocess.Popen):
             self._proof_fd, proof_write = os.pipe()
             inherited.append(proof_write)
             os.set_blocking(self._proof_fd, False)
+            from .linux_recovery import create_receipt
+            self._recovery_container_id, recovery_fd = create_receipt()
+            inherited.append(recovery_fd)
             helper = str(Path(__file__).with_name("linux_process_guardian.py"))
-            command = [sys.executable, "-I", helper, str(owner_fd), str(cancel_read), str(proof_write), *argv]
+            command = [sys.executable, "-I", helper, str(owner_fd), str(cancel_read), str(proof_write),
+                       str(recovery_fd), *argv]
             kwargs.update(pass_fds=tuple(inherited), close_fds=True, start_new_session=True)
             super().__init__(command, **kwargs)
         except BaseException:

@@ -23,7 +23,9 @@ def test_public_catalog_states_targeting_without_granting_build_readiness():
     pi = get_control_targeting("pi_rpc", "turn.steer")
     assert pi.native_turn_id == "forbidden" and pi.requires_active_run
     assert pi.steer_timing == "NEXT_TURN_BOUNDARY"
-    assert not get_control_targeting("claude_stream", "turn.steer").supported
+    claude = get_control_targeting("claude_stream", "turn.steer")
+    assert claude.supported and claude.requires_active_run
+    assert claude.native_turn_id == "forbidden" and claude.steer_timing == "IMMEDIATE"
     assert "claude_attach" not in by_id
     for descriptor in catalog.runtimes:
         for contract in descriptor.control_targeting:
@@ -36,6 +38,7 @@ def test_public_catalog_states_targeting_without_granting_build_readiness():
     ("pi_rpc", "steer", None, "invented-turn"),
     ("pi_rpc", "interrupt", None, "invented-turn"),
     ("claude_stream", "interrupt", None, "invented-turn"),
+    ("claude_stream", "steer", None, "invented-turn"),
 ])
 def test_runtime_checks_public_contract_before_admitting_control(
         tmp_path, adapter, verb, valid_target, bad_target):
@@ -64,7 +67,7 @@ def test_runtime_checks_public_contract_before_admitting_control(
 
 def test_unknown_adapter_and_unsupported_control_do_not_fall_back():
     for adapter, action in (("unknown", "turn.steer"), ("pi_rpc", "invented"),
-                            ("claude_stream", "turn.steer"), ("claude_attach", "turn.interrupt")):
+                            ("claude_stream", "invented"), ("claude_attach", "turn.interrupt")):
         with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
             validate_control_target(adapter, action, None)
 

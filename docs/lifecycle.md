@@ -44,6 +44,11 @@ operation returns its old receipt; a new operation ID cannot reuse that
 session ID after close, failure or restart. Even a proven pre-write failure
 requires a fresh session ID for a new open attempt. This is a durable
 identity fence, not proof that an old native process was stopped.
+`project_r4_resource_release` also accepts an effect-capable failed opening
+when the exact opening claim and independently released owned slot match.
+This proves resource release without rewriting its `FAILED` receipt. A host
+may recover a separately proven never-dispatched first message under current
+authority; the failed opening itself is not replayed.
 After restart, a trusted host can scan `claimed_sessions` for one
 Server/executor namespace. The first page fixes a journal rowid high-water
 mark; subsequent pages reuse it, so claims inserted later are outside that

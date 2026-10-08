@@ -14,7 +14,7 @@ from nexus_connector_core.native.process.recovery import recover_owned_container
 from nexus_connector_core.native.runtime_bridge import CopiedAdapterSession
 
 
-@pytest.mark.skipif(sys.platform != 'win32', reason='Windows container recovery')
+@pytest.mark.skipif(sys.platform not in {'win32', 'linux'}, reason='Durable container recovery')
 def test_container_proof_survives_abrupt_owner_exit(tmp_path):
     evidence_file = tmp_path / 'birth.json'
     source = str(Path(__file__).resolve().parents[1] / 'src')

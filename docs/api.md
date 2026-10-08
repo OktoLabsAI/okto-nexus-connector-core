@@ -1,4 +1,4 @@
-# Core API (`0.0.2`)
+# Core API (`0.0.9`)
 
 ## Runtime automation
 
@@ -9,6 +9,12 @@ Connector reconnections through callbacks, without replaying submitted native
 operations or bypassing the host's ownership and authorization checks.
 
 ## Harness configuration and native input
+
+`get_runtime_connection_contract` exposes the trusted adapter's host integration
+contract without module paths or credentials. Additional managed connectors
+confirm their registered contract at opening; registration alone does not prove
+readiness. A connector declaring no tool transport receives no session tool
+credential. Fallback requires transport binding contract version 1.
 
 `CONFIGURATION_SCHEMA_VERSION` identifies the discovery schema.
 `discover_harness_configuration` describes adapter settings;
@@ -56,6 +62,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `OwnedSlotReservation`, `OwnedSlotPage` | Bounded read-only inventory of unresolved reservations and their original open operation IDs; it is not process-liveness or release authority. |
 | `ShutdownPolicy`, `ShutdownReport` | Bounded drain/interrupt observation and per-session outcome. `unknown` retains ownership. |
 | `CoreError` | Typed failure with `code`, `stage`, `possible_effect`, `retry_safe` and optional `operation_id`. C3/S07: `code` is a stable machine-readable enum; human diagnostics (redacted by the raiser) travel in the separate `message` field (`str(exc)` shows the message). |
+| `OperationNotAdmitted` | A `CoreError` raised when productive quota refuses a turn before any native effect. Its correlated `refusal` is **not durable in Core**. The host must persist that fact in its publication obligation before publishing it, retain its own replay identity, and reconcile normally if it crashes before persistence. No reserved interrupt/close rows are consumed. |
 | `CONTRACT_REVISION` | Exact NXL revision required by development negotiation; see [compatibility](compatibility.md). |
 
 `LocalRuntimeCore` implements `discover`, `prepare`, `open`, `submit`,
@@ -69,6 +76,19 @@ The local constructor's `reconnect_fence_seconds` bounds the wait for pending
 session native sends before `renew_lease`/`revoke_lease` can report a
 successful generation or revocation update; a busy error leaves that update
 unapplied.
+
+`context_observation_supported(SessionKey)` reports optional, observed support
+on a live owned session. `observe_context(SessionKey, envelope, guard=...)` is a
+trusted-host context-storage port, not an execution command or a remote R4 action.
+Only a registered connector that confirms context-observation contract 1 and
+implements the guarded method qualifies. The host must first commit a durable
+send intent, bound its physical workers, and never replay an uncertain call.
+Its mandatory guard revalidates the source audience, credential, approved
+observer endpoint and host owner at the native write frontier. Core additionally
+checks the live lease, session scope and containment fence. The envelope must
+request information without a response. Success proves only the method returned:
+it creates no turn, inference, execution grant or runtime result. This port does
+not add observation support to remote executors or to built-in harnesses.
 `decide_native_approval` requires `approval.decide` or `input.provide` in the
 host-issued `ExecutionContext` and in the active binding. The Core first
 requires an exact matching native request event that its own journal has
@@ -282,8 +302,10 @@ After restart, read `Journal.get_receipt(OperationKey(...))` and call `project_r
 `OwnedSlotState` records the historical session reservation and release fact;
 it never grants authority over a live process. `project_r4_resource_release`
 requires matching receipt binding, claimed session, released owned slot and
-opening receipt before projecting an EXITED resource proof. It rejects mismatched
-scope and unresolved opening outcomes. `r4_resource_release_digest` computes the
+opening receipt before projecting an EXITED resource proof. An effect-capable
+intermediate or unknown opening outcome is retained unchanged: the independently
+released owned slot proves containment, not operation success. Mismatched scope,
+unreleased slots and unstarted admission receipts are refused. `r4_resource_release_digest` computes the
 scoped proof digest; a digest alone is not evidence that a process stopped.
 
 `DiscoveryCancelled` reports that the host stopped passive observation before

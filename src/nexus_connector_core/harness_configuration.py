@@ -30,6 +30,10 @@ _CHOICES = {
 
 def validate_harness_settings(adapter_id, values):
     """Validate supported launch fields before hashing or any native effect."""
+    if adapter_id not in _CHOICES:
+        from .native.registry import registered_managed_contract
+        if registered_managed_contract(adapter_id) is not None and values == {}:
+            return HarnessSettings()
     if adapter_id not in _CHOICES or not isinstance(values, dict) or set(values) - set(_CHOICES[adapter_id]):
         raise CoreError('VALIDATION_ERROR', 'harness_settings')
     for name, value in values.items():
@@ -117,12 +121,24 @@ def discover_harness_configuration(adapter_id, *, version=None, candidate_ref=No
     Unknown versions/absent observations remain visibly unverified. Values are
     native spellings: no invented cross-provider effort or permission modes.
     """
-    if adapter_id not in {"codex_app_server", "claude_stream", "pi_rpc"}:
-        raise CoreError("CAPABILITY_UNSUPPORTED", "configuration_discovery")
     if version is not None and (not isinstance(version, str) or len(version) > 160):
         raise CoreError("VALIDATION_ERROR", "configuration_discovery")
     if candidate_ref is not None and (not isinstance(candidate_ref, str) or not 1 <= len(candidate_ref) <= 256):
         raise CoreError("VALIDATION_ERROR", "configuration_discovery")
+    if adapter_id not in {"codex_app_server", "claude_stream", "pi_rpc"}:
+        from .native.registry import registered_managed_contract
+        if registered_managed_contract(adapter_id) is None:
+            raise CoreError("CAPABILITY_UNSUPPORTED", "configuration_discovery")
+        if any(value is not None for value in (native_models, cli_help, thinking_levels, requirements, native_parameters)):
+            raise CoreError('CAPABILITY_UNSUPPORTED', 'configuration_discovery')
+        value = dict(schema_version=CONFIGURATION_SCHEMA_VERSION, adapter_id=adapter_id,
+            version=version, candidate_ref=candidate_ref, parameters=[], models=[], constraints={},
+            discovery_methods=['managed_contract'], human_input=dict(native_methods=[],
+                core_bridge='unavailable', recipient_policy='originating_interlocutor',
+                recipient_routing_implemented=False, separate_from_tool_approval=True),
+            nexus_tool_approval=dict(values=[], scope='nexus_tools_only'))
+        value['schema_revision'] = 'sha256:' + sha256(canonical_json(value)).hexdigest()
+        return value
     fields = [_field("model", "Model", "model" if adapter_id == "codex_app_server" else "--model", applied=True)]
     if adapter_id == "codex_app_server":
         fields += [_field("effort", "Reasoning effort", "turn/start.effort", scope="turn"),

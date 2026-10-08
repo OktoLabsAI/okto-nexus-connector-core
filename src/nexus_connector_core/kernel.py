@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 
 from .clock import RollbackFencedClock, SystemClock
 from .journal import SQLiteJournal
-from .models import CoreError, EffectNotSent, EffectRejected, ExecutionContext, Operation, OperationKey, OperationReceipt
+from .models import CoreError, EffectNotSent, EffectRejected, ExecutionContext, Operation, OperationKey, OperationReceipt, OperationNotAdmitted
 from .ports import Journal, Clock
 from .protocol import intent_hash
 
@@ -49,9 +49,7 @@ class OperationKernel:
         digest = intent_hash(operation, context)
         key = OperationKey(context.server_id, context.executor_id,
                            operation.operation_id)
-        receipt, fresh = await self.journal.admit(key, digest,
-                                                 operation.session_id,
-                                                 critical=operation.action in {
+        admission = dict(critical=operation.action in {
                                                      "turn.interrupt", "runtime.close",
                                                      "approval.decide", "input.provide"},
                                                  claim_session=operation.action == "runtime.open",
@@ -67,6 +65,20 @@ class OperationKernel:
                                                  configuration_revision=(
                                                      context.configuration_revision
                                                      if operation.action == "runtime.open" else None))
+        try:
+            receipt, fresh = await self.journal.admit(
+                key, digest, operation.session_id, **admission)
+        except CoreError as error:
+            # Productive refusals must not consume the capacity reserved for
+            # interrupt/close. Give the host a correlated no-effect fact to
+            # persist in its already-reserved publication obligation instead.
+            if (operation.action not in {'turn.submit', 'turn.steer'} or
+                    error.code != 'JOURNAL_FULL' or error.stage != 'admission' or error.possible_effect or
+                    not error.retry_safe):
+                raise
+            raise OperationNotAdmitted(OperationReceipt(
+                operation.operation_id, digest, 'FAILED', False, True,
+                operation.session_id, error_code=error.code)) from error
         if not fresh:
             return receipt
         if _expired():

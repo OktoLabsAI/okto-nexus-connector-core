@@ -4,6 +4,8 @@ The host must fence the original owner before calling with stop=True. A name
 is persisted only after an atomic contained launch. An absent Windows job
 means its last member exited; live jobs are stopped through their exact handle.
 Legacy births without a container name remain unknown.
+On Linux the original guardian persists proof only after reaping every child;
+recovery waits for that proof without signalling historical process IDs.
 """
 import ctypes
 from ctypes import wintypes as w
@@ -15,10 +17,15 @@ from ...journal import validate_process_birth
 
 def recover_owned_container(evidence, *, stop=False, timeout_seconds=5):
     validate_process_birth(evidence)
-    if sys.platform != 'win32' or evidence.platform != 'win32' or not evidence.container_id:
-        return 'UNKNOWN'
     if not 0 <= timeout_seconds <= 30:
         raise ValueError('Invalid recovery wait')
+    if sys.platform == 'linux' and evidence.platform == 'linux' and evidence.container_id:
+        from .linux_recovery import recover_receipt
+        # The original owner's pidfd makes its guardian drain automatically.
+        # Observe that exact proof; never signal a historical/reused PID.
+        return recover_receipt(evidence.container_id, timeout_seconds=timeout_seconds if stop else 0)
+    if sys.platform != 'win32' or evidence.platform != 'win32' or not evidence.container_id:
+        return 'UNKNOWN'
     kernel = ctypes.WinDLL('kernel32', use_last_error=True)
     open_job = kernel.OpenJobObjectW
     open_job.argtypes, open_job.restype = [w.DWORD,w.BOOL,w.LPCWSTR], w.HANDLE

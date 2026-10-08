@@ -35,11 +35,10 @@ def test_stopped_resource_keeps_pending_release_visible_without_storage(tmp_path
             assert factory.open_count == 1
         finally:
             restore.set()
-            for _ in range(30):
-                await runtime.shutdown(ShutdownPolicy(0, 0))
-                if not runtime.shutdown_resources()[key]["release_pending"]:
-                    break
-                await asyncio.sleep(.01)
+            async with asyncio.timeout(10):
+                while runtime.shutdown_resources()[key]["release_pending"]:
+                    await runtime.shutdown(ShutdownPolicy(0, 0))
+                    await asyncio.sleep(.01)
             assert runtime.shutdown_resources()[key] == {"process_state": "STOPPED", "release_pending": False}
             journal.close()
     asyncio.run(scenario())
@@ -66,13 +65,17 @@ def test_expired_stopped_session_reconciles_release_after_eviction(tmp_path):
             async with asyncio.timeout(2):
                 while runtime.shutdown_resources()[key]["process_state"] != "STOPPED":
                     await asyncio.sleep(.01)
-            # Let the stopped native binding finish its cooperative eviction.
-            await asyncio.sleep(.1)
             assert runtime.shutdown_resources()[key]["release_pending"] is True
             restored = True
-            for _ in range(5):
-                report = await runtime.shutdown(ShutdownPolicy(0, 0))
-                await asyncio.sleep(.01)
+            # A STOPPED observation precedes durable release and eviction.
+            # Wait for their public completion, not a fixed number of polls.
+            async with asyncio.timeout(10):
+                while True:
+                    report = await runtime.shutdown(ShutdownPolicy(0, 0))
+                    if (not runtime.shutdown_resources()[key]["release_pending"]
+                            and report.session_outcomes[key] == "already_closed"):
+                        break
+                    await asyncio.sleep(.01)
             assert runtime.shutdown_resources()[key] == {"process_state": "STOPPED", "release_pending": False}
             assert report.session_outcomes[key] == "already_closed"
             assert factory.open_count == 1

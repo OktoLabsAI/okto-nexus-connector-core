@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mappin
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-from ..models import (CoreError, ExecutionContext, PreparedLaunch,
+from ..models import (CoreError, EffectNotSent, ExecutionContext, PreparedLaunch,
                       ProcessBirthEvidence, RuntimeEvent)
 from ..harness_config import _token_env_name
 from ..pi_extension_resource import PiNativeActionLaunch
@@ -32,7 +32,7 @@ _CONTROL_POOL_SIZE = 4
 _FORCE_POOL_SIZE = 2
 
 from .event_ingest import translate_native_event
-from .registry import adapter_spec, load_adapter
+from .registry import adapter_spec, load_adapter, registered_managed_contract
 from .redaction import NativeSecretRedactor, credential_values
 from .process import snapshot_owned_process_birth
 
@@ -162,12 +162,46 @@ class CopiedAdapterSession:
         self._end_attempted = False
         self._end_sent = False
         self._active_operation_id: str | None = None
+        self._replacement_operations: deque[str] = deque()
         self._active_turn_id: str | None = None
         self._pi_started_for_active = False
         self._last_outcome: str | None = None
         self._last_failure_code: str | None = None
         self._recent_codex_turn_ids: deque[str] = deque()
         self._recent_codex_turn_set: set[str] = set()
+        self.context_observation_contract = None
+
+    async def observe_context(self, envelope: Mapping, guard) -> None:
+        """Optional host-owned context storage, never a native send/turn."""
+        method = getattr(self._connector, 'observe_context', None)
+        if self.context_observation_contract != 1 or not callable(method):
+            raise EffectNotSent('Context observation is not qualified', code='CAPABILITY_UNSUPPORTED')
+        def checked():
+            guard()
+            if self._close_started:
+                raise EffectNotSent('Session closed', code='SESSION_CLOSED')
+            fence = getattr(self, 'effect_fence', None)
+            if fence is not None:
+                fence.check('observe_context')
+        def write():
+            checked()
+            guards = getattr(self._connector, '_dispatch_guards', None)
+            if guards is None:
+                raise EffectNotSent('Context guard unavailable', code='CAPABILITY_UNSUPPORTED')
+            guards.set(checked)
+            try:
+                method(self._session, envelope)
+            except RuntimeCommandNotSent as error:
+                raise EffectNotSent(str(error), code=error.code) from error
+            finally:
+                guards.clear()
+        task = asyncio.create_task(asyncio.to_thread(write))
+        try:
+            await asyncio.shield(task)
+        except asyncio.CancelledError:
+            # Cancellation cannot release ownership of a still-running writer.
+            await task
+            raise
 
     def _remember_codex_turn(self, turn_id: str) -> None:
         if len(self._recent_codex_turn_ids) >= 256:
@@ -222,8 +256,14 @@ class CopiedAdapterSession:
             self._pi_started_for_active = False
             self._last_outcome = None
             self._last_failure_code = None
+        replacement = verb == "steer" and self._session.harness_kind == "claude_code"
+        if replacement:
+            # Claude emits results in submission order. Keep the old operation
+            # active through its interrupted result, including when that result
+            # arrives before the blocking replacement write returns.
+            self._replacement_operations.append(operation_id)
         native_payload = dict(payload)
-        if verb == "send_turn" and self._session.harness_kind == "claude_code":
+        if verb in {"send_turn", "steer"} and self._session.harness_kind == "claude_code":
             native_payload = {"content": native_payload["text"]}
         command = HarnessCommand(self._session.session_id, verb, native_payload,
                                  operation_id=operation_id,
@@ -256,12 +296,16 @@ class CopiedAdapterSession:
                 await asyncio.to_thread(self._connector.send,
                                         self._session, command)
         except RuntimeCommandNotSent:
+            if replacement:
+                self._discard_replacement(operation_id)
             if verb == "send_turn":
                 self._active_operation_id = None
                 self._active_turn_id = None
                 self._pi_started_for_active = False
             raise
         except RuntimeCommandRejected as exc:
+            if replacement:
+                self._discard_replacement(operation_id)
             if verb == "send_turn":
                 self._active_operation_id = None
                 self._active_turn_id = None
@@ -275,11 +319,24 @@ class CopiedAdapterSession:
             # durable safe failure. A write/flush error remains uncertain.
             if exc.details.get("not_sent") is not True:
                 raise
+            if replacement:
+                self._discard_replacement(operation_id)
             if verb == "send_turn":
                 self._active_operation_id = None
                 self._active_turn_id = None
                 self._pi_started_for_active = False
             raise RuntimeCommandNotSent(exc.message, code=exc.code.value) from exc
+
+    def _discard_replacement(self, operation_id: str) -> None:
+        if operation_id in self._replacement_operations:
+            self._replacement_operations.remove(operation_id)
+        elif self._active_operation_id == operation_id:
+            # The preceding result may already have advanced the FIFO while
+            # the native adapter refused this replacement before its write.
+            self._active_operation_id = None
+            self._active_turn_id = None
+            self._last_outcome = None
+            self._last_failure_code = None
 
     async def reply_native_approval(
             self, request: Mapping[str, object], decision: str,
@@ -487,7 +544,8 @@ class CopiedAdapterSession:
                                  delivery_phase="terminal", delivery_outcome=settled_outcome)
                 if native.harness_kind == "codex":
                     self._remember_codex_turn(native.turn_id)
-                self._active_operation_id = None
+                self._active_operation_id = (self._replacement_operations.popleft()
+                    if native.harness_kind == "claude_code" and self._replacement_operations else None)
                 self._active_turn_id = None
                 self._pi_started_for_active = False
                 self._last_outcome = None
@@ -666,6 +724,7 @@ class CopiedAdapterFactory:
                    context: ExecutionContext, *, stream_epoch: str,
                    opening_guard=None) -> CopiedAdapterSession:
         spec = adapter_spec(prepared.intent.adapter_id)
+        registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
             raise CoreError("CAPABILITY_UNSUPPORTED", "open", retry_safe=True)
         # PC11: refuse productive work before secrets/spawn when the host's
@@ -743,7 +802,7 @@ class CopiedAdapterFactory:
             return qualified_build(kind, observed.version, sys.platform,
                 observed.architecture, observed.fingerprint,
                 build_identity=observed.build_identity)
-        if candidate.version is None and not is_qualified(candidate):
+        if registered is None and candidate.version is None and not is_qualified(candidate):
             # Passive discovery does not execute the installation. Observe
             # its version only at this admitted, selected launch boundary.
             # The probe filters the process environment and resolves no
@@ -762,7 +821,7 @@ class CopiedAdapterFactory:
         # Build campaigns are evidence, not a cross-platform execution allowlist.
         # An observed native version may attempt the adapter's live handshake.
         # Unknown/malformed identities still fail before credentials are resolved.
-        if not recorded_build and not can_probe_protocol(
+        if registered is None and not recorded_build and not can_probe_protocol(
                 candidate.version, candidate.architecture, candidate.fingerprint):
             raise CoreError("NATIVE_VERSION_UNQUALIFIED", "open", retry_safe=True)
         approval_actions = {"approval.decide", "input.provide"}.issubset(context.allowed_actions)
@@ -801,7 +860,9 @@ class CopiedAdapterFactory:
                                 retry_safe=True)
         native_action = None
         resume_grant = None
-        if kind == "codex":
+        if registered is not None:
+            connector = load_adapter(spec.adapter_id)(command=command, cwd=prepared.cwd, env=env)
+        elif kind == "codex":
             resume_grant = (await self._codex_resume(prepared, session_id, context)
                             if self._codex_resume is not None else None)
             _revalidate_launch("codex_resume")
@@ -889,6 +950,21 @@ class CopiedAdapterFactory:
                 return connector.start(**start_kwargs)
 
             native_session = await asyncio.to_thread(_guarded_start)
+            if registered is not None:
+                # Registration alone is not observed support. This handshake
+                # belongs to the loaded connector and cannot be supplied over
+                # the network or inferred from another runtime's version.
+                observed = await asyncio.to_thread(connector.verify_protocol)
+                if (type(observed) is not dict or type(observed.get('managed_contract')) is not int
+                        or observed['managed_contract'] != 1
+                        or type(observed.get('transport_binding_contract')) is not type(registered.transport_binding_contract)
+                        or observed.get('transport_binding_contract') != registered.transport_binding_contract
+                        or native_session.harness_kind != spec.native_kind
+                        or native_session.owning_agent_id != context.agent_id):
+                    from .adapter_types import ErrorCode
+                    raise NativeAdapterError(ErrorCode.CONFLICT,
+                        'The registered adapter did not confirm its managed contract.',
+                        {'reason': 'protocol_incompatible'})
             if kind == 'claude_code' and not recorded_build:
                 await asyncio.to_thread(connector.verify_protocol)
         except BaseException as error:
@@ -909,9 +985,17 @@ class CopiedAdapterFactory:
                 _revalidate_launch('configuration_discovery')
                 return value
             connector.configuration_observation = observe_configuration
-        return CopiedAdapterSession(connector, native_session,
+        result = CopiedAdapterSession(connector, native_session,
                                     session_id=session_id,
                                     stream_epoch=stream_epoch, context=context,
                                     redactor=redactor,
                                     control_executor=self._control_executor,
                                     force_executor=self._force_executor)
+        if (registered is not None and type(registered.context_observation_contract) is int
+                and registered.context_observation_contract == 1
+                and type(observed.get('context_observation_contract')) is int
+                and observed['context_observation_contract'] == 1
+                and callable(getattr(connector, 'observe_context', None))
+                and getattr(connector, '_dispatch_guards', None) is not None):
+            result.context_observation_contract = 1
+        return result

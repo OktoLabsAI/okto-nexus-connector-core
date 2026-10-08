@@ -96,6 +96,10 @@ def _validate(frame: dict[str, Any]) -> None:
     except ValidationError as exc:
         raise CoreError("VALIDATION_ERROR", "r4_schema", retry_safe=True) from exc
     if frame["type"] == "operation.submit":
+        if frame['action'] == 'runtime.open':
+            from .native.registry import adapter_specs
+            if frame['payload']['adapter_id'] not in {spec.adapter_id for spec in adapter_specs()}:
+                raise CoreError('VALIDATION_ERROR', 'r4_adapter', retry_safe=True)
         if len(canonical_json(frame["payload"])) > MAX_OPERATION_PAYLOAD_BYTES:
             raise CoreError("CAPACITY_EXCEEDED", "r4_payload", retry_safe=True)
         if frame["intent_hash"] != r4_submit_intent_hash(frame):

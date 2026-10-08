@@ -113,6 +113,20 @@ class OperationReceipt:
     error_code: str | None = None
 
 
+class OperationNotAdmitted(CoreError):
+    """A correlated pre-effect refusal that is NOT a durable Core receipt.
+
+    The host must durably retain ``refusal`` before publishing it. Core has
+    admitted no operation and has consumed no containment reserve. A host
+    that loses this exception before persisting it must reconcile normally.
+    """
+
+    def __init__(self, refusal: OperationReceipt):
+        super().__init__(refusal.error_code, 'admission', retry_safe=True,
+                         operation_id=refusal.operation_id)
+        self.refusal = refusal
+
+
 @dataclass(frozen=True, slots=True)
 class OperationKey:
     server_id: str

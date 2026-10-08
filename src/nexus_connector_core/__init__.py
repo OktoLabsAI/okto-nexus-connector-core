@@ -8,6 +8,7 @@ from .models import (
     ExecutionContext,
     Operation,
     OperationReceipt,
+    OperationNotAdmitted,
     OperationKey,
     SessionKey,
     ClaimedSession,
@@ -75,7 +76,7 @@ from .approval_reducer_r4 import (
 from .ports import OwnedSlotLedger, RuntimeCore
 from .composition import create_runtime
 from .catalog import (
-    RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog,
+    RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog, get_runtime_connection_contract,
     CATALOG_FORMAT_VERSION,
 )
 from .availability import (
@@ -103,7 +104,7 @@ from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.0.8"
+__version__ = "0.0.9"
 
 __all__ = [
     "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",
@@ -113,6 +114,7 @@ __all__ = [
     "probe_selected_configuration",
     "discover_harness_configuration", "query_harness_configuration", "CONFIGURATION_SCHEMA_VERSION",
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
+    "OperationNotAdmitted",
     "r4_close_operation",
     "ControlTargeting", "get_control_targeting", "validate_control_target",
     "R4Authority", "R4LeaseApplication",
@@ -138,7 +140,7 @@ __all__ = [
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ReconcileRequest",
     "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
     "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",
-    "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "CATALOG_FORMAT_VERSION",
+    "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "get_runtime_connection_contract", "CATALOG_FORMAT_VERSION",
     "AvailabilityReport", "CandidateAvailability", "evaluate_runtime_availability", "AVAILABILITY_FORMAT_VERSION",
     "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
     "discover_installations", "DiscoveryCancelled",

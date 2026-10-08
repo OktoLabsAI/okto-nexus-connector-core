@@ -77,7 +77,7 @@ def snapshot_owned_process_birth(process: subprocess.Popen) -> ProcessBirthEvide
             raise RuntimeError("owned process is already stopped")
         return ProcessBirthEvidence(
             "linux", process.pid, token,
-            "linux_guardian")
+            "linux_guardian", process._recovery_container_id)
 
     if sys.platform == "darwin":
         from .macos_process import OwnedDarwinPopen
