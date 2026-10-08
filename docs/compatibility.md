@@ -6,6 +6,11 @@ containment after abrupt owner death without signalling historical process IDs.
 Missing, incomplete or untrusted receipts remain unknown, including externally
 killed guardians. Receipt files must remain available across owner restarts.
 
+When productive journal admission is full, submit and steer operations use the
+bounded critical reserve to persist a no-effect refusal. A healthy native session
+stays usable once capacity returns, and replaying the refused operation returns
+the same failure. If the reserve itself is exhausted, no receipt is fabricated.
+
 Codex initialization failures preserve observed
 process containment, allowing a terminal startup failure without indefinite
 recovery. A later startup attempt cannot inherit the earlier containment proof.

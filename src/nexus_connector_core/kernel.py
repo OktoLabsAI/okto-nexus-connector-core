@@ -49,9 +49,7 @@ class OperationKernel:
         digest = intent_hash(operation, context)
         key = OperationKey(context.server_id, context.executor_id,
                            operation.operation_id)
-        receipt, fresh = await self.journal.admit(key, digest,
-                                                 operation.session_id,
-                                                 critical=operation.action in {
+        admission = dict(critical=operation.action in {
                                                      "turn.interrupt", "runtime.close",
                                                      "approval.decide", "input.provide"},
                                                  claim_session=operation.action == "runtime.open",
@@ -67,6 +65,25 @@ class OperationKernel:
                                                  configuration_revision=(
                                                      context.configuration_revision
                                                      if operation.action == "runtime.open" else None))
+        try:
+            receipt, fresh = await self.journal.admit(
+                key, digest, operation.session_id, **admission)
+        except CoreError as error:
+            # Normal journal pressure can refuse a turn before its effect
+            # marker exists. Use the bounded critical reserve to retain that
+            # refusal; otherwise a host can wait forever for a missing receipt.
+            # Opening and containment retain their separate resource contracts.
+            if (operation.action not in {'turn.submit', 'turn.steer'} or
+                    error.code != 'JOURNAL_FULL' or error.possible_effect or
+                    not error.retry_safe):
+                raise
+            receipt, fresh = await self.journal.admit(
+                key, digest, operation.session_id, **(admission | {'critical': True}))
+            if not fresh:
+                return receipt
+            return await self.journal.record_receipt(key, OperationReceipt(
+                operation.operation_id, digest, 'FAILED', False, True,
+                operation.session_id, error_code=error.code))
         if not fresh:
             return receipt
         if _expired():
