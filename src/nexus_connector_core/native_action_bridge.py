@@ -82,7 +82,45 @@ class MessageCreate(RuntimeInputList):
     message: Mapping[str, Any]
 
 
+@dataclass(frozen=True, slots=True)
+class AgentList(RuntimeInputList):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class AgentGet(RuntimeInputList):
+    agent_id: str
+
+
+@dataclass(frozen=True, slots=True)
+class CapabilityList(RuntimeInputList):
+    pass
+
+
+@dataclass(frozen=True, slots=True)
+class CoordinationHealth(RuntimeInputList):
+    window: str = '24h'
+
+
+DISCOVERY_ACTIONS = {AgentList: 'agent.list', AgentGet: 'agent.get',
+                     CapabilityList: 'capability.list', CoordinationHealth: 'coordination.health'}
+
+
+def _discovery_payload(request):
+    if type(request) is AgentGet:
+        if not _bounded_id(request.agent_id):
+            raise CoreError('VALIDATION_ERROR', 'native_action')
+        return {'agent_id': request.agent_id}
+    if type(request) is CoordinationHealth:
+        if type(request.window) is not str or request.window not in ('1h', '24h', '7d'):
+            raise CoreError('VALIDATION_ERROR', 'native_action')
+        return {'window': request.window}
+    return {}
+
+
 class CanonicalNativeActions(Protocol):
+    async def read_discovery(self, request: AgentList | AgentGet | CapabilityList | CoordinationHealth,
+                             context: ExecutionContext) -> Mapping[str, Any]: ...
     async def create_message(self, request: MessageCreate,
                              context: ExecutionContext) -> Mapping[str, Any]: ...
     async def list_runtime_inputs(self, request: RuntimeInputList,
@@ -143,16 +181,19 @@ def native_action_request_body(request: NativeActionRequest, scope: Mapping[str,
     scope = native_action_scope(scope)
     types = {ContextGet: 'context', HandoffClaim: 'claim', HandoffComplete: 'complete',
              RuntimeInputList: 'input_list', RuntimeInputRespond: 'input_respond', MessageCreate: 'message_create'}
+    types.update({kind: action.replace('.', '_') for kind, action in DISCOVERY_ACTIONS.items()})
     action = types.get(type(request))
     if action is None:
         raise CoreError('CAPABILITY_UNSUPPORTED', 'native_action')
-    question = type(request) in {RuntimeInputList, RuntimeInputRespond, MessageCreate}
+    question = isinstance(request, RuntimeInputList)
     if (not _bounded_id(request.operation_id) or (not question and not _bounded_id(request.handoff_id))
             or request.session_id != scope['session_id']
             or not _bounded_id(request.capability_ref, maximum=256)
             or not request.capability_ref.startswith('native-cap:')):
         raise CoreError('VALIDATION_ERROR', 'native_action')
     payload = {} if question else dict(handoff_id=request.handoff_id)
+    if type(request) in DISCOVERY_ACTIONS:
+        payload = _discovery_payload(request)
     if type(request) is MessageCreate:
         if not isinstance(request.message, Mapping):
             raise CoreError('VALIDATION_ERROR', 'native_action')
@@ -196,7 +237,7 @@ class ScopedNativeActionBridge:
                 not math.isfinite(grant.expires_monotonic) or
                 not grant.allowed_actions <= {
                     "handoff.get", "handoff.claim", "handoff.complete",
-                    "runtime.input.list", "runtime.input.respond", "message.create"}):
+                    "runtime.input.list", "runtime.input.respond", "message.create", *DISCOVERY_ACTIONS.values()}):
             raise ValueError("invalid native action grant")
         if any(type(v) is not int or v < 1 for v in (
                 grant.connection_generation, grant.authorization_revision, grant.configuration_revision)):
@@ -218,7 +259,10 @@ class ScopedNativeActionBridge:
 
     async def invoke(self, request: NativeActionRequest,
                      context: ExecutionContext) -> Mapping[str, Any]:
-        if type(request) is ContextGet:
+        if type(request) in DISCOVERY_ACTIONS:
+            action = DISCOVERY_ACTIONS[type(request)]
+            _discovery_payload(request)
+        elif type(request) is ContextGet:
             action = "handoff.get"
         elif type(request) is HandoffClaim:
             action = "handoff.claim"
@@ -235,11 +279,11 @@ class ScopedNativeActionBridge:
         grant = self._grant
         if (not _bounded_id(request.operation_id) or
                 not _bounded_id(request.session_id) or
-                (type(request) not in {RuntimeInputList, RuntimeInputRespond, MessageCreate} and not _bounded_id(request.handoff_id)) or
+                (not isinstance(request, RuntimeInputList) and not _bounded_id(request.handoff_id)) or
                 not isinstance(request.capability_ref, str)):
             raise CoreError("VALIDATION_ERROR", "native_action")
         self._authorize(request, context, action)
-        read_only = type(request) in {ContextGet, RuntimeInputList}
+        read_only = type(request) in {ContextGet, RuntimeInputList, *DISCOVERY_ACTIONS}
         if type(request) is MessageCreate:
             try:
                 if not isinstance(request.message, Mapping):
@@ -273,7 +317,9 @@ class ScopedNativeActionBridge:
             except (TypeError, ValueError, RecursionError) as exc:
                 raise CoreError("VALIDATION_ERROR", "native_action") from exc
         try:
-            if type(request) is ContextGet:
+            if type(request) in DISCOVERY_ACTIONS:
+                response = await self._backend.read_discovery(request, context)
+            elif type(request) is ContextGet:
                 response = await self._backend.get_context(request, context)
             elif type(request) is HandoffClaim:
                 response = await self._backend.claim_handoff(request, context)

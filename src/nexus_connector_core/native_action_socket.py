@@ -17,6 +17,7 @@ from .models import CoreError, ExecutionContext, SessionKey
 from .native_action_bridge import (
     ContextGet, HandoffClaim, HandoffComplete, ScopedNativeActionBridge,
     RuntimeInputList, RuntimeInputRespond, MessageCreate,
+    AgentList, AgentGet, CapabilityList, CoordinationHealth,
 )
 from .protocol import canonical_json
 
@@ -26,6 +27,10 @@ _TIMEOUT_S = 10.0
 _COMMON_KEYS = frozenset({"action", "operation_id", "session_id",
                           "capability_ref", "handoff_id"})
 _ACTION_KEYS = {
+    'agent.list': (_COMMON_KEYS - {'handoff_id'}, _COMMON_KEYS - {'handoff_id'}),
+    'agent.get': ((_COMMON_KEYS - {'handoff_id'}) | {'agent_id'}, (_COMMON_KEYS - {'handoff_id'}) | {'agent_id'}),
+    'capability.list': (_COMMON_KEYS - {'handoff_id'}, _COMMON_KEYS - {'handoff_id'}),
+    'coordination.health': (_COMMON_KEYS - {'handoff_id'}, (_COMMON_KEYS - {'handoff_id'}) | {'window'}),
     'message.create': ((_COMMON_KEYS - {'handoff_id'}) | {'message'}, (_COMMON_KEYS - {'handoff_id'}) | {'message'}),
     'runtime.input.list': (_COMMON_KEYS - {'handoff_id'}, _COMMON_KEYS - {'handoff_id'}),
     'runtime.input.respond': ((_COMMON_KEYS - {'handoff_id'}) | {'request'}, (_COMMON_KEYS - {'handoff_id'}) | {'request'}),
@@ -68,6 +73,11 @@ def _decode_request(line: bytes) -> ContextGet | HandoffClaim | HandoffComplete:
     required, allowed = _ACTION_KEYS[action]
     if not required <= value.keys() or not value.keys() <= allowed:
         raise CoreError("VALIDATION_ERROR", "native_action_ingress")
+    discovery = {'agent.list': AgentList, 'agent.get': AgentGet,
+                 'capability.list': CapabilityList, 'coordination.health': CoordinationHealth}
+    if action in discovery:
+        kwargs = {k: value[k] for k in ('agent_id', 'window') if k in value}
+        return discovery[action](value['operation_id'], value['session_id'], value['capability_ref'], **kwargs)
     if action == 'message.create':
         return MessageCreate(value['operation_id'], value['session_id'], value['capability_ref'], value['message'])
     if action.startswith('runtime.input.'):

@@ -2,6 +2,10 @@
 // A trusted host supplies a narrow, authenticated loopback JSONL socket.
 import { createConnection } from "node:net";
 const actions = [
+  ["nexus_agent_list", "agent.list", {}],
+  ["nexus_agent_get", "agent.get", {agent_id: {type: "string"}}],
+  ["nexus_capability_list", "capability.list", {}],
+  ["nexus_coordination_health", "coordination.health", {window: {type: "string", enum: ["1h", "24h", "7d"]}}],
   ["nexus_message_create", "message.create", {message: {type: "object", additionalProperties: false,
     properties: {subject: {type: "string"}, body: {type: "string"}, target: {type: "object"},
       channel_id: {type: "string"}, parent_message_id: {type: "string"},
@@ -119,13 +123,19 @@ export default function (pi) {
     },
   });
   for (const [name, action, properties] of actions) {
-    const requiredFields = action === "message.create" ? ["message"] : action === "runtime.input.list" ? [] :
+    const discovery = ["agent.list", "agent.get", "capability.list", "coordination.health"].includes(action);
+    const requiredFields = discovery ? (action === "agent.get" ? ["agent_id"] : []) : action === "message.create" ? ["message"] : action === "runtime.input.list" ? [] :
       action === "runtime.input.respond" ? ["request"] : action === "handoff.get" ? ["handoff_id"] :
       action === "handoff.claim" ? ["handoff_id", "idempotency_key"] :
       ["handoff_id", "claim_epoch", "result"];
     pi.registerTool({
-      name, label: name, description: action === "message.create" ?
-        'Send a Nexus message as your authenticated runtime agent in its workspace. Use message={subject,body,target:{strategy:"direct",agent_id:"recipient"}}. Sender and workspace are supplied by the session. Replaying the same tool call ID cannot create a second message. The result can require operator approval.' : action === "runtime.input.list" ?
+      name, label: name, description: discovery ? ({
+        "agent.list": "List agents reachable under your communication permissions, with presence and connection status. Online does not guarantee delivery.",
+        "agent.get": "Read a reachable agent's profile, presence and connection status by agent_id. The target ID does not change your authenticated identity.",
+        "capability.list": "List the capability catalog and owners reachable under your communication permissions.",
+        "coordination.health": "Read coordination health for this session's workspace. Requires the enabled health feature and your health.read permission."
+      })[action] : action === "message.create" ?
+        'Send a Nexus message as your authenticated runtime agent in its workspace. Use message={subject,body,target:{strategy:"direct",agent_id:"recipient"}} or target:{strategy:"broadcast"}. Routing and message permissions still apply. Discover peers with nexus_agent_list. Sender and workspace are supplied by the session. Replaying the same tool call ID cannot create a second message. The result can require operator approval.' : action === "runtime.input.list" ?
         "List native questions addressed to you in this session's workspace. Return the native answer with nexus_runtime_input_respond." :
         action === "runtime.input.respond" ?
         "Answer a question addressed to you. Copy approval_key, expected_revision, request_hash and cas_token from the listed question into request. Add decision approve or deny and response when approving. Omit client_intent_id; the tool call supplies it. Preserve the native response contract: Codex answers={question_id:{answers:[text]}}; Claude answers={question_text:text}; Pi value=text or confirmed=boolean; MCP content={field:value}." : `Nexus native ${action} action`,
@@ -153,6 +163,8 @@ export default function (pi) {
         const request = { action, operation_id: toolCallId, session_id: session,
           capability_ref: capability };
         if (action.startsWith("handoff.")) request.handoff_id = params.handoff_id;
+        if (action === "agent.get") request.agent_id = required(params.agent_id, "agent");
+        if (action === "coordination.health" && params.window !== undefined) request.window = params.window;
         if (action === "runtime.input.respond") request.request = params.request;
         if (action === "message.create") request.message = params.message;
         if (action === "handoff.claim") {
@@ -166,7 +178,7 @@ export default function (pi) {
         if (Buffer.byteLength(JSON.stringify(request), "utf8") > 16 * 1024) {
           throw new Error("native action payload too large");
         }
-        const uncertain = ["handoff.get", "runtime.input.list"].includes(action) ? "EXECUTOR_OFFLINE" : "OUTCOME_UNKNOWN";
+        const uncertain = discovery || ["handoff.get", "runtime.input.list"].includes(action) ? "EXECUTOR_OFFLINE" : "OUTCOME_UNKNOWN";
         const data = await exchange(port, request, signal, uncertain);
         return { content: [{ type: "text", text: JSON.stringify(data) }], details: data };
       },
