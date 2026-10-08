@@ -1,6 +1,9 @@
 # Version and platform compatibility
 
-Current package version: `0.0.6`. Pi native tools include agent list/get,
+Current package version: `0.0.7`. Native turn-start events retain their phase
+and current operation identity; foreign or idle starts are refused.
+
+Pi native tools include agent list/get,
 capability discovery and workspace-bound coordination health. Their socket
 requests retain session identity, action ceilings and lease checks; Nexus
 enforces the agent's current domain permissions and communication visibility.

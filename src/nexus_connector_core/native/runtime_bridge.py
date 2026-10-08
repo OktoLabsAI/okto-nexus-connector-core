@@ -444,6 +444,13 @@ class CopiedAdapterSession:
                                     possible_effect=True)
                 if native.turn_id is not None:
                     self._active_turn_id = native.turn_id
+            if phase == "started":
+                active = self._active_operation_id
+                if active is None or native.operation_id not in (None, active):
+                    raise CoreError("EVENT_OPERATION_MISMATCH", "native_pump",
+                                    possible_effect=True)
+                native = replace(native, operation_id=active,
+                                 delivery_phase=phase)
             from .failure_codes import provider_failure_code
             failure_code = provider_failure_code(native)
             if (failure_code and self._active_operation_id is not None

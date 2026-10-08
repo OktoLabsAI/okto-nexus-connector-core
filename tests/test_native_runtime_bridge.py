@@ -675,6 +675,41 @@ def test_copied_adapter_refuses_idle_and_stale_target_before_write():
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("active,reported", [(True, None), (True, "foreign"), (False, None)])
+def test_codex_started_event_preserves_phase_and_current_operation(active, reported):
+    class TurnConnector(FakeCopiedConnector):
+        delivery_event_phase = staticmethod(CodexAppServerConnector.delivery_event_phase)
+
+        def events(self):
+            yield HarnessEvent("native-session", "codex", "turn_started",
+                               "turn/started", "2026-10-08T00:00:00Z", {},
+                               turn_id="native-turn-1", operation_id=reported)
+
+    async def run():
+        connector = TurnConnector()
+        harness = HarnessSession("native-session", "codex", "agent", "STARTING",
+                                 HarnessCapabilities(False, "IMMEDIATE", False, False, True),
+                                 "2026-10-08T00:00:00Z")
+        bridge = CopiedAdapterSession(connector, harness, session_id="public-session",
+                                      stream_epoch="epoch", context=context())
+        try:
+            if active:
+                await bridge.send("send_turn", {"text": "hello"}, "op-1")
+            if active and reported is None:
+                events = [event async for event in bridge.events()]
+                assert len(events) == 1
+                assert events[0].operation_id == "op-1"
+                assert events[0].payload["delivery_phase"] == "started"
+                assert events[0].payload["turn_id"] == "native-turn-1"
+            else:
+                with pytest.raises(CoreError, match="EVENT_OPERATION_MISMATCH"):
+                    _ = [event async for event in bridge.events()]
+        finally:
+            await bridge.close()
+
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("stale_terminal_first", [True, False])
 def test_pi_terminal_needs_active_agent_start(stale_terminal_first):
     class TurnConnector(FakeCopiedConnector):
@@ -708,6 +743,8 @@ def test_pi_terminal_needs_active_agent_start(stale_terminal_first):
             assert bridge.active_turn()
         else:
             events = [event async for event in bridge.events()]
+            assert events[0].operation_id == "op-1"
+            assert events[0].payload["delivery_phase"] == "started"
             assert events[-1].operation_id == "op-1"
             assert events[-1].payload["delivery_phase"] == "terminal"
             assert not bridge.active_turn()
