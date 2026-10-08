@@ -143,8 +143,10 @@ def validate_process_birth(evidence: ProcessBirthEvidence) -> None:
         raise ValueError("invalid owned process birth evidence")
     if evidence.container_id is not None:
         import re
-        if (evidence.platform != 'win32' or type(evidence.container_id) is not str or
-                re.fullmatch(r'Global\\nexus-core-[0-9a-f]{32}', evidence.container_id) is None):
+        pattern = {'win32': r'Global\\nexus-core-[0-9a-f]{32}',
+                   'linux': r'linux-guardian:[0-9a-f]{32}'}.get(evidence.platform)
+        if (pattern is None or type(evidence.container_id) is not str or
+                re.fullmatch(pattern, evidence.container_id) is None):
             raise ValueError("invalid owned process container")
 
 

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, AsyncIterator, Mapping, Protocol
+from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Mapping, Protocol
 
 from .models import (
     CloseOperation, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
@@ -53,6 +53,9 @@ class RuntimeCore(Protocol):
     async def storage_status(self) -> StorageStatus: ...
     async def checkpoint_wal(self) -> tuple[int, int, int]: ...
     async def inspect(self, session: SessionKey) -> RuntimeSnapshot: ...
+    def context_observation_supported(self, session: SessionKey) -> bool: ...
+    async def observe_context(self, session: SessionKey, envelope: Mapping, *,
+                              guard: Callable[[], None]) -> None: ...
     async def claimed_sessions(self, server_id: str, executor_id: str, *,
                                after_rowid: int = 0,
                                high_water_rowid: int | None = None,

@@ -103,6 +103,10 @@ def test_explicit_guardian_force_reaps_escaped_grandchild(tmp_path):
         readable, _, _ = select.select([process.stdout], [], [], 10)
         assert readable, "owned process did not report its tree"
         native_pid, grandchild_pid = json.loads(process.stdout.readline())
+        from nexus_connector_core.native.process import snapshot_owned_process_birth
+        from nexus_connector_core.native.process.recovery import recover_owned_container
+        evidence = snapshot_owned_process_birth(process)
+        assert recover_owned_container(evidence) == 'UNKNOWN'
         for pid in (process.pid, native_pid, grandchild_pid):
             descriptor = pidfd_open(pid)
             descriptors.append(descriptor)
@@ -112,6 +116,7 @@ def test_explicit_guardian_force_reaps_escaped_grandchild(tmp_path):
         assert observe_owned_process(process)["stop_observed"] is True
         for descriptor in descriptors:
             assert select.select([descriptor], [], [], 10)[0]
+        assert recover_owned_container(evidence, stop=True) == 'STOPPED'
     finally:
         if process.poll() is None:
             process.kill()

@@ -179,6 +179,7 @@ class _LateStopNative:
         self.queue = asyncio.Queue()
         self.stopped = False
         self.start_gate = threading.Event()
+        self.open_entered = asyncio.Event()
 
     async def send(self, verb, payload, operation_id, *,
                    expected_turn_id=None):
@@ -211,6 +212,7 @@ def _late_open_runtime(tmp_path, native):
 
     class _Factory:
         async def open(self, prepared, session_id, auth, *, stream_epoch):
+            native.open_entered.set()
             await asyncio.to_thread(native.start_gate.wait, 5)
             return native
 
@@ -225,13 +227,15 @@ def _late_open_runtime(tmp_path, native):
     return runtime, journal
 
 
-async def _cancel_open_late(runtime, clock):
+async def _cancel_open_late(runtime, clock, native):
     auth = replace(context(), lease_deadline_monotonic=clock.now + 60)
     prepared = await runtime.prepare(
         LaunchIntent("agent", "ws", "codex_app_server"), auth)
     opening = asyncio.create_task(runtime.open(
         OpenOperation("open-op", "session", "epoch", prepared), auth))
-    await asyncio.sleep(0.2)
+    # Cancel an open that has actually reached the native factory. A fixed
+    # sleep can cancel journal admission instead on a busy CI worker.
+    await asyncio.wait_for(native.open_entered.wait(), timeout=10)
     opening.cancel()
     try:
         await opening
@@ -245,7 +249,7 @@ def test_x02_late_stop_keeps_failed_slot_release_recoverable(tmp_path):
         runtime, journal = _late_open_runtime(tmp_path, native)
         clock = FakeClock(100.0)
         try:
-            await _cancel_open_late(runtime, clock)
+            await _cancel_open_late(runtime, clock, native)
             # Inject ONE pre-commit refusal into the durable release of
             # the LATE CONTAINMENT itself (the slot is still held when
             # the handle stops): the obligation must survive the failed
@@ -307,7 +311,7 @@ def test_control_late_stop_with_available_ledger_releases_slot(tmp_path):
         runtime, journal = _late_open_runtime(tmp_path, native)
         clock = FakeClock(100.0)
         try:
-            await _cancel_open_late(runtime, clock)
+            await _cancel_open_late(runtime, clock, native)
             native.start_gate.set()
             await asyncio.sleep(0.4)
             await asyncio.wait_for(
@@ -351,7 +355,7 @@ class _ThreadForceNative(_LateStopNative):
                 self.force_active += 1
                 self.force_peak = max(self.force_peak,
                                       self.force_active)
-            self.force_gate.wait(5)
+            self.force_gate.wait(30)
             with self._lock:
                 self.force_active -= 1
             self.stopped = True
@@ -365,7 +369,7 @@ def test_x03_repeat_shutdown_coalesces_physical_force_in_flight(tmp_path):
         runtime, journal = _late_open_runtime(tmp_path, native)
         clock = FakeClock(100.0)
         try:
-            await _cancel_open_late(runtime, clock)
+            await _cancel_open_late(runtime, clock, native)
             # First containment dispatches the physical force (a REAL
             # thread unit that stays held on the gate).
             first = asyncio.create_task(runtime.shutdown(

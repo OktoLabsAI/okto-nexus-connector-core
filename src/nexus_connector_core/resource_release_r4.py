@@ -1,4 +1,4 @@
-"""Correlate historical release with the original successful opening.
+"""Correlate historical release with the original effect-capable opening.
 
 The digest is an integrity/correlation marker for an authenticated report.
 It is not a signature, live ownership proof, takeover permission or a receipt
@@ -37,7 +37,12 @@ def project_r4_resource_release(binding, claim, slot, receipt):
         raise CoreError("SCOPE_MISMATCH", "r4_resource_release")
     key = OperationKey(claim.key.server_id, claim.key.executor_id, claim.opening_operation_id)
     projected = project_r4_bound_receipt(binding, receipt, key=key, receipt_revision=1)
-    if projected["session_id"] != claim.key.session_id or projected["stage"] not in ("SUBMITTED", "SUCCEEDED"):
+    # The native tree can exist before the successful opening receipt commits.
+    # The released owned slot is the stop proof; an uncertain opening receipt
+    # preserves that uncertainty rather than making containment unrecoverable.
+    if (projected["session_id"] != claim.key.session_id
+            or projected["stage"] not in ("SUBMISSION_STARTED", "SUBMITTED", "RUNNING", "OUTCOME_UNKNOWN", "SUCCEEDED", "FAILED")
+            or not projected['possible_effect']):
         raise CoreError("RECONCILIATION_REQUIRED", "r4_resource_release")
     digest = r4_resource_release_digest(server_id=key.server_id, executor_id=key.executor_id,
         session_id=claim.key.session_id, opening_operation_id=key.operation_id,

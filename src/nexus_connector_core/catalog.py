@@ -25,7 +25,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .native.registry import adapter_specs
+from .native.registry import adapter_specs, adapter_spec, registered_managed_contract
 from .models import ControlTargeting
 
 #: Bumped when the projection's SHAPE changes; values themselves derive
@@ -106,7 +106,7 @@ def get_runtime_catalog() -> RuntimeCatalog:
             connection_mode=spec.mode,
             implementation_platforms=tuple(sorted(spec.platforms)),
             support_status=_SUPPORT_STATUS.get(spec.adapter_id,
-                                               "registered_unqualified"),
+                'managed_supported' if spec.managed_contract == 1 else "registered_unqualified"),
             discoverable=(spec.mode == "managed"
                           and spec.executable_name is not None),
             control_targeting=spec.control_targeting,
@@ -118,5 +118,19 @@ def get_runtime_catalog() -> RuntimeCatalog:
     )
 
 
+def get_runtime_connection_contract(adapter_id):
+    """Path-free host integration metadata from trusted registration.
+
+    This describes the implemented interface, not observed readiness. Another
+    managed connector must independently confirm its version at opening.
+    """
+    registered = registered_managed_contract(adapter_id, check_platform=False)
+    if registered is not None:
+        return dict(managed_contract=1, tool_transport='none',
+            transport_binding_contract=registered.transport_binding_contract)
+    return dict(managed_contract=None, tool_transport='native' if adapter_id == 'pi_rpc' else 'mcp',
+        transport_binding_contract=1 if adapter_id in _SUPPORT_STATUS else None)
+
+
 __all__ = ["RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog",
-           "CATALOG_FORMAT_VERSION"]
+           "CATALOG_FORMAT_VERSION", "get_runtime_connection_contract"]

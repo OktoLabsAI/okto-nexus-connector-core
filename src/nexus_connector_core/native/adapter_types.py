@@ -127,6 +127,11 @@ class HarnessCapabilities:
     observes_session_end: bool
 
 
+def _known_harness_kind(kind):
+    from .registry import adapter_specs
+    return type(kind) is str and any(spec.native_kind == kind for spec in adapter_specs())
+
+
 @dataclass(slots=True)
 class HarnessSession:
     session_id: str
@@ -146,7 +151,7 @@ class HarnessSession:
     owner_epoch: int | None = None
 
     def __post_init__(self) -> None:
-        if self.harness_kind not in {"pi", "codex", "claude_code"}:
+        if not _known_harness_kind(self.harness_kind):
             raise NativeAdapterError(ErrorCode.VALIDATION_ERROR,
                                      "unknown harness kind", {})
         if self.status not in {STATUS_STARTING, STATUS_RUNNING,
@@ -178,7 +183,7 @@ class HarnessEvent:
     delivery_outcome: str | None = None
 
     def __post_init__(self) -> None:
-        if self.harness_kind not in {"pi", "codex", "claude_code"}:
+        if not _known_harness_kind(self.harness_kind):
             raise NativeAdapterError(ErrorCode.VALIDATION_ERROR,
                                      "unknown harness kind", {})
         if self.kind not in {"turn_started", "output_delta", "turn_completed",

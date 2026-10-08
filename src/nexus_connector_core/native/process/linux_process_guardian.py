@@ -58,7 +58,20 @@ def _reap_exited_except(leader):
         os.waitpid(child.si_pid, 0)
 
 
-def run(owner_fd, cancel_fd, proof_fd, argv):
+def run(owner_fd, cancel_fd, proof_fd, argv, recovery_fd=None):
+    def prove_stopped():
+        if recovery_fd is not None:
+            # This script is started with -I and has no package import path.
+            # Keep its fixed receipt encoding identical to linux_recovery.
+            receipt = b'nexus-linux-tree-stopped-v1\n'
+            if os.write(recovery_fd, receipt) != len(receipt):
+                raise OSError('Incomplete owned-container completion receipt')
+            os.fsync(recovery_fd)
+        try:
+            os.write(proof_fd, b'D')
+        except BrokenPipeError:
+            # The durable receipt is precisely for a dead original owner.
+            pass
     libc = ctypes.CDLL(None, use_errno=True)
     if libc.prctl(36, 1, 0, 0, 0) != 0:  # PR_SET_CHILD_SUBREAPER
         raise OSError(ctypes.get_errno(), "Cannot establish Linux child subreaper")
@@ -74,14 +87,14 @@ def run(owner_fd, cancel_fd, proof_fd, argv):
     # Death between this check and Popen is still protected by this subreaper;
     # the ready owner pidfd then takes us directly into cleanup.
     if monitor.select(0):
-        os.write(proof_fd, b"D")
+        prove_stopped()
         return 125
     try:
         native = subprocess.Popen(argv, close_fds=True, start_new_session=True)
     except BaseException:
         # Popen failed before returning a live child; its exec-error handling
         # has already waited for that child. No native tree was admitted.
-        os.write(proof_fd, b"D")
+        prove_stopped()
         raise
     try:
         # Only the native tree owns its protocol pipes after spawn. Keeping a
@@ -143,7 +156,7 @@ def run(owner_fd, cancel_fd, proof_fd, argv):
                 try:
                     pid, observed = os.waitpid(-1, os.WNOHANG)
                 except ChildProcessError:
-                    os.write(proof_fd, b"D")
+                    prove_stopped()
                     return os.waitstatus_to_exitcode(status) if status is not None else 125
                 if not pid:
                     break
@@ -162,7 +175,7 @@ def run(owner_fd, cancel_fd, proof_fd, argv):
 
 if __name__ == "__main__":
     try:
-        code = run(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[4:])
+        code = run(int(sys.argv[1]), int(sys.argv[2]), int(sys.argv[3]), sys.argv[5:], int(sys.argv[4]))
     except Exception as exc:
         print(f"Nexus Linux ownership failed: {type(exc).__name__}", file=sys.stderr, flush=True)
         code = 126

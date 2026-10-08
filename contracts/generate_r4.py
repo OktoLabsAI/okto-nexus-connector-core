@@ -20,13 +20,9 @@ OUT = Path(__file__).resolve().parents[1] / "src/nexus_connector_core/contracts/
 SRC = Path(__file__).resolve().parents[1] / "src"
 if str(SRC) not in sys.path:
     sys.path.insert(0, str(SRC))
-from nexus_connector_core.native.registry import adapter_specs  # noqa: E402
 from nexus_connector_core.executor_inventory import SNAPSHOT_FORMAT_VERSION  # noqa: E402
 from nexus_connector_core.catalog import CATALOG_FORMAT_VERSION  # noqa: E402
 
-# Retain the retired identifier in this frozen wire revision so historical
-# frames remain readable. The native registry still rejects its execution.
-ADAPTER_IDS = [spec.adapter_id for spec in adapter_specs()] + ["claude_attach"]
 ID = {"type": "string", "minLength": 1, "maxLength": 160}
 REV = {"type": "integer", "minimum": 0, "maximum": 9007199254740991}
 HASH = {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
@@ -60,7 +56,9 @@ SCOPE_REQUIRED = tuple(SCOPE)
 CONNECTION = {"connection_id": ID, "connection_generation": REV}
 
 OPEN = obj({
-    "adapter_id": {"enum": ADAPTER_IDS},
+    # Identifier syntax is portable; decoding additionally requires the local
+    # trusted static registry. No module or connector class travels on the wire.
+    "adapter_id": ID,
     "candidate_ref": {"type": "string", "pattern": "^nexus-install-v1:[0-9a-f]{64}$"},
     "inventory_revision": HASH,
     "realization_ref": ID,

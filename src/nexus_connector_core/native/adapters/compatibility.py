@@ -196,11 +196,10 @@ def control_observation(kind, version, *, platform=None, architecture=None,
     if not verified:
         return {"compatible_controls": [],
                 "control_contract_basis": "unverified"}
-    # Claude stream has no steer vocabulary: its only real-time control is
-    # interrupt, and public turn.steer is refused for claude_stream. Pi's
+    # Claude replacement steering composes its qualified interrupt and user
+    # prompt, retaining FIFO correlation for the two distinct results. Pi's
     # steer is the ID-less queued next-turn-boundary contract.
-    controls = (["interrupt"] if kind == "claude_code"
-                else ["steer", "interrupt"])
+    controls = ["steer", "interrupt"]
     return {"compatible_controls": controls,
             "control_contract_basis": "tested_version_contract"}
 

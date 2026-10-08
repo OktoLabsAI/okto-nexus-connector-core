@@ -1000,6 +1000,41 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
     async def checkpoint_wal(self) -> tuple[int, int, int]:
         return await self._journal.checkpoint_wal()
 
+    def context_observation_supported(self, session: SessionKey) -> bool:
+        """Observed optional support on this exact owned session, not a grant."""
+        binding = self._sessions.get(session)
+        return bool(binding and not any((binding.closed, binding.closing, binding.draining,
+            binding.revoked, binding.faulted, binding.superseded, binding.lease_hold,
+            binding.lease_expired, self._shutting_down))
+            and getattr(binding.native, 'context_observation_contract', None) == 1
+            and callable(getattr(binding.native, 'observe_context', None)))
+
+    async def observe_context(self, session: SessionKey, envelope: Mapping, *, guard) -> None:
+        """Trusted host's durable observation lane; no turn, result or execution grant.
+
+        The host commits send intent before calling and never replays uncertain
+        calls. Its mandatory guard revalidates the source audience, credential,
+        endpoint approval and owner at the native write frontier.
+        """
+        if not callable(guard) or not isinstance(envelope, Mapping):
+            raise CoreError('VALIDATION_ERROR', 'context_observation')
+        encoded = canonical_json(dict(envelope))
+        if (len(encoded) > 65536 or envelope.get('intent') != 'information'
+                or envelope.get('response_requested') is not False):
+            raise CoreError('VALIDATION_ERROR', 'context_observation')
+        frozen = json.loads(encoded)
+        if not self.context_observation_supported(session):
+            raise EffectNotSent('Context observation unavailable', code='CAPABILITY_UNSUPPORTED')
+        binding = self._sessions[session]
+        if (envelope.get('recipient_agent_id') != binding.context.agent_id
+                or envelope.get('workspace_id') != binding.context.workspace_id):
+            raise EffectNotSent('Context scope changed', code='BINDING_NOT_AUTHORIZED')
+        async with binding.normal_lock:
+            if not self.context_observation_supported(session):
+                raise EffectNotSent('Context observation unavailable', code='CAPABILITY_UNSUPPORTED')
+            self._session(session.session_id, binding.context, require_live_lease=True)
+            await binding.native.observe_context(frozen, guard)
+
     async def inspect(self, session: SessionKey) -> RuntimeSnapshot:
         binding = self._sessions.get(session)
         if binding is None:
