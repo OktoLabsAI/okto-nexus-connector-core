@@ -95,11 +95,11 @@ def test_pi_prior_force_is_not_reclassified_as_graceful():
     {'success': 'true', 'data': {}},
     {'success': True, 'data': []},
 ])
-def test_pi_failed_readiness_retains_proof_of_stopped_process(reply):
+def test_pi_failed_readiness_retains_proof_of_stopped_process(reply, tmp_path):
     source = ('import sys,json\nfor line in sys.stdin:\n'
         ' msg=json.loads(line)\n'
         f' print(json.dumps(dict(type="response",command=msg["type"],**{reply!r})),flush=True)\n')
-    connector = PiRpcConnector(command=[sys.executable, '-u', '-c', source], env={})
+    connector = PiRpcConnector(command=[sys.executable, '-u', '-c', source], cwd=str(tmp_path), env={})
     try:
         with pytest.raises(NativeAdapterError, match='protocol_incompatible'):
             connector.start(owning_agent_id='agent')
