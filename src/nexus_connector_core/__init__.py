@@ -76,7 +76,7 @@ from .approval_reducer_r4 import (
 from .ports import OwnedSlotLedger, RuntimeCore
 from .composition import create_runtime
 from .catalog import (
-    RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog,
+    RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog, get_runtime_connection_contract,
     CATALOG_FORMAT_VERSION,
 )
 from .availability import (
@@ -140,7 +140,7 @@ __all__ = [
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ReconcileRequest",
     "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
     "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",
-    "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "CATALOG_FORMAT_VERSION",
+    "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "get_runtime_connection_contract", "CATALOG_FORMAT_VERSION",
     "AvailabilityReport", "CandidateAvailability", "evaluate_runtime_availability", "AVAILABILITY_FORMAT_VERSION",
     "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
     "discover_installations", "DiscoveryCancelled",

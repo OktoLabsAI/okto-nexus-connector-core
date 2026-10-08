@@ -1265,12 +1265,9 @@
               "additionalProperties": false,
               "properties": {
                 "adapter_id": {
-                  "enum": [
-                    "codex_app_server",
-                    "pi_rpc",
-                    "claude_stream",
-                    "claude_attach"
-                  ]
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 160
                 },
                 "candidate_ref": {
                   "pattern": "^nexus-install-v1:[0-9a-f]{64}$",

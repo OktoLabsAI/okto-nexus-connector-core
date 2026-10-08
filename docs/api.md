@@ -10,6 +10,12 @@ operations or bypassing the host's ownership and authorization checks.
 
 ## Harness configuration and native input
 
+`get_runtime_connection_contract` exposes the trusted adapter's host integration
+contract without module paths or credentials. Additional managed connectors
+confirm their registered contract at opening; registration alone does not prove
+readiness. A connector declaring no tool transport receives no session tool
+credential. Fallback requires transport binding contract version 1.
+
 `CONFIGURATION_SCHEMA_VERSION` identifies the discovery schema.
 `discover_harness_configuration` describes adapter settings;
 `query_harness_configuration` queries native runtime observations, and

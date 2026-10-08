@@ -20,7 +20,9 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
                    workspace_root: str | Path) -> PreparedLaunch:
     if intent.adapter_id != candidate.adapter_id or candidate.trust != "selected":
         raise CoreError("BINDING_NOT_AUTHORIZED", "prepare")
-    if intent.adapter_id not in {"codex_app_server", "pi_rpc", "claude_stream"}:
+    from .native.registry import registered_managed_contract
+    registered = registered_managed_contract(intent.adapter_id)
+    if intent.adapter_id not in {"codex_app_server", "pi_rpc", "claude_stream"} and registered is None:
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
     settings = harness_settings_dict(intent.harness_settings)
     validate_harness_settings(intent.adapter_id, settings)
@@ -60,7 +62,11 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
             current_identity = executable_build_identity(candidate.executable)
         if current_identity != candidate.build_identity:
             raise CoreError("PROFILE_DRIFT", "prepare")
-    if intent.adapter_id == "codex_app_server":
+    if registered is not None:
+        if intent.model is not None:
+            raise CoreError('CAPABILITY_UNSUPPORTED', 'prepare')
+        argv = (str(executable), *registered.launch_arguments)
+    elif intent.adapter_id == "codex_app_server":
         argv = (str(executable), "app-server")
     elif intent.adapter_id == "pi_rpc":
         argv = ((str(executable), candidate.launch_script, "--mode", "rpc")

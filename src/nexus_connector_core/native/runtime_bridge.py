@@ -32,7 +32,7 @@ _CONTROL_POOL_SIZE = 4
 _FORCE_POOL_SIZE = 2
 
 from .event_ingest import translate_native_event
-from .registry import adapter_spec, load_adapter
+from .registry import adapter_spec, load_adapter, registered_managed_contract
 from .redaction import NativeSecretRedactor, credential_values
 from .process import snapshot_owned_process_birth
 
@@ -691,6 +691,7 @@ class CopiedAdapterFactory:
                    context: ExecutionContext, *, stream_epoch: str,
                    opening_guard=None) -> CopiedAdapterSession:
         spec = adapter_spec(prepared.intent.adapter_id)
+        registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
             raise CoreError("CAPABILITY_UNSUPPORTED", "open", retry_safe=True)
         # PC11: refuse productive work before secrets/spawn when the host's
@@ -768,7 +769,7 @@ class CopiedAdapterFactory:
             return qualified_build(kind, observed.version, sys.platform,
                 observed.architecture, observed.fingerprint,
                 build_identity=observed.build_identity)
-        if candidate.version is None and not is_qualified(candidate):
+        if registered is None and candidate.version is None and not is_qualified(candidate):
             # Passive discovery does not execute the installation. Observe
             # its version only at this admitted, selected launch boundary.
             # The probe filters the process environment and resolves no
@@ -787,7 +788,7 @@ class CopiedAdapterFactory:
         # Build campaigns are evidence, not a cross-platform execution allowlist.
         # An observed native version may attempt the adapter's live handshake.
         # Unknown/malformed identities still fail before credentials are resolved.
-        if not recorded_build and not can_probe_protocol(
+        if registered is None and not recorded_build and not can_probe_protocol(
                 candidate.version, candidate.architecture, candidate.fingerprint):
             raise CoreError("NATIVE_VERSION_UNQUALIFIED", "open", retry_safe=True)
         approval_actions = {"approval.decide", "input.provide"}.issubset(context.allowed_actions)
@@ -826,7 +827,9 @@ class CopiedAdapterFactory:
                                 retry_safe=True)
         native_action = None
         resume_grant = None
-        if kind == "codex":
+        if registered is not None:
+            connector = load_adapter(spec.adapter_id)(command=command, cwd=prepared.cwd, env=env)
+        elif kind == "codex":
             resume_grant = (await self._codex_resume(prepared, session_id, context)
                             if self._codex_resume is not None else None)
             _revalidate_launch("codex_resume")
@@ -914,6 +917,21 @@ class CopiedAdapterFactory:
                 return connector.start(**start_kwargs)
 
             native_session = await asyncio.to_thread(_guarded_start)
+            if registered is not None:
+                # Registration alone is not observed support. This handshake
+                # belongs to the loaded connector and cannot be supplied over
+                # the network or inferred from another runtime's version.
+                observed = await asyncio.to_thread(connector.verify_protocol)
+                if (type(observed) is not dict or type(observed.get('managed_contract')) is not int
+                        or observed['managed_contract'] != 1
+                        or type(observed.get('transport_binding_contract')) is not type(registered.transport_binding_contract)
+                        or observed.get('transport_binding_contract') != registered.transport_binding_contract
+                        or native_session.harness_kind != spec.native_kind
+                        or native_session.owning_agent_id != context.agent_id):
+                    from .adapter_types import ErrorCode
+                    raise NativeAdapterError(ErrorCode.CONFLICT,
+                        'The registered adapter did not confirm its managed contract.',
+                        {'reason': 'protocol_incompatible'})
             if kind == 'claude_code' and not recorded_build:
                 await asyncio.to_thread(connector.verify_protocol)
         except BaseException as error:
