@@ -1,6 +1,11 @@
 # Version and platform compatibility
 
-Current package version: `0.0.5`. Pi startup failures retain process ownership
+Current package version: `0.0.6`. Pi native tools include agent list/get,
+capability discovery and workspace-bound coordination health. Their socket
+requests retain session identity, action ceilings and lease checks; Nexus
+enforces the agent's current domain permissions and communication visibility.
+
+Pi startup failures retain process ownership
 and report confirmed containment, allowing a terminal protocol failure instead
 of unnecessary recovery. Unknown containment remains unknown.
 
