@@ -4,14 +4,14 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "okto-nexus-connector-core"
-version = "0.0.9"
+version = "0.0.10"
 description = "Shared native harness runtime contracts for Okto Nexus"
 readme = "README.md"
 requires-python = ">=3.11"
 authors = [{name = "Okto Labs"}]
 license = "LicenseRef-Okto-Labs-ELv2-SaaS-Branding"
 license-files = ["LICENSE"]
-dependencies = ["rfc8785==0.1.4", "jsonschema==4.26.0"]
+dependencies = ["rfc8785==0.1.4", "jsonschema==4.26.0", "mcp>=1.30,<2"]
 
 [project.optional-dependencies]
 test = ["pytest>=8", "pytest-asyncio>=0.24", "build>=1"]

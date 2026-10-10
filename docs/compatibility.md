@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-Current package version: `0.0.9`. Linux guardians persist a private completion
+Current package version: `0.0.10`. Linux guardians persist a private completion
 receipt after reaping their entire owned tree. A replacement owner can confirm
 containment after abrupt owner death without signalling historical process IDs.
 Missing, incomplete or untrusted receipts remain unknown, including externally

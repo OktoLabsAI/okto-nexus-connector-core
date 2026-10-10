@@ -66,6 +66,7 @@ OPEN = obj({
     "profile_revision": REV,
     "mode": {"const": "managed"},
     "model": {"type": ["string", "null"], "maxLength": 160},
+    "mcp_preset": {"type": "array", "maxItems": 32, "items": {"type": "object"}},
     "harness_settings": {
         "type": "object", "additionalProperties": False,
         "properties": {

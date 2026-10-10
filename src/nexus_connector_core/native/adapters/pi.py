@@ -110,6 +110,7 @@ import queue
 import subprocess
 import threading
 from collections import deque
+from dataclasses import replace
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from ..adapter_types import utc_now_iso
@@ -125,6 +126,33 @@ from ..adapter_types import (
 from ..adapter_types import ErrorCode, NativeAdapterError, RuntimeCommandRejected
 
 __all__ = ["PiRpcConnector"]
+
+
+def _coalesce_message_delta(previous, incoming):
+    """Bounded batching of adjacent Pi chunks; never cross message boundaries.
+
+    Native replay still retains every original occurrence. A live subscriber
+    receives the exact concatenated delta and latest cumulative metadata,
+    avoiding one durable fsync per provider token during bursts.
+    """
+    if (previous.session_id != incoming.session_id or previous.kind != incoming.kind or
+            previous.operation_id != incoming.operation_id or previous.turn_id != incoming.turn_id or
+            previous.native_event != 'message_update' or incoming.native_event != 'message_update'):
+        return None
+    first = previous.payload.get('assistantMessageEvent')
+    last = incoming.payload.get('assistantMessageEvent')
+    if (not isinstance(first, dict) or not isinstance(last, dict) or
+            first.get('type') not in {'text_delta', 'thinking_delta', 'toolcall_delta'} or
+            first.get('type') != last.get('type') or
+            first.get('contentIndex') != last.get('contentIndex') or
+            not isinstance(first.get('delta'), str) or not isinstance(last.get('delta'), str)):
+        return None
+    payload = dict(incoming.payload)
+    payload['assistantMessageEvent'] = dict(last, delta=first['delta'] + last['delta'])
+    # Leave room for redaction, normalized output and the public event envelope.
+    if len(json.dumps(payload, ensure_ascii=False).encode('utf-8')) > 24 * 1024:
+        return None
+    return replace(incoming, payload=payload)
 
 # --------------------------------------------------------------------------- #
 # Native wire vocabulary (adapter-only; D2 forbids this crossing into domain)
@@ -884,7 +912,8 @@ class PiRpcConnector:
         Idle waits only check shutdown and never poll native protocol status.
         """
         with self._history_lock:
-            my_queue, backlog = subscribe(self._event_history, self._subscribers)
+            my_queue, backlog = subscribe(self._event_history, self._subscribers,
+                                          coalesce=_coalesce_message_delta)
         try:
             for item in backlog:
                 yield item

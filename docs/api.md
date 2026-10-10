@@ -1,4 +1,4 @@
-# Core API (`0.0.9`)
+# Core API (`0.0.10`)
 
 ## Runtime automation
 

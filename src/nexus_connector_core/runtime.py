@@ -269,11 +269,12 @@ class _OpeningGuard:
     so a late environment resolution cannot start a native adapter under
     a runtime that already began draining."""
 
-    __slots__ = ("_closed", "authority_probe")
+    __slots__ = ("_closed", "authority_probe", "context_probe")
 
     def __init__(self) -> None:
         self._closed = False
         self.authority_probe = None
+        self.context_probe = None
 
     @property
     def closed(self):
@@ -427,7 +428,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         if root is None:
             raise CoreError("WORKSPACE_UNAVAILABLE", "prepare")
         prepared = await asyncio.to_thread(prepare_launch, intent, candidate, root)
-        self._authorize(context, "runtime.open")
+        self._authorize(self._current_open_context(context), "runtime.open")
         return prepared
 
     async def open(self, operation: OpenOperation,
@@ -479,6 +480,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                 operation_id=operation.operation_id)
             attempt = _OpeningAttempt()
             attempt.guard.authority_probe = lambda: self._r4_open_blocked(context, operation.session_id)
+            attempt.guard.context_probe = lambda: self._current_open_context(context, operation.session_id)
             self._opening[session_key] = attempt
         # C4/T04: factories that declare the additive opening_guard seam
         # receive the draining fence (legacy/test factories without the
@@ -497,7 +499,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
 
             async def effect() -> str:
                 nonlocal effect_started, binding_registered
-                self._check_r4_context(context, "runtime.open", operation.session_id)
+                self._current_open_context(context, operation.session_id)
                 async with self._lock:
                     if self._shutting_down:
                         raise EffectNotSent("runtime is draining",
@@ -528,10 +530,10 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 # the Future (and any live handle it returns) stays
                 # supervised by the runtime, never abandoned.
                 try:
-                    self._check_r4_context(context, "runtime.open", operation.session_id)
+                    current_context = self._current_open_context(context, operation.session_id)
                     open_task = asyncio.ensure_future(
                         self._native_factory.open(
-                            prepared, operation.session_id, context,
+                            prepared, operation.session_id, current_context,
                             **open_kwargs))
                     attempt.native_task = open_task
                     native = await asyncio.shield(open_task)
@@ -565,6 +567,10 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                    prepared.intent.adapter_id,
                                    operation.operation_id, slot_reserved)
                 async with self._lock:
+                    # Installation and registration share the same lock: a
+                    # renewal cannot be lost between these two ownership states.
+                    installed = self._r4_leases.get(session_key)
+                    binding.context = installed.context if installed is not None else context
                     self._sessions[session_key] = binding
                     binding_registered = True
                     # PC03: thread-safe pre-dispatch guard shared with the
@@ -607,7 +613,9 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                     operation_id=operation.operation_id)
                 return native.native_id
 
-            return await self._kernel.execute(semantic, context, effect)
+            return await self._kernel.execute(semantic, context, effect,
+                opening_deadline=lambda: self._current_open_context(
+                    context, operation.session_id).lease_deadline_monotonic)
         finally:
             async with self._lock:
                 # C6/V02c: the WAITER ended, but the PRODUCER may still be
@@ -2650,13 +2658,18 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 if not expected:
                     binding.faulted = True
             if not expected:
-                await self._record_stream_loss(session, binding)
+                await self._record_stream_loss(session, binding, reason='UNEXPECTED_CANCELLATION')
             return
-        except Exception:
+        except Exception as error:
             # A dead stream does not prove process death or turn completion.
             # Keep ownership until explicit close/shutdown.
             binding.faulted = True
-            await self._record_stream_loss(session, binding)
+            from .native.event_buffers import NativeEventOverflow, NativeReplayExpired
+            reason = ('NATIVE_EVENT_OVERFLOW' if isinstance(error, NativeEventOverflow) else
+                      'NATIVE_REPLAY_EXPIRED' if isinstance(error, NativeReplayExpired) else
+                      'CORE_ERROR' if isinstance(error, CoreError) else 'EVENT_READER_FAILED')
+            await self._record_stream_loss(session, binding, reason=reason,
+                                           core_error=error if isinstance(error, CoreError) else None)
         else:
             # Iterator exhausted without exception (audit F03 / RC-04-01):
             # with a live process this is an unexpected EOF, not a turn
@@ -2670,10 +2683,11 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 if not expected:
                     binding.faulted = True
             if not expected:
-                await self._record_stream_loss(session, binding)
+                await self._record_stream_loss(session, binding, reason='UNEXPECTED_EOF')
 
     async def _record_stream_loss(self, session: SessionKey,
-                                  binding: _Session) -> None:
+                                  binding: _Session, *, reason='EVENT_READER_FAILED',
+                                  core_error=None) -> None:
         """Best-effort bounded incident record; never gates the fence."""
         try:
             await asyncio.wait_for(
@@ -2681,7 +2695,9 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                     session.server_id, session.executor_id,
                     session.session_id, binding.epoch, 0, "error",
                     "core.event_pump_failed",
-                    {"code": "EVENT_STREAM_UNAVAILABLE"})),
+                    {"code": "EVENT_STREAM_UNAVAILABLE", "reason": reason,
+                     **({"cause_code": core_error.code, "cause_stage": core_error.stage}
+                        if core_error is not None else {})})),
                 timeout=5.0)
         except (asyncio.TimeoutError, CoreError, Exception):
             pass

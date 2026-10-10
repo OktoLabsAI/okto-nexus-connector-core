@@ -134,8 +134,9 @@ class NativeEventHistory:
 
 
 class NativeEventQueue:
-    def __init__(self, *, max_events=128, max_bytes=2 * 1024 * 1024):
+    def __init__(self, *, max_events=128, max_bytes=2 * 1024 * 1024, coalesce=None):
         self.max_events, self.max_bytes = max_events, max_bytes
+        self.coalesce = coalesce
         self._items, self._bytes = deque(), 0
         self._overflow = False
         self._changed = threading.Condition()
@@ -143,6 +144,17 @@ class NativeEventQueue:
     def put(self, event):
         size = event_bytes(event)
         with self._changed:
+            coalesce = self.coalesce
+            if not self._overflow and self._items and coalesce is not None:
+                previous, previous_size = self._items[-1]
+                merged = coalesce(previous, event)
+                if merged is not None:
+                    merged_size = event_bytes(merged)
+                    if self._bytes - previous_size + merged_size <= self.max_bytes:
+                        self._items[-1] = (merged, merged_size)
+                        self._bytes += merged_size - previous_size
+                        self._changed.notify()
+                        return True
             if self._overflow or len(self._items) >= self.max_events or self._bytes + size > self.max_bytes:
                 self._overflow = True
                 self._changed.notify_all()
@@ -167,12 +179,12 @@ class NativeEventQueue:
             return len(self._items)
 
 
-def subscribe(history, subscribers, *, session_id=None):
+def subscribe(history, subscribers, *, session_id=None, coalesce=None):
     """Caller holds its append/snapshot registration lock."""
     if len(subscribers) >= 16:
         raise NativeSubscriptionLimit("native event subscription capacity exhausted")
     backlog = history.snapshot(session_id)
-    subscriber = NativeEventQueue()
+    subscriber = NativeEventQueue(coalesce=coalesce)
     subscribers.append(subscriber)
     return subscriber, backlog
 

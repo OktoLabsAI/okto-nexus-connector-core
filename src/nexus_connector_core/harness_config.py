@@ -157,7 +157,7 @@ def render_codex_toml_fragment(template: HarnessHTTPTemplate) -> str:
             ('default_tools_approval_mode = "approve"\n' if template.always_allow_tools else ''))
 
 
-def process_http_arguments(adapter_id: str, templates, approved_refs, *, inherit_global_mcps=False, disabled_mcp_names=()) -> tuple[str, ...]:
+def process_http_arguments(adapter_id: str, templates, approved_refs, *, inherit_global_mcps=False, disabled_mcp_names=(), preset_entries=None, preset_strict=False) -> tuple[str, ...]:
     """Render bounded process-only MCP options without bearer material.
 
     The host supplies validated templates, never arbitrary argv or a config
@@ -169,7 +169,9 @@ def process_http_arguments(adapter_id: str, templates, approved_refs, *, inherit
         raise CoreError('CAPABILITY_UNSUPPORTED', 'mcp_client_configuration')
     if type(templates) is not tuple or not 1 <= len(templates) <= 8:
         raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
-    entries = {}
+    entries = dict(preset_entries or {})
+    if any(name.lower().startswith('nexus') for name in entries):
+        raise CoreError('BINDING_NOT_AUTHORIZED', 'mcp_client_configuration')
     for template in templates:
         if (type(template) is not HarnessHTTPTemplate or template.adapter_id != adapter_id
                 or type(template.always_allow_tools) is not bool
@@ -187,7 +189,7 @@ def process_http_arguments(adapter_id: str, templates, approved_refs, *, inherit
             raise CoreError('PROFILE_DRIFT', 'mcp_client_configuration')
         entries[template.entry_name] = template.entry()
     if adapter_id == 'claude_stream':
-        return (*(() if inherit_global_mcps else ('--strict-mcp-config',)), '--mcp-config',
+        return (*(() if inherit_global_mcps and not preset_strict else ('--strict-mcp-config',)), '--mcp-config',
                 json.dumps({'mcpServers': entries}, separators=(',', ':')),
                 *(('--allowedTools', ','.join('mcp__'+t.entry_name+'__*' for t in templates if t.always_allow_tools))
                   if any(t.always_allow_tools for t in templates) else ()))
@@ -197,10 +199,12 @@ def process_http_arguments(adapter_id: str, templates, approved_refs, *, inherit
     # Codex recursively merges this table with native configuration. Render one
     # table, including opt-out flags, so arbitrary TOML entry names stay intact
     # (CLI dotted paths split literal dots and do not unquote path components).
-    combined = ({name: {'enabled': False} for name in disabled_mcp_names if name not in entries}
-                if not inherit_global_mcps else {})
+    combined = {name: {'enabled': False} for name in disabled_mcp_names if name not in entries}
     combined.update(entries)
-    fields = ','.join(json.dumps(name) + '={' + ','.join(
-        key + '=' + json.dumps(value) for key, value in entry.items()) + '}'
-        for name, entry in combined.items())
-    return ('-c', 'mcp_servers={' + fields + '}')
+    def toml(value):
+        if isinstance(value, dict):
+            return '{' + ','.join(json.dumps(k) + '=' + toml(v) for k, v in value.items()) + '}'
+        if isinstance(value, list):
+            return '[' + ','.join(toml(v) for v in value) + ']'
+        return json.dumps(value)
+    return ('-c', 'mcp_servers=' + toml(combined))

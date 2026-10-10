@@ -1320,6 +1320,13 @@
                   "pattern": "^sha256:[0-9a-f]{64}$",
                   "type": "string"
                 },
+                "mcp_preset": {
+                  "items": {
+                    "type": "object"
+                  },
+                  "maxItems": 32,
+                  "type": "array"
+                },
                 "mode": {
                   "const": "managed"
                 },

@@ -58,6 +58,16 @@ def _key(context: ExecutionContext) -> SessionKey:
                       context.r4_authority.session_id)
 
 
+def _same_open_authority(old: ExecutionContext, new: ExecutionContext) -> bool:
+    """Only lease serial/id/deadline may change during an admitted opening."""
+    if old.r4_authority is None or new.r4_authority is None:
+        return old == new
+    return replace(new, lease_deadline_monotonic=old.lease_deadline_monotonic,
+                   r4_authority=replace(new.r4_authority,
+                       lease_id=old.r4_authority.lease_id,
+                       lease_serial=old.r4_authority.lease_serial)) == old
+
+
 def _application(entry: _Installation, stage: str) -> R4LeaseApplication:
     p = entry.projection
     frame = {
@@ -192,10 +202,23 @@ class R4LeaseRuntime:
 
     def _r4_open_blocked(self, context: ExecutionContext, session_id: str) -> bool:
         try:
-            self._check_r4_context(context, "runtime.open", session_id)
+            self._current_open_context(context, session_id)
             return False
         except CoreError:
             return True
+
+    def _current_open_context(self, admitted: ExecutionContext,
+                              session_id: str | None = None) -> ExecutionContext:
+        # Internal continuation only. Public entry points still require the
+        # exact installed context; productive turns never borrow old authority.
+        current = admitted
+        if admitted.r4_authority is not None:
+            entry = self._r4_leases.get(_key(admitted))
+            if entry is None or not _same_open_authority(admitted, entry.context):
+                raise CoreError("STALE_GENERATION", "open", retry_safe=True)
+            current = entry.context
+        self._check_r4_context(current, "runtime.open", session_id)
+        return current
 
     def _r4_revoked(self, session: SessionKey) -> bool:
         entry = self._r4_leases.get(session)
@@ -283,7 +306,8 @@ class R4LeaseRuntime:
                 if (not context.allowed_actions.issubset(entry.context.allowed_actions) and
                         context.authorization_revision == entry.context.authorization_revision):
                     raise CoreError("BINDING_NOT_AUTHORIZED", "r4_install")
-                if key in self._opening or key in self._uncertain_opens:
+                if (key in self._uncertain_opens or
+                        (key in self._opening and not _same_open_authority(entry.context, context))):
                     raise CoreError("RECONNECT_BUSY", "r4_install", retry_safe=True)
                 if key not in self._sessions:
                     # Before open, installation is process-local and has no native effect.

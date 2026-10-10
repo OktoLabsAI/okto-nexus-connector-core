@@ -112,6 +112,49 @@ def test_rc_04_03_expected_close_does_not_emit_stream_loss(tmp_path):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize('failure,reason', [
+    ('overflow', 'NATIVE_EVENT_OVERFLOW'),
+    ('replay', 'NATIVE_REPLAY_EXPIRED'),
+    ('core', 'CORE_ERROR'),
+    ('other', 'EVENT_READER_FAILED'),
+])
+def test_stream_loss_records_safe_cause_without_exception_text(tmp_path, failure, reason):
+    from nexus_connector_core.native.event_buffers import NativeEventOverflow, NativeReplayExpired
+
+    class Failing(EofNative):
+        async def events(self):
+            await self.queue.get()
+            raise {'overflow': NativeEventOverflow(), 'replay': NativeReplayExpired(),
+                   'core': CoreError('EVENT_OPERATION_MISMATCH', 'native_pump'),
+                   'other': ValueError('secret-private-provider-token')}[failure]
+            yield  # pragma: no cover
+
+    async def run():
+        journal = SQLiteJournal(tmp_path / 'journal.db')
+        native = Failing()
+        runtime = _runtime(tmp_path, journal, Factory(native))
+        authority = _context()
+        try:
+            prepared = await runtime.prepare(LaunchIntent('agent', 'ws', 'codex_app_server'), authority)
+            await runtime.open(OpenOperation('open', 'session', 'epoch', prepared), authority)
+            await native.queue.put(True)
+            async def incident():
+                while True:
+                    events = [e async for e in journal.events(EventCursor('srv', 'exe', 'session', 'epoch'))]
+                    if events:
+                        return events[0]
+                    await asyncio.sleep(.01)
+            event = await asyncio.wait_for(incident(), 3)
+            assert event.payload['reason'] == reason
+            assert 'secret-private-provider-token' not in repr(event)
+            if failure == 'core':
+                assert event.payload['cause_code'] == 'EVENT_OPERATION_MISMATCH'
+            await runtime.shutdown(ShutdownPolicy(.1, .1))
+        finally:
+            journal.close()
+    asyncio.run(run())
+
+
 def test_rc_04_08_unexpected_eof_records_single_incident_per_epoch(tmp_path):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")

@@ -310,6 +310,7 @@ class LaunchIntent:
     model: str | None = None
     auth_refs: tuple[str, ...] = ()
     harness_settings: HarnessSettings = field(default_factory=HarnessSettings)
+    mcp_preset: tuple[dict, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
