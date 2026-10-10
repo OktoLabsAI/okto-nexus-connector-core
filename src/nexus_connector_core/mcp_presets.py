@@ -1,7 +1,7 @@
 """Validated per-session MCP definitions. No credential resolution or I/O.
 
-Presets are public configuration. Sensitive values are host-local references;
-native rendering occurs only after the host has authorized the session.
+Presets are public configuration. Literals are persisted as configuration;
+host-local references are preferred for secrets. Rendering requires authorization.
 """
 from copy import deepcopy
 import hashlib
@@ -50,7 +50,7 @@ def validate_mcp_preset(value):
         transport = entry.get('transport')
         common = {'name', 'enabled', 'transport'}
         fields = ({'command', 'args', 'env', 'env_refs'} if transport == 'stdio'
-                  else {'url', 'header_refs'} if transport == 'http' else None)
+                  else {'url', 'headers', 'header_refs'} if transport == 'http' else None)
         if fields is None or set(entry) - common - fields:
             _invalid()
         if transport == 'stdio':
@@ -83,15 +83,18 @@ def validate_mcp_preset(value):
             except ValueError:
                 valid = False
             if not valid:
-                _invalid('MCP URL must be HTTP(S), with credentials supplied by protected references.')
+                _invalid('MCP URL must be HTTP(S), without credentials, query or fragment.')
             refs = entry.setdefault('header_refs', {})
-            if type(refs) is not dict or len(refs) > 32:
+            headers = entry.get('headers', {})
+            if type(refs) is not dict or type(headers) is not dict or len(refs) + len(headers) > 32:
                 _invalid()
-            if len({k.casefold() for k in refs if type(k) is str}) != len(refs):
+            keys = [*headers, *refs]
+            if len({k.casefold() for k in keys if type(k) is str}) != len(keys):
                 _invalid()
-            for key, item in refs.items():
-                if type(key) is not str or not _HEADER.fullmatch(key) or not _reference(item):
-                    _invalid()
+            for mapping, references in ((headers, False), (refs, True)):
+                for key, item in mapping.items():
+                    if type(key) is not str or not _HEADER.fullmatch(key) or not (_reference(item) if references else _text(item)):
+                        _invalid()
         result.append(entry)
     if len(json.dumps(result, ensure_ascii=False).encode()) > 32768:
         _invalid('MCP preset exceeds 32 KiB.')
@@ -150,7 +153,7 @@ def render_mcp_preset(adapter_id, preset, resolve_secret):
         else:
             native = {'url': entry['url']}
             native['http_headers' if adapter_id == 'codex_app_server' else 'headers'] = {
-                k: resolve(v) for k, v in entry['header_refs'].items()}
+                **entry.get('headers', {}), **{k: resolve(v) for k, v in entry['header_refs'].items()}}
             if adapter_id == 'claude_stream':
                 native['type'] = 'http'
         result[entry['name']] = native

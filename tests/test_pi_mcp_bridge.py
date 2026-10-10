@@ -76,7 +76,8 @@ def test_bridge_rejects_unapproved_secret_and_closes_startup(tmp_path):
     asyncio.run(run())
 
 
-def test_real_http_discovery_call_and_protected_header(tmp_path):
+@pytest.mark.parametrize('direct', [False, True])
+def test_real_http_discovery_call_and_protected_header(tmp_path, direct):
     import socket
     import uvicorn
     from mcp.server.fastmcp import FastMCP
@@ -101,8 +102,9 @@ def test_real_http_discovery_call_and_protected_header(tmp_path):
         port = sock.getsockname()[1]
         host = uvicorn.Server(uvicorn.Config(app, log_level='error'))
         serving = asyncio.create_task(host.serve(sockets=[sock]))
+        authentication = {'headers': {'Authorization': 'protected-server-credential'}} if direct else {'header_refs': {'Authorization': 'vault:example'}}
         bridge = PiMCPBridge([dict(name='http', transport='http', url=f'http://127.0.0.1:{port}/mcp',
-            header_refs={'Authorization': 'vault:example'})], Resolver(), ('vault:example',),
+            **authentication)], Resolver(), () if direct else ('vault:example',),
             cwd=str(tmp_path), environment={})
         try:
             async with asyncio.timeout(5):

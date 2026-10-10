@@ -19,7 +19,8 @@ from nexus_connector_core.runtime import LocalRuntimeCore
 @pytest.mark.skipif(os.environ.get('OKTO_NEXUS_REAL_MCP_PRESETS') != '1' or sys.platform != 'win32',
                     reason='Installed Windows harness campaign is opt-in.')
 @pytest.mark.parametrize('adapter', ['codex_app_server', 'claude_stream', 'pi_rpc'])
-def test_installed_harness_loads_preset_without_global_configuration_changes(tmp_path, adapter):
+@pytest.mark.parametrize('inject_nexus', [True, False])
+def test_installed_harness_loads_preset_without_global_configuration_changes(tmp_path, adapter, inject_nexus):
     if adapter == 'codex_app_server':
         binary = Path.home() / 'AppData/Roaming/npm/node_modules/@openai/codex/node_modules/@openai/codex-win32-x64/vendor/x86_64-pc-windows-msvc/bin/codex.exe'
         selected = candidate(adapter, binary, explicit=True)
@@ -55,7 +56,7 @@ asyncio.run(main())
             assert ref == 'mcp-cap:isolated-test'
             return 'isolated-test-value'
     async def run():
-        templates = () if adapter == 'pi_rpc' else (harness_http_template(adapter,
+        templates = () if adapter == 'pi_rpc' or not inject_nexus else (harness_http_template(adapter,
             'http://127.0.0.1:1/mcp', 'mcp-cap:isolated-test', entry_name='nexus_session',
             harness_is_local=True, loopback_reachable=True,
             approved_origins={'http://127.0.0.1:1'}, format_qualified=True),)

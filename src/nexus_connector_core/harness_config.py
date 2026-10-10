@@ -167,7 +167,11 @@ def process_http_arguments(adapter_id: str, templates, approved_refs, *, inherit
         raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
     if adapter_id not in ('codex_app_server', 'claude_stream'):
         raise CoreError('CAPABILITY_UNSUPPORTED', 'mcp_client_configuration')
-    if type(templates) is not tuple or not 1 <= len(templates) <= 8:
+    # Connection checks carry the approved preset without injecting Nexus tools.
+    # An explicitly supplied empty preset also needs isolation flags (all entries
+    # may be disabled). Keep rejecting an empty call with no preset at all.
+    if (type(templates) is not tuple or not 0 <= len(templates) <= 8
+            or (not templates and preset_entries is None)):
         raise CoreError('VALIDATION_ERROR', 'mcp_client_configuration')
     entries = dict(preset_entries or {})
     if any(name.lower().startswith('nexus') for name in entries):

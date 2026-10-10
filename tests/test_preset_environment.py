@@ -16,13 +16,13 @@ class Resolver:
         return 'private-mcp-value' if reference == 'vault:docs' else 'private-nexus-value'
 
 
-def render(adapter, tmp_path, preset, *, inherit=False, approved=True):
+def render(adapter, tmp_path, preset, *, inherit=False, approved=True, nexus=True):
     launch = prepared(adapter, tmp_path)
     refs = (*launch.secret_refs, 'vault:docs') if approved else launch.secret_refs
     launch = replace(launch, secret_refs=refs, intent=replace(launch.intent, mcp_preset=tuple(preset),
         harness_settings=HarnessSettings(inherit_global_mcps='enabled' if inherit else None)))
     environment = asyncio.run(child_environment(launch, Resolver(), provider_home=tmp_path, trusted_home=True,
-        http_templates=(template(adapter),), process_http=True))
+        http_templates=(template(adapter),) if nexus else (), process_http=nexus))
     argv = process_http_arguments(adapter, environment.http_templates, refs, inherit_global_mcps=inherit,
         disabled_mcp_names=environment.disabled_mcp_names, preset_entries=environment.preset_entries,
         preset_strict=environment.preset_strict)
@@ -53,6 +53,54 @@ def test_unapproved_preset_secret_is_refused(tmp_path):
         render('claude_stream', tmp_path, [dict(name='docs', transport='http', url='https://example.test/mcp',
                header_refs={'Authorization': 'vault:docs'})], approved=False)
     assert caught.value.code == 'BINDING_NOT_AUTHORIZED'
+
+
+@pytest.mark.parametrize('adapter', ['codex_app_server', 'claude_stream'])
+def test_direct_http_headers_reach_harness_without_entering_arguments(adapter, tmp_path):
+    entries, env, argv = render(adapter, tmp_path, [dict(name='docs', transport='http',
+        url='https://example.test/mcp', headers={'Authorization': 'Bearer literal-test-token'},
+        header_refs={'X-Reference': 'vault:docs'})])
+    assert 'Bearer literal-test-token' not in repr(argv)
+    headers = entries['docs']['env_http_headers' if adapter == 'codex_app_server' else 'headers']
+    for name, expected in [('Authorization', 'Bearer literal-test-token'), ('X-Reference', 'private-mcp-value')]:
+        variable = headers[name] if adapter == 'codex_app_server' else headers[name][2:-1]
+        assert env[variable] == expected
+
+
+@pytest.mark.parametrize('headers, refs', [
+    ({'Authorization': 'a'}, {'authorization': 'vault:docs'}),
+    ({'Authorization': 'a', 'authorization': 'b'}, {}),
+    ({'Authorization': 'a\r\nInjected: b'}, {}),
+    ({'Bad Header': 'a'}, {}),
+])
+def test_direct_headers_preserve_validation(headers, refs):
+    from nexus_connector_core.mcp_presets import validate_mcp_preset
+    with pytest.raises(CoreError):
+        validate_mcp_preset([dict(name='docs', transport='http', url='https://example.test/mcp',
+                                 headers=headers, header_refs=refs)])
+
+
+def test_legacy_preset_digest_is_unchanged():
+    import hashlib
+    from nexus_connector_core.mcp_presets import mcp_preset_digest
+    normalized = [dict(name='docs', transport='http', url='https://example.test/mcp', enabled=True, header_refs={})]
+    old_digest = 'sha256:' + hashlib.sha256(json.dumps(normalized, sort_keys=True, separators=(',', ':')).encode()).hexdigest()
+    assert mcp_preset_digest(normalized) == old_digest
+
+
+@pytest.mark.parametrize('adapter', ['codex_app_server', 'claude_stream'])
+@pytest.mark.parametrize('transport', ['stdio', 'http'])
+@pytest.mark.parametrize('enabled', [True, False])
+def test_connection_check_renders_preset_without_injected_nexus_tools(adapter, transport, enabled, tmp_path):
+    definition = dict(name='docs', transport=transport, enabled=enabled)
+    definition.update(dict(command='example') if transport == 'stdio' else
+                      dict(url='https://example.test/mcp', headers={'Authorization': 'Bearer test-only'}))
+    entries, env, argv = render(adapter, tmp_path, [definition], nexus=False)
+    assert set(entries) == ({'docs'} if enabled else set())
+    assert not env.http_templates
+    assert 'Bearer test-only' not in repr(argv)
+    if adapter == 'claude_stream':
+        assert '--strict-mcp-config' in argv
 
 
 def test_codex_replacement_cannot_merge_old_transport_or_credentials(tmp_path):

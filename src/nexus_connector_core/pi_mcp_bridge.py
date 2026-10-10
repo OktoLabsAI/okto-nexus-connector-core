@@ -82,7 +82,7 @@ class PiMCPBridge:
                             env[key] = await self._secret(ref)
                         streams = await stack.enter_async_context(owned_stdio(entry, cwd=self._cwd, env=env, owned=self._owned))
                     else:
-                        headers = {key: await self._secret(ref) for key, ref in entry['header_refs'].items()}
+                        headers = {**entry.get('headers', {}), **{key: await self._secret(ref) for key, ref in entry['header_refs'].items()}}
                         streams = await stack.enter_async_context(streamablehttp_client(entry['url'], headers=headers, timeout=15))
                     client = await stack.enter_async_context(ClientSession(streams[0], streams[1], read_timeout_seconds=timedelta(seconds=30)))
                     await client.initialize()

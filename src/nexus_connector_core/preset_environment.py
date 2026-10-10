@@ -106,6 +106,9 @@ async def compile_preset(prepared, resolver, env, *, inherit_global):
         else:
             native = dict(url=entry['url'])
             headers = {}
+            for key, value in entry.get('headers', {}).items():
+                variable = protect(value, 'literal:' + name + ':header:' + key)
+                headers[key] = variable if adapter == 'codex_app_server' else '${' + variable + '}'
             for key, reference in entry['header_refs'].items():
                 variable = protect(await secret(reference), reference)
                 headers[key] = variable if adapter == 'codex_app_server' else '${' + variable + '}'
