@@ -17,7 +17,7 @@ from .journal import validate_claim_namespace, validate_claim_page
 from .models import (CoreError, OperationKey, OwnedSlotPage,
                      OwnedSlotReservation, OwnedSlotState, SessionKey)
 from .capacity_storage import (SCHEMA as CAPACITY_SCHEMA, SQLiteCapacityOperations,
-                               transfer_reserved_open, release_session_capacity)
+                               transfer_reserved_open, release_session_capacity, _changed)
 
 
 class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
@@ -164,6 +164,7 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
                     "INSERT INTO owned_slot_reservations VALUES (?,?,?,?,0)",
                     (key.server_id, key.executor_id, session_id,
                      key.operation_id))
+                _changed(db)
                 db.execute("COMMIT")
             except BaseException as exc:
                 self._rollback_if_active(db)
@@ -201,6 +202,7 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
                            WHERE server_id=? AND executor_id=? AND session_id=?""",
                         (key.server_id, key.executor_id, session_id))
                     release_session_capacity(db, key.server_id, key.executor_id, session_id)
+                    _changed(db)
                 db.execute("COMMIT")
             except BaseException as exc:
                 self._rollback_if_active(db)

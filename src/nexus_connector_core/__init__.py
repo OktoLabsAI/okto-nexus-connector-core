@@ -8,7 +8,7 @@ from .models import (
     ExecutionContext,
     Operation,
     OperationReceipt,
-    OperationNotAdmitted,
+    OperationNotAdmitted, OperationCapacityDeferred,
     OperationKey,
     SessionKey,
     ClaimedSession,
@@ -75,6 +75,8 @@ from .approval_reducer_r4 import (
 )
 from .ports import OwnedSlotLedger, RuntimeCore, RuntimeCapacity, CapacitySlotLedger, RuntimeCapacityAuthority
 from .capacity_runtime import ExecutionCapacity
+from .capacity_publication import CapacityChangePublisher
+from .capacity_waiter import CapacityRetryWaiter
 from .control_codec import decode_control_frame
 from .capacity_control import execute_capacity_control, capacity_result_frame, capacity_denial_frame
 from .capacity_bundle import verify_capacity_bundle
@@ -122,7 +124,7 @@ __all__ = [
     "CAPACITY_FRAME_TYPES", "CAPACITY_REQUEST_TYPES", "encode_capacity_frame", "decode_capacity_frame",
     "RuntimeCapacity", "CAPACITY_CONTRACT_REVISION", "CAPACITY_REASONS", "RESERVATION_STATES",
     "CapacitySlotLedger",
-    "ExecutionCapacity", "RuntimeCapacityAuthority",
+    "ExecutionCapacity", "RuntimeCapacityAuthority", "CapacityChangePublisher",
     "verify_capacity_bundle",
     "decode_control_frame", "execute_capacity_control", "capacity_result_frame", "capacity_denial_frame",
     "CapacityScope", "CapacityRequest", "CapacityAssessment", "CapacityConsumption",
@@ -134,7 +136,7 @@ __all__ = [
     "probe_selected_configuration",
     "discover_harness_configuration", "query_harness_configuration", "CONFIGURATION_SCHEMA_VERSION",
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
-    "OperationNotAdmitted",
+    "OperationNotAdmitted", "OperationCapacityDeferred", "CapacityRetryWaiter",
     "r4_close_operation",
     "ControlTargeting", "get_control_targeting", "validate_control_target",
     "R4Authority", "R4LeaseApplication",

@@ -127,6 +127,34 @@ class OperationNotAdmitted(CoreError):
         self.refusal = refusal
 
 
+class OperationCapacityDeferred(CoreError):
+    """Exact pre-journal capacity refusal; the same operation may wait.
+
+    Emitted only by Core admission gates before an effect. This is not a
+    receipt, execution or completion. Hosts retain their transport ownership
+    and must release worker/session locks while waiting.
+    """
+    def __init__(self, key, session_id, digest):
+        super().__init__('CAPACITY_EXCEEDED', 'capacity_admission', retry_safe=True,
+                         operation_id=key.operation_id)
+        self.key, self.session_id, self.intent_hash = key, session_id, digest
+
+    def require_binding(self, binding):
+        from .receipt_binding_r4 import validate_r4_receipt_binding
+        value = validate_r4_receipt_binding(binding)
+        source = value['source']
+        if ((source['server_id'], source['executor_id'], source['operation_id'], source['session_id']) !=
+                (self.key.server_id, self.key.executor_id, self.key.operation_id, self.session_id)
+                or value['core_intent_hash'] != self.intent_hash):
+            raise CoreError('OPERATION_CONFLICT', 'capacity_deferral')
+        return value
+
+    def stopped_receipt(self):
+        """Host stopped while retaining this proven pre-effect refusal."""
+        return OperationReceipt(self.key.operation_id, self.intent_hash, 'FAILED', False, True,
+                                self.session_id, error_code='RUNTIME_DRAINING')
+
+
 @dataclass(frozen=True, slots=True)
 class OperationKey:
     server_id: str

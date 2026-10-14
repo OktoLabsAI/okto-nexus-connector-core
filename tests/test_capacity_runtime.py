@@ -147,7 +147,7 @@ def test_real_r4_readiness_scope_lease_and_bound_native_dispatch(tmp_path):
             await service.consume_capacity(req, held.reservation_id, consumed_record)
             with pytest.raises(CoreError, match='CAPACITY_EXCEEDED'):
                 await runtime.submit(TurnOperation('turn', 'session', 'Hello'), installed.context)
-            await service.bind_capacity_operation(req, held.reservation_id, bound)
+            assert (await service.bind_admitted_capacity_operation(bound)).reservation_id == held.reservation_id
             await runtime.submit(TurnOperation('turn', 'session', 'Hello'), installed.context)
             assert factory.native.sent == [('send_turn', {'text': 'Hello'}, 'turn')]
             # Fake observe says IDLE, but the real operation still owns the gate.
@@ -280,16 +280,53 @@ def test_r4_cold_reservation_transfers_without_launching_during_reserve(tmp_path
             c = CapacityConsumption(turn['operation_id'], turn['intent_hash'], opening['operation_id'], opening['intent_hash'])
             await service.consume_capacity(req, held.reservation_id, c)
             bound_open = prepare_r4_receipt_binding(opening, installed.context, prepared=prepared, stream_epoch='epoch')
-            await service.bind_capacity_operation(req, held.reservation_id, bound_open)
+            assert (await service.bind_admitted_capacity_operation(bound_open)).reservation_id == held.reservation_id
             assert factory.open_count == 0
             await runtime.open(OpenOperation('reserved-open', 'session', 'epoch', prepared), installed.context)
             assert len((await ledger.owned_slot_page()).reservations) == 1
             with pytest.raises(CoreError, match='CAPACITY_EXCEEDED'):
                 await runtime.submit(TurnOperation('unrelated', 'session', 'must wait'), installed.context)
-            await service.bind_capacity_operation(req, held.reservation_id, prepare_r4_receipt_binding(turn, installed.context))
+            await service.bind_admitted_capacity_operation(prepare_r4_receipt_binding(turn, installed.context))
             await runtime.submit(TurnOperation('reserved-turn', 'session', 'Hello'), installed.context)
             assert factory.open_count == 1
             assert factory.native.sent == [('send_turn', {'text': 'Hello'}, 'reserved-turn')]
+        finally:
+            await service.aclose()
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+            ledger.close()
+    asyncio.run(run())
+
+
+def test_released_capacity_binding_replays_only_existing_receipt_not_native_effect(tmp_path):
+    from nexus_connector_core import RuntimeEvent
+    async def run():
+        ledger = SQLiteOwnedSlotLedger(tmp_path / 'slots.db')
+        clock = FakeClock()
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock, owned_slot_ledger=ledger, capacity_enabled=True)
+        service = facade(ledger, runtime=runtime, clock=clock, boot='capacity-owner-boot')
+        lease = await attempt(runtime, clock)
+        req = capacity_request(lease)
+        try:
+            installed = await runtime.install_r4_lease(lease, grant(lease))
+            await open_session(runtime, installed.context)
+            frame = operation(lease)
+            binding = prepare_r4_receipt_binding(frame, installed.context)
+            held = await service.try_reserve_capacity(req)
+            await service.consume_capacity(req, held.reservation_id,
+                CapacityConsumption(frame['operation_id'], frame['intent_hash'], None, None))
+            await service.bind_admitted_capacity_operation(binding)
+            turn = TurnOperation(frame['operation_id'], 'session', 'Hello')
+            first = await runtime.submit(turn, installed.context)
+            await factory.native.queue.put(RuntimeEvent(lease.scope['server_id'], lease.scope['executor_id'],
+                'session', 'epoch', 0, 'turn_state', 'turn/completed',
+                {'delivery_phase': 'terminal', 'turn_id': frame['operation_id']}, frame['operation_id']))
+            async with asyncio.timeout(2):
+                while (await service.get_capacity_reservation(req)).state != 'RELEASED':
+                    await asyncio.sleep(.005)
+            assert (await service.bind_admitted_capacity_operation(binding)).state == 'RELEASED'
+            assert await runtime.submit(turn, installed.context) == first
+            assert len(factory.native.sent) == 1
         finally:
             await service.aclose()
             await runtime.shutdown(ShutdownPolicy(0, 0))

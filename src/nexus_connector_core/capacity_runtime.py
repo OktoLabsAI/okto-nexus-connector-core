@@ -224,5 +224,33 @@ class ExecutionCapacity:
             await self._ledger.release_capacity_slot(request, reservation_id, **self._observation())
             raise CoreError(reason, 'capacity_binding')
 
+    async def bind_admitted_capacity_operation(self, binding):
+        """Use the host's existing R4 association before productive dispatch.
+
+        Returns None for ordinary work. A consumed reservation is looked up
+        by its canonical operation ID, then its full original scope and both
+        hashes are revalidated by the same public binding operation.
+        """
+        from .receipt_binding_r4 import validate_r4_receipt_binding
+        from .models import OperationKey
+        value = validate_r4_receipt_binding(binding)
+        source = value['source']
+        if value['action'] not in ('runtime.open', 'turn.submit'):
+            raise ValueError('Capacity binding requires a productive operation.')
+        if self._closed or (self._namespace is not None and
+                            (source['server_id'], source['executor_id']) != self._namespace):
+            raise CoreError('NOT_AUTHORIZED', 'capacity_operation')
+        record = await self._ledger.capacity_for_operation(
+            OperationKey(source['server_id'], source['executor_id'], source['operation_id']),
+            action=value['action'], **self._observation())
+        if record is None:
+            return None
+        await self.bind_capacity_operation(record.request, record.reservation_id, value)
+        return record
+
     async def expire_unconsumed(self, *, limit=128):
         return await self._ledger.expire_capacity_slots(limit=limit, **self._observation())
+
+    async def observe_capacity_revision(self):
+        """Trusted owner signal; callers still assess/reserve the exact scope."""
+        return await self._ledger.capacity_revision()

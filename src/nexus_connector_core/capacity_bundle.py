@@ -12,7 +12,7 @@ from .models import CoreError
 
 @lru_cache(maxsize=1)
 def _bundle():
-    root = files('nexus_connector_core').joinpath('contracts', 'capacity', 'v1')
+    root = files('nexus_connector_core').joinpath('contracts', 'capacity', 'v2')
     try:
         manifest = json.loads(root.joinpath('manifest.json').read_bytes())
         if (manifest['revision'] != CAPACITY_CONTRACT_REVISION or manifest['max_frame_bytes'] != 16384

@@ -14,7 +14,7 @@ from typing import ClassVar, Mapping
 
 from .protocol import canonical_json
 
-CAPACITY_CONTRACT_REVISION = 'nexus-execution-capacity-v1'
+CAPACITY_CONTRACT_REVISION = 'nexus-execution-capacity-v2'
 CAPACITY_REASONS = frozenset({
     'AVAILABLE', 'BUSY_AFFINITY', 'POOL_FULL', 'HOST_FULL',
     'EARLIER_WORK_PENDING', 'RECOVERING', 'STALE_OBSERVATION',

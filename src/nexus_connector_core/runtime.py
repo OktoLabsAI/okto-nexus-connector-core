@@ -24,7 +24,7 @@ from .models import (
     CloseOperation, ControlOperation, CoreError, DiscoveryRequest, EventCursor,
     EffectNotSent, EffectRejected, ExecutionContext, InstallationCandidate, Inventory, LaunchIntent,
     OpenOperation, Operation, OperationKey, OperationReceipt, NativeApprovalOperation,
-    PreparedLaunch,
+    PreparedLaunch, OperationCapacityDeferred,
     ReconcileReport, ReconcileRequest, RuntimeEvent, RuntimeSnapshot,
     SessionKey, ShutdownPolicy, ShutdownReport, TurnOperation,
     StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord,
@@ -519,6 +519,9 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 except CoreError as error:
                     if error.retry_safe and not error.possible_effect:
                         pre_reserve_uncertain = False
+                        if error.code == 'CAPACITY_EXCEEDED':
+                            raise OperationCapacityDeferred(opening_key, operation.session_id,
+                                                            intent_hash(semantic, context)) from error
                     raise
                 pre_reserve_uncertain = False
                 preowned_slot = True
@@ -941,8 +944,14 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             effect_entered = False
             if self._capacity_enabled and verb == 'send_turn':
                 capacity_key = OperationKey(context.server_id, context.executor_id, semantic.operation_id)
-                fresh = await self._owned_slots.acquire_turn_slot(
-                    capacity_key, semantic.session_id, intent_hash(semantic, context))
+                try:
+                    fresh = await self._owned_slots.acquire_turn_slot(
+                        capacity_key, semantic.session_id, intent_hash(semantic, context))
+                except CoreError as error:
+                    if error.code == 'CAPACITY_EXCEEDED' and error.retry_safe and not error.possible_effect:
+                        raise OperationCapacityDeferred(capacity_key, semantic.session_id,
+                                                        intent_hash(semantic, context)) from error
+                    raise
                 if not fresh:
                     # A surviving gate without a receipt is an interrupted
                     # admission. Never infer that the native send did not run.

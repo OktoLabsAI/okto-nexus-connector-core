@@ -37,6 +37,10 @@ CREATE INDEX IF NOT EXISTS capacity_expiry ON execution_capacity_reservations(
     json_extract(request_json,'$.scope.boot_id'),deadline) WHERE state='HELD';
 CREATE INDEX IF NOT EXISTS capacity_owner_generation ON execution_capacity_reservations(
     server_id,executor_id,json_extract(request_json,'$.scope.connection_generation')) WHERE state='HELD';
+CREATE INDEX IF NOT EXISTS capacity_turn_operation ON execution_capacity_reservations(
+    server_id,executor_id,json_extract(consumption_json,'$.turn_operation_id'));
+CREATE INDEX IF NOT EXISTS capacity_open_operation ON execution_capacity_reservations(
+    server_id,executor_id,json_extract(consumption_json,'$.opening_operation_id'));
 CREATE TABLE IF NOT EXISTS execution_turn_slots (
     server_id TEXT NOT NULL, executor_id TEXT NOT NULL, session_id TEXT NOT NULL,
     operation_id TEXT NOT NULL, intent_hash TEXT NOT NULL, active INTEGER NOT NULL,
@@ -131,6 +135,13 @@ def _reason(db, request, max_slots):
 
 class SQLiteCapacityOperations:
     """Internal mixin for SQLiteOwnedSlotLedger, using its worker and cap."""
+
+    async def capacity_revision(self):
+        """Installation change cursor, not a contextual availability decision."""
+        def read(db):
+            self._check_storage_identity(db)
+            return _revision(db)
+        return await self._run(read)
 
     async def _capacity_transaction(self, work):
         def run(db):
@@ -273,9 +284,50 @@ class SQLiteCapacityOperations:
                 return _record(row, request, now, boot_id)
             if row['state'] != 'HELD':
                 raise CoreError('RESERVATION_CONFLICT', 'capacity_consume')
+            # One canonical operation cannot be assigned to reservations for
+            # different sessions/attempts, including opening-vs-turn aliases.
+            ids = (consumption.turn_operation_id, consumption.opening_operation_id)
+            if db.execute('SELECT 1 FROM execution_capacity_reservations WHERE server_id=? AND executor_id=? '
+                    "AND (json_extract(consumption_json,'$.turn_operation_id') IN (?,?) "
+                    "OR json_extract(consumption_json,'$.opening_operation_id') IN (?,?)) LIMIT 1",
+                    (request.scope.server_id, request.scope.executor_id, *ids, *ids)).fetchone():
+                raise CoreError('RESERVATION_CONFLICT', 'capacity_consume')
             db.execute('UPDATE execution_capacity_reservations SET state=?,consumption_json=?,revision=? '
                        'WHERE reservation_id=?', ('CONSUMED', json.dumps(consumption.to_dict()), _changed(db), reservation_id))
             return _record(_row(db, request), request, now, boot_id)
+        return await self._capacity_transaction(work)
+
+    async def capacity_for_operation(self, key, *, action, now, boot_id):
+        """Find the durable reservation of this canonical operation, if any.
+
+        The host must still bind/authorize it; this lookup grants no effect.
+        Historical records remain discoverable to prevent operation reuse.
+        """
+        from .journal import validate_claim_namespace
+        from .models import OperationKey
+        if (not isinstance(key, OperationKey) or not key.operation_id
+                or action not in ('runtime.open', 'turn.submit')
+                or type(now) not in (int, float) or not math.isfinite(now) or now < 0
+                or not isinstance(boot_id, str) or not boot_id):
+            raise ValueError('Invalid capacity operation lookup.')
+        validate_claim_namespace(key.server_id, key.executor_id)
+        def work(db):
+            matches = db.execute('SELECT request_json FROM execution_capacity_reservations '
+                "WHERE server_id=? AND executor_id=? AND (json_extract(consumption_json,'$.turn_operation_id')=? "
+                "OR json_extract(consumption_json,'$.opening_operation_id')=?) LIMIT 2",
+                (key.server_id, key.executor_id, key.operation_id, key.operation_id)).fetchall()
+            if not matches:
+                return None
+            if len(matches) != 1:
+                raise CoreError('RESERVATION_CONFLICT', 'capacity_operation')
+            request = CapacityRequest.from_dict(json.loads(matches[0][0]))
+            row = _row(db, request)
+            record = _record(row, request, now, boot_id)
+            expected = (record.consumption.opening_operation_id if action == 'runtime.open'
+                        else record.consumption.turn_operation_id)
+            if expected != key.operation_id:
+                raise CoreError('RESERVATION_CONFLICT', 'capacity_operation')
+            return record
         return await self._capacity_transaction(work)
 
     async def release_capacity_slot(self, request, reservation_id, *, now, boot_id):
@@ -304,7 +356,7 @@ class SQLiteCapacityOperations:
         value = validate_r4_receipt_binding(binding)
         def work(db):
             row = _row(db, request)
-            if (not row or row['reservation_id'] != reservation_id or row['state'] != 'CONSUMED'
+            if (not row or row['reservation_id'] != reservation_id or not row['consumption_json']
                     or request.scope.boot_id != boot_id):
                 raise CoreError('RESERVATION_CONFLICT', 'capacity_binding')
             c = CapacityConsumption.from_dict(json.loads(row['consumption_json']))
@@ -322,7 +374,11 @@ class SQLiteCapacityOperations:
             if old:
                 if json.loads(old[0]) != value:
                     raise CoreError('RESERVATION_CONFLICT', 'capacity_binding')
+                # Retained metadata permits receipt replay after completion;
+                # it is not permission to execute a released reservation.
                 return
+            if row['state'] != 'CONSUMED':
+                raise CoreError('RESERVATION_CONFLICT', 'capacity_binding')
             db.execute('INSERT INTO capacity_operation_bindings VALUES(?,?,?,?)',
                        (reservation_id, action, json.dumps(value), value['core_intent_hash']))
             _changed(db)
@@ -345,6 +401,19 @@ class SQLiteCapacityOperations:
                 if tuple(prior) != (session_id, intent_hash):
                     raise CoreError('OPERATION_CONFLICT', 'turn_capacity')
                 return False
+            historic = db.execute('SELECT state,session_id,consumption_json FROM execution_capacity_reservations '
+                "WHERE server_id=? AND executor_id=? AND (json_extract(consumption_json,'$.turn_operation_id')=? "
+                "OR json_extract(consumption_json,'$.opening_operation_id')=?) LIMIT 2",
+                (key.server_id, key.executor_id, key.operation_id, key.operation_id)).fetchall()
+            if historic:
+                if len(historic) != 1:
+                    raise CoreError('RESERVATION_CONFLICT', 'turn_capacity')
+                state, reserved_session, raw = historic[0]
+                c = CapacityConsumption.from_dict(json.loads(raw))
+                if (state != 'CONSUMED' or reserved_session != session_id or c.turn_operation_id != key.operation_id):
+                    # An operation assigned to an old/cancelled reservation
+                    # must never silently reenter as ordinary unreserved work.
+                    raise CoreError('RESERVATION_CONFLICT', 'turn_capacity')
             slot = db.execute('SELECT released,operation_id FROM owned_slot_reservations WHERE server_id=? AND executor_id=? '
                               'AND session_id=?', (key.server_id, key.executor_id, session_id)).fetchone()
             if not slot or slot[0] or slot[1].startswith('capacity:'):

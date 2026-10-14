@@ -17,7 +17,7 @@ MAX_CAPACITY_FRAME_BYTES = 16_384
 CAPACITY_REQUEST_TYPES = frozenset({
     'capacity.assess', 'capacity.reserve', 'capacity.get', 'capacity.consume', 'capacity.release',
 })
-CAPACITY_FRAME_TYPES = CAPACITY_REQUEST_TYPES | {'capacity.result', 'capacity.changed'}
+CAPACITY_FRAME_TYPES = CAPACITY_REQUEST_TYPES | {'capacity.result', 'capacity.changed', 'capacity.dispatch_state'}
 _HEADER = {'contract_revision', 'type', 'server_id', 'executor_id', 'connection_id', 'connection_generation'}
 
 
@@ -63,6 +63,14 @@ def _validate(frame):
                 raise ValueError('Assessment request mismatch.')
         elif result_type != 'not_found' or frame.get('result') is not None:
             raise ValueError('Invalid capacity result.')
+    elif kind == 'capacity.dispatch_state':
+        expected |= {'binding_id', 'agent_id', 'session_id', 'operation_id', 'intent_hash', 'action', 'state', 'sequence'}
+        for name in ('binding_id', 'agent_id', 'session_id', 'operation_id'):
+            _text(frame.get(name), name)
+        _digest(frame.get('intent_hash'), 'intent_hash')
+        _integer(frame.get('sequence'), 'sequence', minimum=1)
+        if frame.get('action') not in ('runtime.open', 'turn.submit') or frame.get('state') not in ('WAITING', 'RUNNING'):
+            raise ValueError('Invalid capacity dispatch state.')
     else:
         expected |= {'binding_id', 'boot_id', 'capacity_revision', 'reason', 'valid_for_ms'}
         for field in ('binding_id', 'boot_id'):
@@ -71,7 +79,7 @@ def _validate(frame):
         _integer(frame.get('valid_for_ms'), 'valid_for_ms', maximum=60_000)
         if type(frame.get('reason')) is not str or frame['reason'] not in CAPACITY_REASONS:
             raise ValueError('Invalid capacity observation reason.')
-    if kind != 'capacity.changed':
+    if kind in CAPACITY_REQUEST_TYPES or kind == 'capacity.result':
         _text(frame.get('request_id'), 'request_id')
     if set(frame) != expected:
         raise ValueError('Unexpected or missing capacity frame fields.')
@@ -109,3 +117,15 @@ def encode_capacity_frame(frame: Mapping):
         raise CoreError('VALIDATION_ERROR', 'capacity_encode', retry_safe=True) from error
     decode_capacity_frame(raw)
     return raw
+
+
+def capacity_dispatch_state(binding, *, state, sequence):
+    """Non-receipt flow control; says nothing about terminal/native effects."""
+    from .receipt_binding_r4 import validate_r4_receipt_binding
+    value = validate_r4_receipt_binding(binding)
+    source = value['source']
+    frame = {k: source[k] for k in ('server_id', 'executor_id', 'connection_id', 'connection_generation',
+                                  'binding_id', 'agent_id', 'session_id', 'operation_id', 'intent_hash')}
+    frame.update(contract_revision=CAPACITY_CONTRACT_REVISION, type='capacity.dispatch_state',
+                 action=value['action'], state=state, sequence=sequence)
+    return decode_capacity_frame(encode_capacity_frame(frame))
