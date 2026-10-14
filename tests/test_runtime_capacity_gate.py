@@ -4,7 +4,7 @@ from dataclasses import replace
 
 import pytest
 
-from nexus_connector_core import (CapacityConsumption, CoreError, OperationKey,
+from nexus_connector_core import (CapacityConsumption, CoreError, OperationKey, OperationCapacityDeferred,
                                   SQLiteOwnedSlotLedger)
 from nexus_connector_core.models import (LaunchIntent, OpenOperation, Operation,
     RuntimeEvent, ShutdownPolicy, TurnOperation, ControlOperation, EffectNotSent)
@@ -42,8 +42,11 @@ def test_send_return_does_not_free_turn_but_correlated_terminal_does(tmp_path):
             await open_session(runtime, ctx)
             assert (await runtime.submit(TurnOperation('one', 'session', 'hello'), ctx)).stage == 'SUBMITTED'
             assert factory.native.sent == [('send_turn', {'text': 'hello'}, 'one')]
-            with pytest.raises(CoreError, match='CAPACITY_EXCEEDED'):
+            with pytest.raises(OperationCapacityDeferred) as refused:
                 await runtime.submit(TurnOperation('two', 'session', 'second'), ctx)
+            assert refused.value.key == OperationKey('srv', 'exe', 'two')
+            assert refused.value.retry_safe and not refused.value.possible_effect
+            assert refused.value.intent_hash == intent_hash(Operation('two', 'session', 'turn.submit', {'text': 'second'}), ctx)
             # Refusal precedes journal admission, so the same operation can wait.
             assert await journal.get_receipt(OperationKey('srv', 'exe', 'two')) is None
             await runtime.control(ControlOperation('interrupt', 'session', 'interrupt'), ctx)
@@ -107,7 +110,7 @@ def test_refused_open_does_not_poison_winner_journal_claim(tmp_path):
         try:
             prepared = await runtime.prepare(LaunchIntent('agent', 'ws', 'codex_app_server'), ctx)
             held = await ledger.reserve_capacity_slot(req, now=10, boot_id='boot-1')
-            with pytest.raises(CoreError, match='CAPACITY_EXCEEDED'):
+            with pytest.raises(OperationCapacityDeferred):
                 await runtime.open(OpenOperation('loser-open', 'session', 'epoch', prepared), ctx)
             assert factory.open_count == 0
             assert await journal.get_receipt(OperationKey('srv', 'exe', 'loser-open')) is None
