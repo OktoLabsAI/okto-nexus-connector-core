@@ -11,6 +11,17 @@ installed operation/lease and two-consumer conformance. `verify_r4_bundle`
 checks the packaged manifest and resources; `R4_CONTRACT_REVISION` identifies
 this wire contract separately from historical R3. The old preview revision
 and development verifier names remain compatibility aliases.
+
+The optional `nexus-preopen-refusal-v1` capability uses the separately generated
+`contracts/preopen_refusal/v1` schema and manifest. Its overlay adds only
+`reconcile.request.preopen_refusal_supported` and
+`reconcile.report.preopen_refusals`. Both peers must negotiate the capability
+before using those fields. The base R4 schema and manifest remain byte-identical;
+ordinary reconciliation and productive operations still use the closed base
+contract. The extension manifest pins both its schema and the base schema.
+`contracts/generate_r4.py --check` verifies both bundles. Validation of a frame
+does not authorize a recovery: authenticated hosts additionally validate the
+current recovery owner, original dispatch and exact released capacity.
 See [promotion evidence](../plans/r4_execution/R4_PROMOTION.md). Contract
 executability does not grant runtime authorization, provider qualification
 or distributed acceptance; each host retains those independent checks.

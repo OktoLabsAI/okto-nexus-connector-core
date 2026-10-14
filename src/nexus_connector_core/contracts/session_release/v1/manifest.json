@@ -1,0 +1,10 @@
+{
+  "revision": "nexus-session-release-v1",
+  "status": "development",
+  "negotiation_capability": "nexus-session-release-v1",
+  "max_frame_bytes": 16384,
+  "sha256": {
+    "schema.json": "005d9e75fb034dbcf7501d125ecc8b91c4fbc97f49d8f0944f5cf2cf3cf1ec08",
+    "fixtures.json": "3833c037d95218432d7f63ff2960a03455f8deb4e7233bc8b53d6d08b75622b0"
+  }
+}

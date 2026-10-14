@@ -7,6 +7,8 @@ from .frame_codec import MAX_FRAME_BYTES
 from .frame_codec_r4 import decode_r4_frame
 from .models import CoreError
 from .protocol import strict_json
+from .lease_denial import LEASE_DENIAL_REVISION, decode_lease_denial
+from .session_release import SESSION_RELEASE_REVISION, decode_session_release
 
 
 def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> dict:
@@ -25,6 +27,14 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
         raise CoreError('VALIDATION_ERROR', 'control_decode', retry_safe=True) from error
     if type(header) is not dict:
         raise CoreError('VALIDATION_ERROR', 'control_decode', retry_safe=True)
+    if header.get('contract_revision') == SESSION_RELEASE_REVISION:
+        if isinstance(capabilities, (str, bytes)) or SESSION_RELEASE_REVISION not in capabilities:
+            raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+        return decode_session_release(raw)
+    if header.get('contract_revision') == LEASE_DENIAL_REVISION:
+        if isinstance(capabilities, (str, bytes)) or LEASE_DENIAL_REVISION not in capabilities:
+            raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+        return decode_lease_denial(raw)
     if header.get('contract_revision') == CAPACITY_CONTRACT_REVISION:
         if isinstance(capabilities, (str, bytes)) or CAPACITY_CONTRACT_REVISION not in capabilities:
             raise CoreError('CAPACITY_PROTOCOL_UNSUPPORTED', 'control_negotiation')

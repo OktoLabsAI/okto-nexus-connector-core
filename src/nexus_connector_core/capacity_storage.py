@@ -104,6 +104,33 @@ def _release_unconsumed(db, row, request, state):
                (state, _changed(db), row['reservation_id']))
 
 
+def _release_unstarted_consumption(db, row, request):
+    """Fence delayed productive admission in the same transaction as its gate.
+
+    Retain consumption/binding history. RELEASED alone is not proof that work
+    had no effect: callers must also prove their canonical operations unsent.
+    This only frees an untouched reservation, never an opened native resource.
+    """
+    if row['opening_started'] or not row['consumption_json']:
+        return False
+    consumption = CapacityConsumption.from_dict(json.loads(row['consumption_json']))
+    s = request.scope
+    if db.execute('SELECT 1 FROM execution_turn_slots WHERE server_id=? AND executor_id=? AND operation_id=?',
+                  (s.server_id, s.executor_id, consumption.turn_operation_id)).fetchone():
+        return False
+    if request.unit == 'new_session':
+        # Only the placeholder owned by this ticket can be released. Transfer
+        # to an opening's operation ID and opening_started are atomic.
+        changed = db.execute('UPDATE owned_slot_reservations SET released=1 '
+            'WHERE server_id=? AND executor_id=? AND session_id=? AND operation_id=? AND released=0',
+            (s.server_id, s.executor_id, s.session_id, 'capacity:' + row['reservation_id'])).rowcount
+        if changed != 1:
+            return False
+    db.execute("UPDATE execution_capacity_reservations SET state='RELEASED',revision=? WHERE reservation_id=?",
+               (_changed(db), row['reservation_id']))
+    return True
+
+
 def _expire(db, row, request, now, boot_id):
     # A different boot cannot interpret the old monotonic deadline.
     if (row and row['state'] == 'HELD' and request.scope.boot_id == boot_id
@@ -141,6 +168,38 @@ class SQLiteCapacityOperations:
         def read(db):
             self._check_storage_identity(db)
             return _revision(db)
+        return await self._run(read)
+
+    async def capacity_opening_for_slot(self, slot):
+        """Attribute an unstarted consumed slot to its canonical opening.
+
+        This is historical association only, never proof that a process stopped
+        or authority to release/reexecute. Storage-specific placeholder IDs stay
+        inside Core, including while the host recovers under a new boot.
+        """
+        from .models import OwnedSlotReservation
+        from .journal import validate_claim_namespace
+        if type(slot) is not OwnedSlotReservation or not slot.opening_operation_id:
+            raise ValueError('Invalid capacity slot lookup.')
+        key = slot.key
+        validate_claim_namespace(key.server_id, key.executor_id)
+        def read(db):
+            self._check_storage_identity(db)
+            row = db.execute('SELECT c.request_json,c.consumption_json FROM execution_capacity_reservations c '
+                'JOIN owned_slot_reservations s USING(server_id,executor_id,session_id) '
+                "WHERE s.server_id=? AND s.executor_id=? AND s.session_id=? AND s.released=0 "
+                "AND s.operation_id=? AND s.operation_id='capacity:' || c.reservation_id "
+                "AND c.state IN ('CONSUMED','RELEASE_PENDING') AND c.opening_started=0",
+                (key.server_id, key.executor_id, key.session_id, slot.opening_operation_id)).fetchone()
+            if row is None:
+                return None
+            request = CapacityRequest.from_dict(json.loads(row[0]))
+            if (request.unit != 'new_session' or
+                    (request.scope.server_id, request.scope.executor_id, request.scope.session_id) !=
+                    (key.server_id, key.executor_id, key.session_id)):
+                raise CoreError('RESERVATION_CONFLICT', 'capacity_slot_owner')
+            consumption = CapacityConsumption.from_dict(json.loads(row[1]))
+            return consumption.opening_operation_id
         return await self._run(read)
 
     async def _capacity_transaction(self, work):
@@ -350,9 +409,10 @@ class SQLiteCapacityOperations:
                 raise CoreError('RESERVATION_CONFLICT', 'capacity_release')
             if row['state'] == 'HELD':
                 _release_unconsumed(db, row, request, 'RELEASED')
-            elif row['state'] in ('CONSUMED', 'NEEDS_RECONCILIATION'):
-                db.execute('UPDATE execution_capacity_reservations SET state=?,revision=? WHERE reservation_id=?',
-                           ('RELEASE_PENDING', _changed(db), reservation_id))
+            elif row['state'] in ('CONSUMED', 'NEEDS_RECONCILIATION', 'RELEASE_PENDING'):
+                if not _release_unstarted_consumption(db, row, request) and row['state'] != 'RELEASE_PENDING':
+                    db.execute('UPDATE execution_capacity_reservations SET state=?,revision=? WHERE reservation_id=?',
+                               ('RELEASE_PENDING', _changed(db), reservation_id))
             return _record(_row(db, request), request, now, boot_id)
         return await self._capacity_transaction(work)
 

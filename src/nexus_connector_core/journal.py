@@ -218,13 +218,6 @@ class SQLiteJournal:
                 error_code TEXT,
                 PRIMARY KEY(server_id, executor_id, operation_id)
             );
-            CREATE TABLE IF NOT EXISTS session_claims (
-                server_id TEXT NOT NULL,
-                executor_id TEXT NOT NULL,
-                session_id TEXT NOT NULL,
-                operation_id TEXT NOT NULL,
-                PRIMARY KEY(server_id, executor_id, session_id)
-            );
             CREATE TABLE IF NOT EXISTS session_open_generations (
                 server_id TEXT NOT NULL,
                 executor_id TEXT NOT NULL,
@@ -369,14 +362,31 @@ class SQLiteJournal:
             SELECT server_id, executor_id, COUNT(*)
             FROM operations_v2 GROUP BY server_id, executor_id
         """)
-        # Older journals had operation receipts but no durable session claim.
-        # Conservatively fence every previously named session rather than
-        # infer that a terminal receipt proves its native process is gone.
-        db.execute("""
-            INSERT OR IGNORE INTO session_claims
-            SELECT server_id, executor_id, session_id, MIN(operation_id)
-            FROM operations_v2 GROUP BY server_id, executor_id, session_id
-        """)
+        # Only pre-claim journals need conservative legacy fencing. Repeating
+        # the backfill on a modern journal invents ownership for pre-admission
+        # refusals, which deliberately persist a receipt without a session claim.
+        # Creation and backfill must commit together, including concurrent opens
+        # and interrupted migrations; table existence is the migration marker.
+        db.execute("BEGIN IMMEDIATE")
+        try:
+            if db.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name='session_claims'").fetchone() is None:
+                db.execute("""CREATE TABLE session_claims (
+                    server_id TEXT NOT NULL,
+                    executor_id TEXT NOT NULL,
+                    session_id TEXT NOT NULL,
+                    operation_id TEXT NOT NULL,
+                    PRIMARY KEY(server_id, executor_id, session_id)
+                )""")
+                db.execute("""
+                    INSERT INTO session_claims
+                    SELECT server_id, executor_id, session_id, MIN(operation_id)
+                    FROM operations_v2 GROUP BY server_id, executor_id, session_id
+                """)
+            db.execute("COMMIT")
+        except BaseException:
+            self._rollback_if_active(db)
+            db.close()
+            raise
         # Development journals created before namespacing have no owner
         # evidence. Keep them intact, but never infer a Server and replay an
         # old operation under a new composite key.
@@ -457,6 +467,23 @@ class SQLiteJournal:
                 high_water_rowid,
                 page_rows[-1][0] if len(rows) > limit else None)
         return await self._run(_worker_impl, urgent=False)
+
+    async def get_session_claim(self, session: SessionKey) -> ClaimedSession | None:
+        """Read one original claim without scanning unrelated session history."""
+        if not isinstance(session, SessionKey):
+            raise ValueError('Invalid session claim key.')
+        validate_claim_namespace(session.server_id, session.executor_id)
+        if type(session.session_id) is not str or not 1 <= len(session.session_id) <= 160:
+            raise ValueError('Invalid session claim key.')
+        def read(db):
+            row = db.execute(
+                'SELECT c.operation_id,g.connection_generation,g.owner_generation FROM session_claims c '
+                'LEFT JOIN session_open_generations g ON g.server_id=c.server_id AND g.executor_id=c.executor_id '
+                'AND g.session_id=c.session_id AND g.operation_id=c.operation_id '
+                'WHERE c.server_id=? AND c.executor_id=? AND c.session_id=?',
+                (session.server_id,session.executor_id,session.session_id)).fetchone()
+            return ClaimedSession(session, *row) if row is not None else None
+        return await self._run(read, urgent=False)
 
     async def record_process_birth(
             self, key: OperationKey, session_id: str,

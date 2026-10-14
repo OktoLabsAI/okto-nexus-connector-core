@@ -115,8 +115,11 @@ def test_racing_release_cannot_erase_consumption_or_free_a_possible_effect(tmp_p
                 assert isinstance(results[0], CoreError) and results[0].code == 'RESERVATION_CONFLICT'
                 assert not (await first.owned_slot_page()).reservations
             else:
-                assert state.state == 'RELEASE_PENDING'
-                assert len((await first.owned_slot_page()).reservations) == 1
+                # Consume won, but no native opening crossed its atomic gate.
+                # The original consumption remains even though its unused
+                # placeholder can be fenced and released.
+                assert state.state == 'RELEASED'
+                assert not (await first.owned_slot_page()).reservations
         finally:
             first.close()
             second.close()

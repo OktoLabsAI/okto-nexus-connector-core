@@ -96,8 +96,8 @@ def test_authority_changes_during_reserve_and_consume_are_compensated(tmp_path):
             with pytest.raises(CoreError, match='NOT_AUTHORIZED'):
                 await service.consume_capacity(req, held.reservation_id, consumed('new_session'))
             state = await ledger.get_capacity_slot(req, now=10, boot_id='boot-1')
-            assert state.state == 'RELEASE_PENDING' and state.consumption is not None
-            assert len((await ledger.owned_slot_page()).reservations) == 1
+            assert state.state == 'RELEASED' and state.consumption is not None
+            assert not (await ledger.owned_slot_page()).reservations
         finally:
             ledger.close()
     asyncio.run(run())

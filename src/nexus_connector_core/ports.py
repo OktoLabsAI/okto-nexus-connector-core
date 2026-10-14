@@ -8,8 +8,8 @@ from .models import (
     CloseOperation, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
     ExecutionContext, Inventory, LaunchIntent, OpenOperation, OperationReceipt,
     R4LeaseApplication,
-    OperationKey, OwnedSlotPage, OwnedSlotState, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
-    SessionKey, SessionClaimPage, SessionLeaseState, ProcessBirthEvidence,
+    OperationKey, OwnedSlotPage, OwnedSlotReservation, OwnedSlotState, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
+    SessionKey, SessionClaimPage, ClaimedSession, SessionLeaseState, ProcessBirthEvidence,
     ProcessBirthRecord,
     ProcessBirthObservation,
     RuntimeSnapshot, ShutdownPolicy, ShutdownReport, StorageStatus,
@@ -134,6 +134,7 @@ class CapacitySlotLedger(OwnedSlotLedger, Protocol):
     async def reserve_owned_slot(self, key: OperationKey, session_id: str, *,
                                  intent_hash: str | None = None) -> None: ...
     async def capacity_revision(self) -> int: ...
+    async def capacity_opening_for_slot(self, slot: OwnedSlotReservation) -> str | None: ...
     async def capacity_for_operation(self, key: OperationKey, *, action: str,
                                      now: float, boot_id: str) -> CapacityReservation | None: ...
     async def capacity_reservation_page(self, server_id: str, executor_id: str, *,
@@ -181,6 +182,7 @@ class Journal(OwnedSlotLedger, Protocol):
     async def record_not_sent(self, key: OperationKey, error_code: str) -> OperationReceipt: ...
     async def record_receipt(self, key: OperationKey, receipt: OperationReceipt) -> OperationReceipt: ...
     async def get_receipt(self, key: OperationKey) -> OperationReceipt | None: ...
+    async def get_session_claim(self, session: SessionKey) -> ClaimedSession | None: ...
     async def claimed_sessions(self, server_id: str, executor_id: str, *,
                                after_rowid: int = 0,
                                high_water_rowid: int | None = None,

@@ -1,4 +1,5 @@
 import asyncio
+import sqlite3
 from dataclasses import replace
 
 import pytest
@@ -6,6 +7,45 @@ from nexus_connector_core import CoreError, CapacityConsumption, OperationKey, S
 from test_capacity_contract import request, consumed
 from test_capacity_runtime import facade, Authority
 from test_capacity_slot_ledger import receipt_binding, different
+
+
+@pytest.mark.parametrize('legacy_identity', [False, True])
+def test_consumed_slot_attribution_is_exact_read_only_and_survives_reopen(tmp_path, legacy_identity):
+    async def run():
+        path = tmp_path / 'slots.db'
+        ledger = SQLiteOwnedSlotLedger(path)
+        req, c = request('new_session'), consumed('new_session')
+        try:
+            held = await ledger.reserve_capacity_slot(req, now=1, boot_id='boot-1')
+            if legacy_identity:
+                # Older versions allocated opaque IDs; their exact stored
+                # association remains authoritative after an upgrade.
+                with sqlite3.connect(path) as db:
+                    db.execute('UPDATE execution_capacity_reservations SET reservation_id=?', ('cap_legacy_identity',))
+                    db.execute('UPDATE owned_slot_reservations SET operation_id=?', ('capacity:cap_legacy_identity',))
+                held = await ledger.get_capacity_slot(req, now=1, boot_id='boot-1')
+            slot, = (await ledger.owned_slot_page()).reservations
+            assert await ledger.capacity_opening_for_slot(slot) is None
+            await ledger.consume_capacity_slot(req, held.reservation_id, c, now=1, boot_id='boot-1')
+            ledger.close()
+            ledger = SQLiteOwnedSlotLedger(path)
+            revision = await ledger.capacity_revision()
+            assert await ledger.capacity_opening_for_slot(slot) == c.opening_operation_id
+            for field in ('server_id', 'executor_id', 'session_id'):
+                wrong = replace(slot, key=replace(slot.key, **{field: 'other'}))
+                assert await ledger.capacity_opening_for_slot(wrong) is None
+            assert await ledger.capacity_opening_for_slot(replace(slot, opening_operation_id='other')) is None
+            assert await ledger.capacity_revision() == revision
+            assert (await ledger.owned_slot_page()).reservations == (slot,)
+            # Association did not free capacity; the normal Core release must
+            # still establish that this consumed opening never started.
+            released = await ledger.release_capacity_slot(req, held.reservation_id, now=5, boot_id='boot-2')
+            assert released.state == 'RELEASED'
+            assert await ledger.capacity_opening_for_slot(slot) is None
+            assert not (await ledger.owned_slot_page()).reservations
+        finally:
+            ledger.close()
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize('overlap', ['same_turn', 'same_open', 'cross_action'])
@@ -56,9 +96,9 @@ def test_operation_lookup_is_exact_historical_and_requires_current_authority_bef
                 await service.bind_admitted_capacity_operation(wrong)
             await service.release_capacity(req, held.reservation_id, 'CANCELLED')
             record = await ledger.capacity_for_operation(key, action='runtime.open', now=9999, boot_id='next-boot')
-            assert record.state == 'RELEASE_PENDING'
+            assert record.state == 'RELEASED'
             # Existing association is historical metadata, not another grant.
-            assert (await service.bind_admitted_capacity_operation(bound)).state == 'RELEASE_PENDING'
+            assert (await service.bind_admitted_capacity_operation(bound)).state == 'RELEASED'
             late = receipt_binding(req, 'turn.submit', c.turn_operation_id, c.turn_intent_hash, 'sha256:' + 'e' * 64)
             with pytest.raises(CoreError, match='RESERVATION_CONFLICT'):
                 await service.bind_admitted_capacity_operation(late)

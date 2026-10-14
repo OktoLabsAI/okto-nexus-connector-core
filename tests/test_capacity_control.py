@@ -110,6 +110,11 @@ def test_control_consumption_keeps_physical_capacity_until_native_release_proof(
             consumed = await execute_capacity_control(service, call | {'type': 'capacity.consume',
                 'reservation_id': held['result']['reservation_id'], 'consumption': consumption.to_dict()})
             assert consumed['result']['state'] == 'CONSUMED'
+            from nexus_connector_core import CapacityReservation
+            from test_capacity_slot_ledger import bind_consumption, key
+            await bind_consumption(ledger, req, CapacityReservation.from_dict(held['result']), consumption)
+            await ledger.reserve_owned_slot(key(consumption.opening_operation_id), req.scope.session_id,
+                                            intent_hash=consumption.opening_intent_hash)
             released = await execute_capacity_control(service, call | {'type': 'capacity.release',
                 'reservation_id': held['result']['reservation_id'], 'reason': 'CANCELLED'})
             assert released['result']['state'] == 'RELEASE_PENDING'

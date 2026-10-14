@@ -27,6 +27,7 @@ class Backend:
         return {'status': 'DISCOVERED'}
 
     async def claim_handoff(self, request, context):
+        assert request.claim_epoch is None
         self.calls.append(("claim", request.idempotency_key, context.agent_id))
         return {"handoff_id": request.handoff_id, "claim_epoch": 1}
 
@@ -91,6 +92,13 @@ const { default: extension } = await import(pathToFileURL(process.argv[1]).href)
 const tools = new Map();
 extension({registerTool(tool) { tools.set(tool.name, tool); }});
 if (tools.size !== 11 || !tools.has("nexus_ask_user") || !tools.has("nexus_runtime_input_respond")) throw new Error("unexpected action set");
+const claim = tools.get("nexus_handoff_claim");
+if (claim.parameters.required.includes("claim_epoch") ||
+    !claim.parameters.properties.claim_epoch.description.includes("Omit for an OPEN handoff") ||
+    !claim.description.includes("omitting claim_epoch") ||
+    !tools.get("nexus_handoff_get").description.includes("payload may be withheld")) {
+  throw new Error("handoff claim lifecycle guidance missing");
+}
 const ask = tools.get("nexus_ask_user");
 for (const [method, value] of [["select", "Blue"], ["confirm", false], ["input", "custom"], ["editor", ""]]) {
   const ui = {[method]: async () => value};

@@ -15,7 +15,8 @@ const actions = [
   ["nexus_handoff_get", "handoff.get", { handoff_id: { type: "string" } }],
   ["nexus_handoff_claim", "handoff.claim", {
     handoff_id: { type: "string" }, idempotency_key: { type: "string" },
-    claim_epoch: { type: "integer", minimum: 1 },
+    claim_epoch: { type: "integer", minimum: 1,
+      description: "Omit for an OPEN handoff. Only supply the exact epoch of an existing claim already owned by this session; never invent or increment it." },
   }],
   ["nexus_handoff_complete", "handoff.complete", {
     handoff_id: { type: "string" }, claim_epoch: { type: "integer", minimum: 1 },
@@ -138,7 +139,11 @@ export default function (pi) {
         'Send a Nexus message as your authenticated runtime agent in its workspace. Use message={subject,body,target:{strategy:"direct",agent_id:"recipient"}} or target:{strategy:"broadcast"}. Routing and message permissions still apply. Discover peers with nexus_agent_list. Sender and workspace are supplied by the session. Replaying the same tool call ID cannot create a second message. The result can require operator approval.' : action === "runtime.input.list" ?
         "List native questions addressed to you in this session's workspace. Return the native answer with nexus_runtime_input_respond." :
         action === "runtime.input.respond" ?
-        "Answer a question addressed to you. Copy approval_key, expected_revision, request_hash and cas_token from the listed question into request. Add decision approve or deny and response when approving. Omit client_intent_id; the tool call supplies it. Preserve the native response contract: Codex answers={question_id:{answers:[text]}}; Claude answers={question_text:text}; Pi value=text or confirmed=boolean; MCP content={field:value}." : `Nexus native ${action} action`,
+        "Answer a question addressed to you. Copy approval_key, expected_revision, request_hash and cas_token from the listed question into request. Add decision approve or deny and response when approving. Omit client_intent_id; the tool call supplies it. Preserve the native response contract: Codex answers={question_id:{answers:[text]}}; Claude answers={question_text:text}; Pi value=text or confirmed=boolean; MCP content={field:value}." : ({
+          "handoff.get": "Read a handoff in this session's workspace. Before a successful claim, the task payload may be withheld; its absence does not mean the handoff has no task. For an OPEN handoff, call nexus_handoff_claim without claim_epoch.",
+          "handoff.claim": "Claim an OPEN handoff using handoff_id and idempotency_key, omitting claim_epoch. The successful result supplies the task payload and claim_epoch; preserve that epoch for nexus_handoff_complete. Only provide claim_epoch to recover an existing claim already owned by this same session. Never guess or increment it. Agent permissions and routing still apply.",
+          "handoff.complete": "Complete this session's claimed handoff with its result. Copy the exact claim_epoch returned by nexus_handoff_claim; do not invent or increment it. Another session's claim cannot be completed here."
+        })[action],
       parameters: { type: "object", properties, required: requiredFields,
         additionalProperties: false },
       async execute(toolCallId, params, signal) {

@@ -1,0 +1,10 @@
+{
+  "revision": "nexus-lease-denial-v1",
+  "negotiation_capability": "nexus-lease-denial-v1",
+  "max_frame_bytes": 16384,
+  "status": "development",
+  "sha256": {
+    "schema.json": "3a266c0aec9b3df5a77fd55f918b23bae3e594d5df10f062022cce2f1fda7c0c",
+    "fixtures.json": "b79386c2ca029beea18f3e570c419af461dd54d1d534a02cee5d869f902e607b"
+  }
+}
