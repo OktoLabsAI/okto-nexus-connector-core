@@ -73,7 +73,15 @@ from .approval_reducer_r4 import (
     R4ApprovalProjection, reduce_r4_approval_request,
     reduce_r4_approval_decision,
 )
-from .ports import OwnedSlotLedger, RuntimeCore
+from .ports import OwnedSlotLedger, RuntimeCore, RuntimeCapacity
+from .capacity import (
+    CAPACITY_CONTRACT_REVISION, CAPACITY_REASONS, RESERVATION_STATES,
+    CapacityScope, CapacityRequest, CapacityAssessment, CapacityConsumption,
+    CapacityReservation, require_same_capacity_request, capacity_contract_supported,
+)
+from .capacity_codec import (
+    CAPACITY_FRAME_TYPES, CAPACITY_REQUEST_TYPES, encode_capacity_frame, decode_capacity_frame,
+)
 from .composition import create_runtime
 from .catalog import (
     RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog, get_runtime_connection_contract,
@@ -104,9 +112,13 @@ from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.0.10"
+__version__ = "0.0.11"
 
 __all__ = [
+    "CAPACITY_FRAME_TYPES", "CAPACITY_REQUEST_TYPES", "encode_capacity_frame", "decode_capacity_frame",
+    "RuntimeCapacity", "CAPACITY_CONTRACT_REVISION", "CAPACITY_REASONS", "RESERVATION_STATES",
+    "CapacityScope", "CapacityRequest", "CapacityAssessment", "CapacityConsumption",
+    "CapacityReservation", "require_same_capacity_request", "capacity_contract_supported",
     "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",
     "native_input_response",
     "HarnessSettings", "validate_harness_settings", "harness_settings_dict", "validate_harness_configuration",

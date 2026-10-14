@@ -16,6 +16,24 @@ from .models import (
     TurnOperation,
 )
 from .lease_reducer_r4 import R4LeaseAttempt
+from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption
+
+
+class RuntimeCapacity(Protocol):
+    """Trusted host port; reservations alone never authorize a native effect.
+
+    Lookup uses the original immutable attempt after an uncertain response.
+    Release is a request: the implementation retains consumed/uncertain
+    resources until its own journal and containment evidence permit release.
+    No network call or provider launch belongs inside a Server transaction.
+    """
+    async def assess_capacity(self, request: CapacityRequest) -> CapacityAssessment: ...
+    async def try_reserve_capacity(self, request: CapacityRequest) -> CapacityReservation | CapacityAssessment: ...
+    async def get_capacity_reservation(self, request: CapacityRequest) -> CapacityReservation | None: ...
+    async def consume_capacity(self, request: CapacityRequest, reservation_id: str,
+                               admitted: CapacityConsumption) -> CapacityReservation: ...
+    async def release_capacity(self, request: CapacityRequest, reservation_id: str,
+                               reason: str) -> CapacityReservation: ...
 
 
 class RuntimeCore(Protocol):
