@@ -325,6 +325,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                  reconnect_fence_seconds: float = 5.0,
                  max_concurrent_opens: int = 8,
                  max_owned_sessions: int = 8,
+                 capacity_enabled: bool = False,
                  pi_install_root: str | "Path | None" = None,
                  pi_node: str | "Path | None" = None,
                  cleanup_budget_seconds: float = 5.0):
@@ -358,6 +359,14 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                   if pi_install_root is not None else None)
         self._pi_node = Path(pi_node) if pi_node is not None else None
         self._journal = journal
+        if type(capacity_enabled) is not bool:
+            raise ValueError('capacity_enabled must be bool')
+        self._capacity_enabled = capacity_enabled
+        if capacity_enabled and (owned_slot_ledger is None or any(
+                not callable(getattr(owned_slot_ledger, method, None)) for method in (
+                    'acquire_turn_slot', 'finish_turn_slot', 'reserve_capacity_slot',
+                    'get_capacity_slot', 'consume_capacity_slot', 'release_capacity_slot'))):
+            raise ValueError('Execution capacity requires a durable CapacitySlotLedger')
         self._owned_slots = owned_slot_ledger or journal
         self._clock = RollbackFencedClock(clock or SystemClock())
         self._kernel = OperationKernel(journal, self._clock)
@@ -490,12 +499,31 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             open_kwargs["opening_guard"] = attempt.guard
         effect_started = False
         binding_registered = False
+        preowned_slot = False
+        pre_reserve_uncertain = False
+        opening_key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
         try:
             refreshed = await asyncio.to_thread(prepare_launch,
                                                 prepared.intent, selected, root)
             if prepared != refreshed:
                 raise CoreError("PROFILE_DRIFT", "open")
             await asyncio.to_thread(verify_prepared, prepared)
+            if self._capacity_enabled and prepared.intent.mode == 'managed':
+                # Exclude competing opens BEFORE journal.admit claims the
+                # session identity. A refused ordinary open must not poison
+                # the reserved winner's canonical opening claim.
+                pre_reserve_uncertain = True
+                try:
+                    await self._owned_slots.reserve_owned_slot(opening_key, operation.session_id,
+                                                              intent_hash=intent_hash(semantic, context))
+                except CoreError as error:
+                    if error.retry_safe and not error.possible_effect:
+                        pre_reserve_uncertain = False
+                    raise
+                pre_reserve_uncertain = False
+                preowned_slot = True
+                attempt.operation_id = operation.operation_id
+                attempt.slot_reserved = True
 
             async def effect() -> str:
                 nonlocal effect_started, binding_registered
@@ -505,11 +533,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                         raise EffectNotSent("runtime is draining",
                                             code="RUNTIME_DRAINING")
                 effect_started = True
-                slot_reserved = False
-                if prepared.intent.mode == "managed":
-                    opening_key = OperationKey(
-                        context.server_id, context.executor_id,
-                        operation.operation_id)
+                slot_reserved = preowned_slot
+                if prepared.intent.mode == "managed" and not preowned_slot:
                     try:
                         await self._owned_slots.reserve_owned_slot(
                             opening_key, operation.session_id)
@@ -617,6 +642,10 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 opening_deadline=lambda: self._current_open_context(
                     context, operation.session_id).lease_deadline_monotonic)
         finally:
+            if preowned_slot and not effect_started and not binding_registered:
+                # No producer was dispatched (or the producer proved non-effect).
+                # Reuse the existing supervised durable release obligation.
+                await self._durable_release(session_key, opening_key, attempt)
             async with self._lock:
                 # C6/V02c: the WAITER ended, but the PRODUCER may still be
                 # able to create an effect. The attempt stays registered
@@ -630,7 +659,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                     attempt.finished.set()
                 else:
                     attempt.waiter_done = True
-                if effect_started and not binding_registered:
+                if (effect_started and not binding_registered) or pre_reserve_uncertain:
                     self._uncertain_opens.add(session_key)
                 if self._shutting_down and (binding := self._sessions.get(session_key)):
                     if binding.shutdown_task is None or binding.shutdown_task.done():
@@ -908,18 +937,42 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             if semantic.action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
 
+            capacity_key = None
+            effect_entered = False
+            if self._capacity_enabled and verb == 'send_turn':
+                capacity_key = OperationKey(context.server_id, context.executor_id, semantic.operation_id)
+                fresh = await self._owned_slots.acquire_turn_slot(
+                    capacity_key, semantic.session_id, intent_hash(semantic, context))
+                if not fresh:
+                    # A surviving gate without a receipt is an interrupted
+                    # admission. Never infer that the native send did not run.
+                    old = await self._existing(semantic, context)
+                    if old is not None:
+                        return old
+                    raise CoreError('NEEDS_RECONCILIATION', 'turn_capacity', possible_effect=True)
+
             async def effect() -> None:
+                nonlocal effect_entered
                 self._check_r4_context(context, semantic.action, semantic.session_id)
                 if binding.draining and semantic.action != "turn.interrupt":
                     raise EffectNotSent("SESSION_CLOSING")
                 if binding.lease_hold and semantic.action != "turn.interrupt":
                     raise EffectNotSent("LEASE_UPDATE_PENDING")
+                effect_entered = True
                 await binding.native.send(
                     verb, payload, semantic.operation_id,
                     expected_turn_id=semantic.expected_turn_id)
                 return None
 
-            return await self._kernel.execute(semantic, context, effect)
+            try:
+                return await self._kernel.execute(semantic, context, effect)
+            except BaseException as error:
+                if capacity_key is not None and (not effect_entered or (
+                        isinstance(error, CoreError) and error.retry_safe and not error.possible_effect)):
+                    # Proven no native effect; failure of this durable release
+                    # remains conservative and is recovered from the journal.
+                    await self._owned_slots.finish_turn_slot(capacity_key, semantic.session_id)
+                raise
 
     async def close(self, operation: CloseOperation,
                      context: ExecutionContext, *,
@@ -1042,6 +1095,61 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 raise EffectNotSent('Context observation unavailable', code='CAPABILITY_UNSUPPORTED')
             self._session(session.session_id, binding.context, require_live_lease=True)
             await binding.native.observe_context(frozen, guard)
+
+    async def capacity_readiness(self, request) -> str:
+        """Contextual technical observation; the durable gate decides exclusion.
+
+        Public seam for a host with one Core per session. Hosts never inspect
+        our private session map. Capacity-owner boot is checked by the facade;
+        this method independently checks the installed R4 lease and its boot.
+        """
+        from .capacity import CapacityRequest
+        if type(request) is not CapacityRequest or request.unit != 'next_turn':
+            raise ValueError('Capacity readiness requires an existing-session request.')
+        if not self._capacity_enabled:
+            return 'CAPACITY_PROTOCOL_UNSUPPORTED'
+        s = request.scope
+        key = SessionKey(s.server_id, s.executor_id, s.session_id)
+
+        def current():
+            binding = self._sessions.get(key)
+            if binding is None:
+                return None, 'RECOVERING'
+            ctx, authority = binding.context, binding.context.r4_authority
+            if authority is None:
+                return None, 'CAPACITY_PROTOCOL_UNSUPPORTED'
+            if any(getattr(ctx, name) != getattr(s, name) for name in (
+                    'server_id', 'executor_id', 'binding_id', 'agent_id', 'workspace_id',
+                    'connection_generation', 'session_owner_generation', 'authorization_revision', 'configuration_revision')):
+                return None, 'STALE_OBSERVATION'
+            if any(getattr(authority, name) != getattr(s, name) for name in (
+                    'workspace_binding_id', 'binding_revision', 'credential_epoch', 'session_id')):
+                return None, 'STALE_OBSERVATION'
+            if (self._shutting_down or binding.closed or binding.closing or binding.faulted
+                    or binding.draining or binding.lease_hold or binding.superseded):
+                return None, 'RECOVERING'
+            try:
+                self._session(s.session_id, ctx, require_live_lease=True)
+                self._check_r4_context(ctx, 'turn.submit', s.session_id)
+            except CoreError:
+                return None, 'NOT_AUTHORIZED'
+            if binding.normal_lock.locked() or binding.pending_native_requests:
+                return None, 'BUSY_AFFINITY'
+            return binding, 'AVAILABLE'
+
+        binding, reason = current()
+        if reason != 'AVAILABLE':
+            return reason
+        try:
+            process, turn = await binding.native.observe()
+        except Exception:
+            return 'RECOVERING'
+        current_binding, reason = current()
+        if reason != 'AVAILABLE' or current_binding is not binding:
+            return reason if reason != 'AVAILABLE' else 'RECOVERING'
+        if process != 'RUNNING' or turn == 'UNKNOWN':
+            return 'RECOVERING'
+        return 'AVAILABLE' if turn == 'IDLE' else 'BUSY_AFFINITY'
 
     async def inspect(self, session: SessionKey) -> RuntimeSnapshot:
         binding = self._sessions.get(session)
@@ -2639,6 +2747,10 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                 binding.pending_native_requests[json.dumps(request_id)] = encoded
                 if (event.payload.get("delivery_phase") == "terminal" and
                         event.category == "turn_state"):
+                    if self._capacity_enabled and event.operation_id:
+                        await self._owned_slots.finish_turn_slot(
+                            OperationKey(session.server_id, session.executor_id, event.operation_id),
+                            session.session_id)
                     turn_id = event.payload.get("turn_id")
                     for key, encoded in tuple(binding.pending_native_requests.items()):
                         pending = json.loads(encoded)

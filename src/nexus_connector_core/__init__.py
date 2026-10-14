@@ -73,7 +73,9 @@ from .approval_reducer_r4 import (
     R4ApprovalProjection, reduce_r4_approval_request,
     reduce_r4_approval_decision,
 )
-from .ports import OwnedSlotLedger, RuntimeCore, RuntimeCapacity
+from .ports import OwnedSlotLedger, RuntimeCore, RuntimeCapacity, CapacitySlotLedger, RuntimeCapacityAuthority
+from .capacity_runtime import ExecutionCapacity
+from .capacity_bundle import verify_capacity_bundle
 from .capacity import (
     CAPACITY_CONTRACT_REVISION, CAPACITY_REASONS, RESERVATION_STATES,
     CapacityScope, CapacityRequest, CapacityAssessment, CapacityConsumption,
@@ -117,6 +119,9 @@ __version__ = "0.0.11"
 __all__ = [
     "CAPACITY_FRAME_TYPES", "CAPACITY_REQUEST_TYPES", "encode_capacity_frame", "decode_capacity_frame",
     "RuntimeCapacity", "CAPACITY_CONTRACT_REVISION", "CAPACITY_REASONS", "RESERVATION_STATES",
+    "CapacitySlotLedger",
+    "ExecutionCapacity", "RuntimeCapacityAuthority",
+    "verify_capacity_bundle",
     "CapacityScope", "CapacityRequest", "CapacityAssessment", "CapacityConsumption",
     "CapacityReservation", "require_same_capacity_request", "capacity_contract_supported",
     "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",

@@ -16,9 +16,11 @@ from .offloop import (ExecutorClosed, ExecutorFull, OffLoopExecutor)
 from .journal import validate_claim_namespace, validate_claim_page
 from .models import (CoreError, OperationKey, OwnedSlotPage,
                      OwnedSlotReservation, OwnedSlotState, SessionKey)
+from .capacity_storage import (SCHEMA as CAPACITY_SCHEMA, SQLiteCapacityOperations,
+                               transfer_reserved_open, release_session_capacity)
 
 
-class SQLiteOwnedSlotLedger:
+class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
     """A cross-process slot cap independent of per-executor journal files."""
 
     def __init__(self, path: str | Path, *, max_slots: int = 8,
@@ -76,6 +78,7 @@ class SQLiteOwnedSlotLedger:
                 CREATE INDEX IF NOT EXISTS active_owned_slot_reservations
                     ON owned_slot_reservations(released);
             """)
+            db.executescript(CAPACITY_SCHEMA)
             info = self.path.stat()
             self._storage_identity = (info.st_dev, info.st_ino)
         except BaseException:
@@ -124,7 +127,7 @@ class SQLiteOwnedSlotLedger:
             db.execute("ROLLBACK")
 
     async def reserve_owned_slot(self, key: OperationKey,
-                                 session_id: str) -> None:
+                                 session_id: str, *, intent_hash: str | None = None) -> None:
         """Reserve before native launch; ambiguity leaves the slot pinned."""
         self._validate(key, session_id)
 
@@ -146,6 +149,9 @@ class SQLiteOwnedSlotLedger:
                        WHERE server_id=? AND executor_id=? AND session_id=?""",
                     (key.server_id, key.executor_id, session_id)).fetchone()
                 if existing is not None:
+                    if transfer_reserved_open(db, key, session_id, intent_hash):
+                        db.execute("COMMIT")
+                        return
                     raise CoreError("SESSION_CONFLICT", "slot_ledger",
                                     possible_effect=True)
                 occupied = db.execute(
@@ -194,6 +200,7 @@ class SQLiteOwnedSlotLedger:
                         """UPDATE owned_slot_reservations SET released=1
                            WHERE server_id=? AND executor_id=? AND session_id=?""",
                         (key.server_id, key.executor_id, session_id))
+                    release_session_capacity(db, key.server_id, key.executor_id, session_id)
                 db.execute("COMMIT")
             except BaseException as exc:
                 self._rollback_if_active(db)

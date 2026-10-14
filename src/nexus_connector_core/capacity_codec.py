@@ -26,6 +26,9 @@ def _validate(frame):
         raise ValueError('Invalid capacity frame.')
     if frame.get('contract_revision') != CAPACITY_CONTRACT_REVISION:
         raise CoreError('VERSION_INCOMPATIBLE', 'capacity_negotiation')
+    from .capacity_bundle import capacity_schema_validator
+    if not capacity_schema_validator().is_valid(frame):
+        raise ValueError('Invalid capacity schema.')
     kind = frame.get('type')
     if type(kind) is not str or kind not in CAPACITY_FRAME_TYPES:
         raise ValueError('Unknown capacity control.')
