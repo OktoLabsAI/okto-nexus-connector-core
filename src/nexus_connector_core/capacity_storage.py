@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import json
 import math
-import uuid
 
 from .capacity import (CAPACITY_CONTRACT_REVISION, CapacityAssessment,
-                       CapacityConsumption, CapacityRequest, CapacityReservation, CapacityReservationPage)
+                       CapacityConsumption, CapacityRequest, CapacityReservation, CapacityReservationPage,
+                       capacity_reservation_id)
 from .models import CoreError
 
 
@@ -248,7 +248,7 @@ class SQLiteCapacityOperations:
             if reason != 'AVAILABLE':
                 return CapacityAssessment(CAPACITY_CONTRACT_REVISION, request.request_hash, reason, _revision(db), 100)
             s = request.scope
-            identity = 'cap_' + uuid.uuid4().hex
+            identity = capacity_reservation_id(request)
             db.execute('INSERT INTO execution_capacity_reservations VALUES(?,?,?,?,?,?,?,?,?,?,NULL,0)',
                 (identity, s.server_id, s.executor_id, request.attempt_id, s.session_id,
                  request.affinity_key, json.dumps(request.to_dict()), 'HELD', _changed(db), now + request.ttl_ms / 1000))
@@ -334,7 +334,19 @@ class SQLiteCapacityOperations:
         self._capacity_arguments(request, now, boot_id)
         def work(db):
             row = _expire(db, _row(db, request), request, now, boot_id)
-            if not row or row['reservation_id'] != reservation_id:
+            if row is None:
+                if reservation_id != capacity_reservation_id(request):
+                    raise CoreError('RESERVATION_CONFLICT', 'capacity_release')
+                # Persist the negative acknowledgement in the SAME journal
+                # consulted by reserve. A delayed/in-flight reserve can only
+                # replay this terminal record; it cannot create a physical slot.
+                # Do not touch a different attempt's owned session or live turn.
+                s = request.scope
+                db.execute('INSERT INTO execution_capacity_reservations VALUES(?,?,?,?,?,?,?,?,?,?,NULL,0)',
+                    (reservation_id, s.server_id, s.executor_id, request.attempt_id, s.session_id,
+                     request.affinity_key, json.dumps(request.to_dict()), 'RELEASED', _changed(db), now))
+                return _record(_row(db, request), request, now, boot_id)
+            if row['reservation_id'] != reservation_id:
                 raise CoreError('RESERVATION_CONFLICT', 'capacity_release')
             if row['state'] == 'HELD':
                 _release_unconsumed(db, row, request, 'RELEASED')

@@ -326,6 +326,33 @@ the authenticated session supplies sender and workspace. Question answers retain
 the source harness contract. Tool call IDs provide operation identity. A lost
 message or answer acknowledgement is `OUTCOME_UNKNOWN`, never an instruction to
 retry with a new ID. Requests and responses remain bounded to 16 KiB.
+## Technical execution capacity
+
+`ExecutionCapacity` implements the public `RuntimeCapacity` port over the host's
+physical slot ledger. Assessment is advisory. Reservation, lookup, consumption
+and release use the exact immutable `CapacityRequest`; the host still checks its
+authenticated owner and native execution authority. These operations do not
+decide ownership of application work.
+
+If a reserve response is lost, look up the original request before retrying.
+To abandon an attempt that has no host record, call `release_capacity` with
+`capacity_reservation_id(request)` and reason `CANCELLED`. The host atomically
+persists a `RELEASED` record with no consumption in the same journal used by
+reserve. A delayed reserve replays that record without taking a slot. An empty
+lookup alone is not proof that a delayed request cannot still arrive.
+
+The proposed ID is derived from the complete immutable request. A persisted
+reservation's ID remains authoritative, including opaque IDs from older Core
+versions; never replace one with the proposed ID. If known history disappears,
+retain uncertainty rather than manufacture a replacement no-effect record.
+Older hosts may refuse cancellation before reservation. Treat that refusal as
+unresolved; it must not grant permission to create a competing attempt.
+
+Cancellation does not release another attempt's session or an active turn.
+Consumed reservations enter `RELEASE_PENDING` until the existing journal and
+correlated termination evidence allow release. TTL and cancellation acknowledgements
+must never be used to infer that native effects have stopped.
+
 # Portable connection configuration
 
 `nexus_connector_core.connection_configuration` provides

@@ -84,6 +84,7 @@ from .capacity import (
     CAPACITY_CONTRACT_REVISION, CAPACITY_REASONS, RESERVATION_STATES,
     CapacityScope, CapacityRequest, CapacityAssessment, CapacityConsumption,
     CapacityReservation, CapacityReservationPage, require_same_capacity_request, capacity_contract_supported,
+    capacity_reservation_id,
 )
 from .capacity_codec import (
     CAPACITY_FRAME_TYPES, CAPACITY_REQUEST_TYPES, encode_capacity_frame, decode_capacity_frame,
@@ -129,6 +130,7 @@ __all__ = [
     "decode_control_frame", "execute_capacity_control", "capacity_result_frame", "capacity_denial_frame",
     "CapacityScope", "CapacityRequest", "CapacityAssessment", "CapacityConsumption",
     "CapacityReservation", "CapacityReservationPage", "require_same_capacity_request", "capacity_contract_supported",
+    "capacity_reservation_id",
     "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",
     "native_input_response",
     "HarnessSettings", "validate_harness_settings", "harness_settings_dict", "validate_harness_configuration",

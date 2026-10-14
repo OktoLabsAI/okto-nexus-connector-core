@@ -196,6 +196,19 @@ def require_same_capacity_request(reservation: CapacityReservation, request: Cap
         raise ValueError('RESERVATION_CONFLICT')
 
 
+def capacity_reservation_id(request: CapacityRequest) -> str:
+    """Proposed identity for a new request, including cancellation before reserve.
+
+    A persisted reservation remains authoritative, including older opaque IDs.
+    This ID grants no authority; release still requires the authenticated owner
+    and the exact immutable request. It permits a host to persist a terminal
+    unconsumed record before a delayed reserve reaches its ledger.
+    """
+    if type(request) is not CapacityRequest:
+        raise ValueError('Invalid capacity request.')
+    return 'cap_' + request.request_hash.removeprefix('sha256:')
+
+
 @dataclass(frozen=True, slots=True)
 class CapacityReservationPage:
     """Durable active facts, without interpreting another owner's clock."""

@@ -25,6 +25,9 @@ class RuntimeCapacity(Protocol):
     Lookup uses the original immutable attempt after an uncertain response.
     Release is a request: the implementation retains consumed/uncertain
     resources until its own journal and containment evidence permit release.
+    For an absent attempt, release with capacity_reservation_id(request) can
+    persist a terminal unconsumed record that fences any delayed reserve.
+    An existing historical reservation ID always takes precedence.
     No network call or provider launch belongs inside a Server transaction.
     """
     async def assess_capacity(self, request: CapacityRequest) -> CapacityAssessment: ...
