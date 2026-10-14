@@ -16,7 +16,7 @@ from .models import (
     TurnOperation,
 )
 from .lease_reducer_r4 import R4LeaseAttempt
-from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption
+from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption, CapacityReservationPage
 
 
 class RuntimeCapacity(Protocol):
@@ -130,6 +130,11 @@ class CapacitySlotLedger(OwnedSlotLedger, Protocol):
     """
     async def reserve_owned_slot(self, key: OperationKey, session_id: str, *,
                                  intent_hash: str | None = None) -> None: ...
+    async def capacity_reservation_page(self, server_id: str, executor_id: str, *,
+                                       after_rowid: int = 0, high_water_rowid: int | None = None,
+                                       limit: int = 128) -> "CapacityReservationPage": ...
+    async def release_fenced_capacity_holds(self, server_id: str, executor_id: str, *,
+                                           connection_generation: int, limit: int = 128) -> int: ...
     async def assess_capacity_slot(self, request: CapacityRequest, *, now: float,
                                    boot_id: str) -> CapacityAssessment: ...
     async def reserve_capacity_slot(self, request: CapacityRequest, *, now: float,

@@ -75,11 +75,13 @@ from .approval_reducer_r4 import (
 )
 from .ports import OwnedSlotLedger, RuntimeCore, RuntimeCapacity, CapacitySlotLedger, RuntimeCapacityAuthority
 from .capacity_runtime import ExecutionCapacity
+from .control_codec import decode_control_frame
+from .capacity_control import execute_capacity_control, capacity_result_frame, capacity_denial_frame
 from .capacity_bundle import verify_capacity_bundle
 from .capacity import (
     CAPACITY_CONTRACT_REVISION, CAPACITY_REASONS, RESERVATION_STATES,
     CapacityScope, CapacityRequest, CapacityAssessment, CapacityConsumption,
-    CapacityReservation, require_same_capacity_request, capacity_contract_supported,
+    CapacityReservation, CapacityReservationPage, require_same_capacity_request, capacity_contract_supported,
 )
 from .capacity_codec import (
     CAPACITY_FRAME_TYPES, CAPACITY_REQUEST_TYPES, encode_capacity_frame, decode_capacity_frame,
@@ -122,8 +124,9 @@ __all__ = [
     "CapacitySlotLedger",
     "ExecutionCapacity", "RuntimeCapacityAuthority",
     "verify_capacity_bundle",
+    "decode_control_frame", "execute_capacity_control", "capacity_result_frame", "capacity_denial_frame",
     "CapacityScope", "CapacityRequest", "CapacityAssessment", "CapacityConsumption",
-    "CapacityReservation", "require_same_capacity_request", "capacity_contract_supported",
+    "CapacityReservation", "CapacityReservationPage", "require_same_capacity_request", "capacity_contract_supported",
     "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",
     "native_input_response",
     "HarnessSettings", "validate_harness_settings", "harness_settings_dict", "validate_harness_configuration",

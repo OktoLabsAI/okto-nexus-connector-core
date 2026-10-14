@@ -196,6 +196,14 @@ def require_same_capacity_request(reservation: CapacityReservation, request: Cap
         raise ValueError('RESERVATION_CONFLICT')
 
 
+@dataclass(frozen=True, slots=True)
+class CapacityReservationPage:
+    """Durable active facts, without interpreting another owner's clock."""
+    reservations: tuple[CapacityReservation, ...]
+    high_water_rowid: int
+    next_after_rowid: int | None
+
+
 def capacity_contract_supported(advertised: Mapping) -> bool:
     """Absence or a future incompatible revision never means idle capacity."""
     return isinstance(advertised, Mapping) and advertised.get('execution_capacity') == CAPACITY_CONTRACT_REVISION

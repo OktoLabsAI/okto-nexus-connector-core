@@ -12,7 +12,7 @@ import math
 import uuid
 
 from .capacity import (CAPACITY_CONTRACT_REVISION, CapacityAssessment,
-                       CapacityConsumption, CapacityRequest, CapacityReservation)
+                       CapacityConsumption, CapacityRequest, CapacityReservation, CapacityReservationPage)
 from .models import CoreError
 
 
@@ -35,6 +35,8 @@ CREATE INDEX IF NOT EXISTS capacity_by_affinity ON execution_capacity_reservatio
     server_id,executor_id,affinity_key,state);
 CREATE INDEX IF NOT EXISTS capacity_expiry ON execution_capacity_reservations(
     json_extract(request_json,'$.scope.boot_id'),deadline) WHERE state='HELD';
+CREATE INDEX IF NOT EXISTS capacity_owner_generation ON execution_capacity_reservations(
+    server_id,executor_id,json_extract(request_json,'$.scope.connection_generation')) WHERE state='HELD';
 CREATE TABLE IF NOT EXISTS execution_turn_slots (
     server_id TEXT NOT NULL, executor_id TEXT NOT NULL, session_id TEXT NOT NULL,
     operation_id TEXT NOT NULL, intent_hash TEXT NOT NULL, active INTEGER NOT NULL,
@@ -159,6 +161,54 @@ class SQLiteCapacityOperations:
         def work(db):
             reason = 'STALE_OBSERVATION' if request.scope.boot_id != boot_id else _reason(db, request, self.max_slots)
             return CapacityAssessment(CAPACITY_CONTRACT_REVISION, request.request_hash, reason, _revision(db), 100)
+        return await self._capacity_transaction(work)
+
+    async def capacity_reservation_page(self, server_id, executor_id, *,
+                                         after_rowid=0, high_water_rowid=None, limit=128):
+        """Public recovery facts for one namespace; no observation of free capacity.
+
+        remaining_ms is deliberately zero: this history scan does not establish
+        which monotonic clock owns a hold. Only the facade can assess validity.
+        """
+        from .journal import validate_claim_namespace, validate_claim_page
+        validate_claim_namespace(server_id, executor_id)
+        validate_claim_page(after_rowid, high_water_rowid, limit)
+        def work(db):
+            high = high_water_rowid
+            if high is None:
+                high = db.execute('SELECT COALESCE(MAX(rowid),0) FROM execution_capacity_reservations '
+                    'WHERE server_id=? AND executor_id=?', (server_id, executor_id)).fetchone()[0]
+            cursor = db.execute('SELECT rowid AS capacity_rowid,* FROM execution_capacity_reservations '
+                f'WHERE server_id=? AND executor_id=? AND state IN {ACTIVE} AND rowid>? AND rowid<=? '
+                'ORDER BY rowid LIMIT ?', (server_id, executor_id, after_rowid, high, limit + 1))
+            names = [c[0] for c in cursor.description]
+            rows = [dict(zip(names, row)) for row in cursor.fetchall()]
+            records = tuple(_record(row, CapacityRequest.from_dict(json.loads(row['request_json'])), 0, None)
+                            for row in rows[:limit])
+            return CapacityReservationPage(records, high, rows[limit - 1]['capacity_rowid'] if len(rows) > limit else None)
+        return await self._capacity_transaction(work)
+
+    async def release_fenced_capacity_holds(self, server_id, executor_id, *, connection_generation, limit=128):
+        """Trusted current host owner only, AFTER fencing older connections.
+
+        Atomic HELD + no consumption/transfer is proof of no native admission.
+        This is cancellation by the replacement owner, not expiry and not a
+        claim that consumed work or an old monotonic deadline is safe to free.
+        """
+        from .journal import validate_claim_namespace
+        from .capacity import _integer
+        validate_claim_namespace(server_id, executor_id)
+        _integer(connection_generation, 'connection_generation', minimum=1)
+        _integer(limit, 'limit', minimum=1, maximum=4096)
+        def work(db):
+            rows = db.execute('SELECT request_json FROM execution_capacity_reservations '
+                "WHERE server_id=? AND executor_id=? AND state='HELD' "
+                "AND json_extract(request_json,'$.scope.connection_generation')<? "
+                'ORDER BY rowid LIMIT ?', (server_id, executor_id, connection_generation, limit)).fetchall()
+            for (raw,) in rows:
+                request = CapacityRequest.from_dict(json.loads(raw))
+                _release_unconsumed(db, _row(db, request), request, 'RELEASED')
+            return len(rows)
         return await self._capacity_transaction(work)
 
     async def expire_capacity_slots(self, *, now, boot_id, limit=128):
