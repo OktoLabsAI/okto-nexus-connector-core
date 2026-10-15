@@ -137,6 +137,49 @@ def context():
                             frozenset({"runtime.open", "turn.submit"}))
 
 
+def test_pi_launch_file_seals_never_block_sibling_event_loop(monkeypatch, tmp_path):
+    import threading
+    import nexus_connector_core.build_identity as identity
+    import nexus_connector_core.native.runtime_bridge as bridge_module
+    import nexus_connector_core.native.adapters.pi as pi_module
+    event_loop_thread = threading.get_ident()
+    checks = []
+
+    def slow_seal(*args):
+        # This assertion fails on every old synchronous launch frontier.
+        assert threading.get_ident() != event_loop_thread
+        checks.append(True)
+        time.sleep(.02)
+        return ('unchanged',)
+
+    class StubPi:
+        def __init__(self, **kwargs):
+            pass
+        def start(self, *, owning_agent_id):
+            return HarnessSession('native', 'pi', owning_agent_id, 'STARTING',
+                HarnessCapabilities(False, None, False, False, True), '2026-10-09T00:00:00Z')
+        def close(self):
+            return 'graceful'
+
+    monkeypatch.setattr(identity, 'launch_artifact_signature', slow_seal)
+    monkeypatch.setattr(bridge_module, 'qualified_build', lambda *a, **kw: True)
+    monkeypatch.setattr(pi_module, 'PiRpcConnector', StubPi)
+    candidate = InstallationCandidate('pi_rpc', sys.executable, 'sha256:test', 'explicit',
+        'selected', version='synthetic', launch_script=str(tmp_path / 'cli.js'))
+    prepared = PreparedLaunch(LaunchIntent('agent', 'ws', 'pi_rpc'), candidate,
+        (sys.executable, str(tmp_path / 'cli.js')), str(tmp_path), str(tmp_path),
+        _root_fingerprint(tmp_path), 'profile', ())
+
+    async def run():
+        async def environment(_):
+            return {}
+        session = await CopiedAdapterFactory(environment).open(prepared, 'session', context(), stream_epoch='epoch')
+        session._control_executor.shutdown()
+        session._force_executor.shutdown()
+    asyncio.run(run())
+    assert len(checks) >= 5  # initial seal, environment, action, launch and worker
+
+
 class FakeCopiedConnector:
     def __init__(self):
         self.sent = []

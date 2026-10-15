@@ -26,6 +26,8 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
         raise CoreError("CAPABILITY_UNSUPPORTED", "prepare")
     settings = harness_settings_dict(intent.harness_settings)
     validate_harness_settings(intent.adapter_id, settings)
+    from .mcp_presets import validate_mcp_preset
+    preset = validate_mcp_preset(list(intent.mcp_preset))
     if intent.model is not None and (
             type(intent.model) is not str or not intent.model or
             len(intent.model) > 200):
@@ -99,6 +101,8 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
                "argv": list(argv), "root": str(resolved)}
     if settings:
         profile['harness_settings'] = settings
+    if preset:
+        profile['mcp_preset'] = preset
     digest = "sha256:" + hashlib.sha256(canonical_json(profile)).hexdigest()
     return PreparedLaunch(intent, candidate, argv, str(resolved), str(root),
                           _root_fingerprint(resolved), digest, intent.auth_refs)

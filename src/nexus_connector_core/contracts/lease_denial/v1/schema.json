@@ -1,0 +1,163 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:okto:nexus:lease-denial:v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_revision",
+    "type",
+    "request",
+    "code"
+  ],
+  "properties": {
+    "contract_revision": {
+      "const": "nexus-lease-denial-v1"
+    },
+    "type": {
+      "const": "lease.denied"
+    },
+    "code": {
+      "const": "LEASE_REVALIDATION_REQUIRED"
+    },
+    "request": {
+      "additionalProperties": false,
+      "properties": {
+        "connection_generation": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "connection_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "contract_revision": {
+          "const": "nxl-1-agent-centric-http-only-2026-09-29-r4"
+        },
+        "expected_lease_serial": {
+          "maximum": 9007199254740991,
+          "minimum": 0,
+          "type": "integer"
+        },
+        "grant_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "protocol_major": {
+          "const": 1
+        },
+        "purpose": {
+          "enum": [
+            "initial",
+            "renew",
+            "reconnect"
+          ]
+        },
+        "request_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "scope": {
+          "additionalProperties": false,
+          "properties": {
+            "agent_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "authorization_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "binding_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "configuration_revision": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "credential_epoch": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "executor_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "server_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "session_owner_generation": {
+              "maximum": 9007199254740991,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "workspace_binding_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            },
+            "workspace_id": {
+              "maxLength": 160,
+              "minLength": 1,
+              "type": "string"
+            }
+          },
+          "required": [
+            "server_id",
+            "executor_id",
+            "binding_id",
+            "agent_id",
+            "workspace_id",
+            "workspace_binding_id",
+            "session_id",
+            "session_owner_generation",
+            "authorization_revision",
+            "configuration_revision",
+            "binding_revision",
+            "credential_epoch"
+          ],
+          "type": "object"
+        },
+        "type": {
+          "const": "lease.renew"
+        }
+      },
+      "required": [
+        "protocol_major",
+        "contract_revision",
+        "type",
+        "request_id",
+        "grant_id",
+        "expected_lease_serial",
+        "scope",
+        "connection_id",
+        "connection_generation",
+        "purpose"
+      ],
+      "title": "lease.renew",
+      "type": "object"
+    }
+  }
+}

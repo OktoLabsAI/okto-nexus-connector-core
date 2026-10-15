@@ -18,7 +18,7 @@ from pathlib import Path
 def verify_import_boundaries(source: bytes | str, name: str) -> None:
     """Fail on application imports or undeclared third-party wheel imports."""
     tree = ast.parse(source, filename=name)
-    allowed_external = {"rfc8785", "jsonschema"}
+    allowed_external = {"rfc8785", "jsonschema", "mcp", "anyio"}
 
     def dotted(expression: ast.expr) -> str:
         if isinstance(expression, ast.Name):

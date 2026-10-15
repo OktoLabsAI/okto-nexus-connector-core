@@ -29,10 +29,13 @@ class ProcessHTTPEnvironment(Mapping[str, str]):
     Values are immutable and omitted from repr. This object is not a wire DTO
     and is never persisted in a prepared launch or receipt.
     """
-    def __init__(self, values, templates, disabled_mcp_names=()):
+    def __init__(self, values, templates, disabled_mcp_names=(), preset_entries=None, preset_strict=False, pi_mcp_bridge=None):
         self._values = MappingProxyType(dict(values))
         self.http_templates = tuple(templates)
         self.disabled_mcp_names = tuple(disabled_mcp_names)
+        self.preset_entries = dict(preset_entries or {})
+        self.preset_strict = preset_strict
+        self.pi_mcp_bridge = pi_mcp_bridge
 
     def __getitem__(self, name):
         return self._values[name]
@@ -155,7 +158,20 @@ async def child_environment(
         import asyncio
         from .mcp_inheritance import codex_mcp_names
         disabled_mcps = await asyncio.to_thread(codex_mcp_names, env, prepared.cwd)
-    return ProcessHTTPEnvironment(env, http_templates, disabled_mcps) if render_http else env
+    preset_entries = {}
+    pi_mcp_bridge = None
+    if prepared.intent.mcp_preset:
+        if prepared.intent.adapter_id == 'pi_rpc':
+            from .pi_mcp_bridge import PiMCPBridge
+            pi_mcp_bridge = PiMCPBridge(prepared.intent.mcp_preset, resolver, prepared.secret_refs,
+                cwd=prepared.cwd, environment={k: v for k, v in env.items() if k.upper() in _ESSENTIALS})
+        else:
+            from .preset_environment import compile_preset
+            preset_entries, preset_disabled = await compile_preset(prepared, resolver, env, inherit_global=inherit_mcps)
+            disabled_mcps = tuple(sorted(set(disabled_mcps) | set(preset_disabled)))
+        render_http = True
+    return ProcessHTTPEnvironment(env, http_templates, disabled_mcps, preset_entries,
+        bool(prepared.intent.mcp_preset) and prepared.intent.adapter_id == 'claude_stream', pi_mcp_bridge) if render_http else env
 
 
 def _is_default_claude_state(home: Path) -> bool:

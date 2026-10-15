@@ -1,0 +1,354 @@
+{
+  "valid": [
+    {
+      "name": "initial",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 0,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "initial"
+        }
+      }
+    },
+    {
+      "name": "renew",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew"
+        }
+      }
+    },
+    {
+      "name": "reconnect",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "reconnect"
+        }
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "extra",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew"
+        },
+        "extra": true
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "revision",
+      "frame": {
+        "contract_revision": "unknown",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew"
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "code",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "free text",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew"
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "type",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.granted",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew"
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "request",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": null
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "boolean-generation",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": true,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew"
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "missing-request",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew"
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "no-credential",
+      "frame": {
+        "contract_revision": "nexus-lease-denial-v1",
+        "type": "lease.denied",
+        "code": "LEASE_REVALIDATION_REQUIRED",
+        "request": {
+          "protocol_major": 1,
+          "contract_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+          "type": "lease.renew",
+          "request_id": "request",
+          "grant_id": "grant",
+          "expected_lease_serial": 1,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "purpose": "renew",
+          "credential": "forbidden"
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    }
+  ]
+}

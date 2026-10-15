@@ -1,0 +1,10 @@
+{
+  "revision": "nexus-execution-capacity-v1",
+  "status": "development",
+  "negotiation_capability": "nexus-execution-capacity-v1",
+  "max_frame_bytes": 16384,
+  "sha256": {
+    "schema.json": "e47a0d7758d4ac19141b840e34f9075ec3a92c5926bfbae76bdf06e7c8554e28",
+    "fixtures.json": "9d288c82660488d0f6a5b4aad5a893cade72fa784bca22269b61eb7564571129"
+  }
+}
