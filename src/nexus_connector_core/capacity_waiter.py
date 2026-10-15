@@ -10,6 +10,10 @@ class CapacityRetryWaiter:
             raise ValueError('Invalid capacity waiter settings.')
         self.read_revision = read_revision
         self.max_waiters, self.poll_seconds, self.recheck_seconds = max_waiters, poll_seconds, recheck_seconds
+        # asyncio may dispatch timers up to one clock tick early. On Windows
+        # Python 3.11 that tick can exceed a short poll interval, making every
+        # timeout immediately ready and turning the observer into a busy loop.
+        self._poll_timeout = max(poll_seconds, 2 * time.get_clock_info('monotonic').resolution)
         self.version = 0
         self.closed = False
         self._waiters = set()
@@ -54,7 +58,7 @@ class CapacityRetryWaiter:
                 self._revision, self._observed_at = revision, now
                 self._wake()
             try:
-                await asyncio.wait_for(self._stop.wait(), self.poll_seconds)
+                await asyncio.wait_for(self._stop.wait(), self._poll_timeout)
             except TimeoutError:
                 pass
 

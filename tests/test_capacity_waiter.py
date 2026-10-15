@@ -1,5 +1,6 @@
 """Shared retry observation cannot multiply slow ledger calls or own effects."""
 import asyncio
+from types import SimpleNamespace
 
 import pytest
 
@@ -34,8 +35,15 @@ def test_slow_revision_has_one_retained_producer_and_bounded_waiters():
     asyncio.run(run())
 
 
-def test_unchanged_revision_does_not_spin_on_repeated_admission_refusal():
+@pytest.mark.parametrize('coarse_clock', [False, True])
+def test_unchanged_revision_does_not_spin_on_repeated_admission_refusal(monkeypatch, coarse_clock):
     async def run():
+        if coarse_clock:
+            # Model the timer look-ahead used by Windows/Python 3.11 even on
+            # hosts whose native monotonic clock has finer resolution.
+            monkeypatch.setattr(asyncio.get_running_loop(), '_clock_resolution', .015625)
+            monkeypatch.setattr('nexus_connector_core.capacity_waiter.time.get_clock_info',
+                                lambda name: SimpleNamespace(resolution=.015625))
         value, calls = 1, 0
         async def revision():
             nonlocal calls
