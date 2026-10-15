@@ -6,6 +6,7 @@ from .adapter_types import RuntimeCommandRejected
 
 import asyncio
 import concurrent.futures
+import json
 import re
 import sys
 import time
@@ -158,6 +159,8 @@ class CopiedAdapterSession:
         self._observe_inflight: asyncio.Task | None = None
         self.native_id = session.session_id
         self._closed = False
+        self._preset_bridge = None
+        self._preset_config = None
         self._close_started = False
         self._end_attempted = False
         self._end_sent = False
@@ -616,7 +619,15 @@ class CopiedAdapterSession:
         return await asyncio.shield(task)
 
     async def close(self) -> str:
+        preset_error = None
+        if self._preset_bridge is not None:
+            try:
+                await self._preset_bridge.close()
+            except Exception as error:
+                preset_error = error
         if self._closed:
+            if preset_error is not None:
+                raise preset_error
             return "already_closed"
         self._close_started = True
         if not self._end_attempted:
@@ -643,6 +654,10 @@ class CopiedAdapterSession:
         # followed by legitimate late observation/retries, and the public
         # lifecycle for factory-owned capacity is the runtime shutdown.
         self._closed = after_close.get("stop_observed") is True
+        if self._closed and self._preset_config is not None:
+            self._preset_config.close()
+        if preset_error is not None:
+            raise preset_error
         # Adapter classification is trusted only after independent tree-stop
         # observation. Older adapters without a report retain the conservative
         # pre-close observation rule.
@@ -654,7 +669,11 @@ class CopiedAdapterSession:
     async def force_stop(self) -> None:
         """Request owned-tree containment independently of a stuck send."""
         self._close_started = True
-        await self._run_force(self._connector.force_stop)
+        try:
+            await self._run_force(self._connector.force_stop)
+        finally:
+            if self._preset_bridge is not None:
+                await self._preset_bridge.close()
 
     async def observe(self) -> tuple[str, str]:
         lifecycle = await self._lifecycle()
@@ -662,6 +681,10 @@ class CopiedAdapterSession:
         if state == "STOPPED":
             self._closed = True
             self._close_started = True
+            if self._preset_bridge is not None:
+                await self._preset_bridge.close()
+            if self._preset_config is not None:
+                self._preset_config.close()
         return state, "UNKNOWN"
 
 
@@ -723,6 +746,17 @@ class CopiedAdapterFactory:
     async def open(self, prepared: PreparedLaunch, session_id: str,
                    context: ExecutionContext, *, stream_epoch: str,
                    opening_guard=None) -> CopiedAdapterSession:
+        resources = []
+        try:
+            return await self._open(prepared, session_id, context, stream_epoch=stream_epoch,
+                                    opening_guard=opening_guard, resources=resources)
+        except BaseException:
+            for resource in resources:
+                resource.close()
+            raise
+
+    async def _open(self, prepared: PreparedLaunch, session_id: str,
+                    context: ExecutionContext, *, stream_epoch: str, opening_guard, resources):
         spec = adapter_spec(prepared.intent.adapter_id)
         registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
@@ -741,8 +775,10 @@ class CopiedAdapterFactory:
             runtime that began draining closes the opening guard - no
             pending open may start a native effect afterwards."""
             clock = self._clock
+            probe = getattr(opening_guard, "context_probe", None)
+            current_context = probe() if probe is not None else context
             if (clock is not None and
-                    clock() >= context.lease_deadline_monotonic):
+                    clock() >= current_context.lease_deadline_monotonic):
                 raise CoreError("AGENT_REVOKED", stage, retry_safe=True)
             if opening_guard is not None and opening_guard.closed:
                 raise CoreError("RUNTIME_DRAINING", stage, retry_safe=True)
@@ -795,6 +831,13 @@ class CopiedAdapterFactory:
             if _launch_signature(stage) != snapshot:
                 raise CoreError("PROFILE_DRIFT", stage, retry_safe=True)
 
+        async def _validate_frontier(stage: str) -> None:
+            # Pi's seal walks its dependency closure. Never perform that I/O
+            # on the event loop shared by existing sessions and their pumps.
+            _revalidate_launch(stage)
+            await asyncio.to_thread(_revalidate_content, stage, content_snapshot)
+            _revalidate_launch(stage)  # authority can expire during the walk
+
         content_snapshot = await asyncio.to_thread(_launch_signature)
         kind = spec.native_kind
         candidate = prepared.candidate
@@ -812,11 +855,11 @@ class CopiedAdapterFactory:
             def probe_guard():
                 _revalidate_launch("version_probe")
                 _revalidate_content("version_probe", content_snapshot)
-            probe_guard()
+            await _validate_frontier('version_probe')
             candidate = await asyncio.to_thread(_probe_selected_version,
                 candidate, candidate.adapter_id, cwd=prepared.cwd,
                 env=dict(os.environ), before_observe=probe_guard)
-            probe_guard()
+            await _validate_frontier('version_probe')
         recorded_build = is_qualified(candidate)
         # Build campaigns are evidence, not a cross-platform execution allowlist.
         # An observed native version may attempt the adapter's live handshake.
@@ -835,16 +878,30 @@ class CopiedAdapterFactory:
         environment = await self._environment(prepared)
         env = dict(environment)
         command = prepared.argv
-        if isinstance(environment, ProcessHTTPEnvironment):
+        preset_bridge = environment.pi_mcp_bridge if isinstance(environment, ProcessHTTPEnvironment) else None
+        preset_config = None
+        if preset_bridge is not None:
+            from importlib.resources import files
+            command = (*command, '--extension', str(files('nexus_connector_core').joinpath('pi_extension', 'mcp.js')))
+        if isinstance(environment, ProcessHTTPEnvironment) and prepared.intent.adapter_id != 'pi_rpc':
             templates = environment.http_templates
-            command = (*command, *process_http_arguments(
+            mcp_arguments = process_http_arguments(
                 prepared.intent.adapter_id, templates, prepared.secret_refs,
                 inherit_global_mcps=prepared.intent.harness_settings.inherit_global_mcps == 'enabled',
-                disabled_mcp_names=environment.disabled_mcp_names))
+                disabled_mcp_names=environment.disabled_mcp_names,
+                preset_entries=environment.preset_entries, preset_strict=environment.preset_strict)
+            if environment.preset_strict:
+                from ..session_mcp_file import SessionMCPFile
+                preset_config = SessionMCPFile()
+                resources.append(preset_config)
+                mcp_arguments = list(mcp_arguments)
+                config_index = mcp_arguments.index('--mcp-config') + 1
+                mcp_arguments[config_index] = await asyncio.to_thread(preset_config.create,
+                    json.loads(mcp_arguments[config_index]))
+            command = (*command, *mcp_arguments)
             if any(template.bearer_env_name not in env for template in templates):
                 raise CoreError('PROVIDER_AUTH_REQUIRED', 'mcp_client_configuration')
-        _revalidate_launch("environment")
-        _revalidate_content("environment", content_snapshot)
+        await _validate_frontier('environment')
         allowed_mcp_names = {_token_env_name(reference)
                              for reference in prepared.secret_refs
                              if isinstance(reference, str) and
@@ -865,8 +922,7 @@ class CopiedAdapterFactory:
         elif kind == "codex":
             resume_grant = (await self._codex_resume(prepared, session_id, context)
                             if self._codex_resume is not None else None)
-            _revalidate_launch("codex_resume")
-            _revalidate_content("codex_resume", content_snapshot)
+            await _validate_frontier('codex_resume')
             if resume_grant is not None and (
                     type(resume_grant) is not CodexResumeGrant or
                     not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}",
@@ -906,14 +962,13 @@ class CopiedAdapterFactory:
         elif kind == "pi":
             native_action = (await self._pi_native_action(prepared, session_id, context)
                              if self._pi_native_action is not None else None)
-            _revalidate_launch("native_action")
-            _revalidate_content("native_action", content_snapshot)
+            await _validate_frontier('native_action')
             if native_action is not None and (
                     not isinstance(native_action, PiNativeActionLaunch) or
                     native_action.session_id != session_id or
                     native_action.capability_ref not in prepared.secret_refs):
                 raise CoreError("BINDING_NOT_AUTHORIZED", "native_action_launch")
-            connector = load_adapter(spec.adapter_id)(command=prepared.argv,
+            connector = load_adapter(spec.adapter_id)(command=command,
                                                       cwd=prepared.cwd, env=env,
                                                       native_action=native_action)
         else:
@@ -925,8 +980,7 @@ class CopiedAdapterFactory:
         secrets = (*credential_values(env),
                    *((native_action.capability_ref,) if native_action is not None else ()))
         redactor = NativeSecretRedactor(secrets)
-        _revalidate_launch("launch")
-        _revalidate_content("launch", content_snapshot)
+        await _validate_frontier('launch')
         # C5/U02: the guard travels WITH the connector so the native
         # creator itself re-validates after its OWN internal waits (start
         # locks, bootstrap steps) - the last memory-only checkpoint
@@ -935,6 +989,9 @@ class CopiedAdapterFactory:
         if hasattr(connector, "_launch_guard") or True:
             connector._launch_guard = _revalidate_launch
         try:
+            if preset_bridge is not None:
+                env.update(await preset_bridge.start())
+                redactor = NativeSecretRedactor((*secrets, env['OKTO_PRESET_MCP_TOKEN']))
             start_kwargs = {"owning_agent_id": context.agent_id}
             if resume_grant is not None:
                 start_kwargs["resume_thread_id"] = resume_grant.thread_id
@@ -968,6 +1025,8 @@ class CopiedAdapterFactory:
             if kind == 'claude_code' and not recorded_build:
                 await asyncio.to_thread(connector.verify_protocol)
         except BaseException as error:
+            if preset_bridge is not None:
+                await preset_bridge.close()
             stopped = await asyncio.to_thread(connector.close)
             if isinstance(error, NativeAdapterError) and stopped in ('graceful', 'forced', 'already_closed'):
                 from ..models import EffectRejected
@@ -991,6 +1050,8 @@ class CopiedAdapterFactory:
                                     redactor=redactor,
                                     control_executor=self._control_executor,
                                     force_executor=self._force_executor)
+        result._preset_bridge = preset_bridge
+        result._preset_config = preset_config
         if (registered is not None and type(registered.context_observation_contract) is int
                 and registered.context_observation_contract == 1
                 and type(observed.get('context_observation_contract')) is int

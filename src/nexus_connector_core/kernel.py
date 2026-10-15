@@ -20,10 +20,13 @@ class OperationKernel:
     async def execute(self, operation: Operation, context: ExecutionContext,
                       effect: Callable[[], Awaitable[str | None]], *,
                       containment: bool | None = None,
+                      opening_deadline: Callable[[], float] | None = None,
                       completion_stage: str = "SUBMITTED") -> OperationReceipt:
         # Only a caller that has observed completion may request a terminal
         # receipt. Validate before admission or any native effect.
         if type(completion_stage) is not str or completion_stage not in {"SUBMITTED", "SUCCEEDED"}:
+            raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)
+        if opening_deadline is not None and operation.action != "runtime.open":
             raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)
         # C7/W04: callers with a derived per-operation classification
         # (a strictly negative approval reply) pass it explicitly; the
@@ -38,7 +41,8 @@ class OperationKernel:
             # durable I/O or thread scheduling. Containment controls stay
             # allowed past the deadline by contract (RC-03-06).
             return (not containment and
-                    self.clock.monotonic() >= context.lease_deadline_monotonic)
+                    self.clock.monotonic() >= (opening_deadline() if opening_deadline
+                                              else context.lease_deadline_monotonic))
 
         if _expired():
             raise CoreError("AGENT_REVOKED", "admission", retry_safe=True,

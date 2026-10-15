@@ -41,9 +41,7 @@ jobs:
       - name: Build independent wheel and sdist
         run: python tools/build_artifacts.py
       - name: Prepare dependency wheelhouse
-        run: >-
-          python -m pip download --only-binary=:all: --dest build/offline-wheelhouse
-          'setuptools>=68' wheel 'rfc8785==0.1.4' 'jsonschema==4.26.0'
+        run: python tools/prepare_offline_wheelhouse.py
       - name: Verify offline wheel and sdist installation
         run: python tools/verify_offline_artifacts.py --wheelhouse build/offline-wheelhouse
       - name: Verify clean-wheel imports and resources

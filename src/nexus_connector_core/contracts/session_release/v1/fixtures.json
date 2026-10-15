@@ -1,0 +1,460 @@
+{
+  "valid": [
+    {
+      "name": "release",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      }
+    },
+    {
+      "name": "accepted",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release.accepted",
+        "request": {
+          "contract_revision": "nexus-session-release-v1",
+          "type": "session.release",
+          "release_id": "release-original",
+          "server_id": "server",
+          "executor_id": "executor",
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "opening_operation_id": "opening",
+          "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "stream_epoch": "epoch",
+          "sequence": 2,
+          "receipt_count": 2,
+          "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    },
+    {
+      "name": "deferred",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release.deferred",
+        "request": {
+          "contract_revision": "nexus-session-release-v1",
+          "type": "session.release",
+          "release_id": "release-original",
+          "server_id": "server",
+          "executor_id": "executor",
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace"
+          },
+          "opening_operation_id": "opening",
+          "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "stream_epoch": "epoch",
+          "sequence": 2,
+          "receipt_count": 2,
+          "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        },
+        "reason": "RECONCILIATION_REQUIRED"
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "credential",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "token": "forbidden"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "zero_receipts",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 0,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "boolean_sequence",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": true,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "negative_generation",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": -1,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "invalid_digest",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "absent",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "oversized_id",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "foreign_server",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "other",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "unknown_type",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.close",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "wrong_revision",
+      "frame": {
+        "contract_revision": "other",
+        "type": "session.release",
+        "release_id": "release-original",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "scope": {
+          "agent_id": "agent",
+          "authorization_revision": 1,
+          "binding_id": "binding",
+          "binding_revision": 1,
+          "configuration_revision": 1,
+          "credential_epoch": 1,
+          "executor_id": "executor",
+          "server_id": "server",
+          "session_id": "session",
+          "session_owner_generation": 1,
+          "workspace_binding_id": "workspace_binding",
+          "workspace_id": "workspace"
+        },
+        "opening_operation_id": "opening",
+        "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+        "stream_epoch": "epoch",
+        "sequence": 2,
+        "receipt_count": 2,
+        "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "nested_credential",
+      "frame": {
+        "contract_revision": "nexus-session-release-v1",
+        "type": "session.release.accepted",
+        "request": {
+          "contract_revision": "nexus-session-release-v1",
+          "type": "session.release",
+          "release_id": "release-original",
+          "server_id": "server",
+          "executor_id": "executor",
+          "connection_id": "connection",
+          "connection_generation": 2,
+          "scope": {
+            "agent_id": "agent",
+            "authorization_revision": 1,
+            "binding_id": "binding",
+            "binding_revision": 1,
+            "configuration_revision": 1,
+            "credential_epoch": 1,
+            "executor_id": "executor",
+            "server_id": "server",
+            "session_id": "session",
+            "session_owner_generation": 1,
+            "workspace_binding_id": "workspace_binding",
+            "workspace_id": "workspace",
+            "credential": "forbidden"
+          },
+          "opening_operation_id": "opening",
+          "opening_intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "proof_digest": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "stream_epoch": "epoch",
+          "sequence": 2,
+          "receipt_count": 2,
+          "receipt_digest": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    }
+  ]
+}

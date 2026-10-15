@@ -35,6 +35,7 @@ def create_runtime(
     reconnect_fence_seconds: float = 5.0,
     max_concurrent_opens: int = 8,
     max_owned_sessions: int = 32,
+    capacity_enabled: bool = False,
     trusted_discovery_roots: tuple = (),
     pi_install_root=None,
     pi_node=None,
@@ -130,4 +131,5 @@ def create_runtime(
         reconnect_fence_seconds=reconnect_fence_seconds,
         max_concurrent_opens=max_concurrent_opens,
         max_owned_sessions=max_owned_sessions,
+        capacity_enabled=capacity_enabled,
         cleanup_budget_seconds=cleanup_budget_seconds)

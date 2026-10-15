@@ -92,7 +92,11 @@ def _validate(frame: dict[str, Any]) -> None:
         raise CoreError("VERSION_INCOMPATIBLE", "r4_negotiation", retry_safe=False)
     _check_depth(frame)
     try:
-        _resources()[0].validate(frame)
+        validator = _resources()[0]
+        if 'preopen_refusal_supported' in frame or 'preopen_refusals' in frame:
+            from .preopen_bundle_r4 import preopen_schema_validator
+            validator = preopen_schema_validator()
+        validator.validate(frame)
     except ValidationError as exc:
         raise CoreError("VALIDATION_ERROR", "r4_schema", retry_safe=True) from exc
     if frame["type"] == "operation.submit":
@@ -104,6 +108,19 @@ def _validate(frame: dict[str, Any]) -> None:
             raise CoreError("CAPACITY_EXCEEDED", "r4_payload", retry_safe=True)
         if frame["intent_hash"] != r4_submit_intent_hash(frame):
             raise CoreError("VALIDATION_ERROR", "r4_intent_hash", retry_safe=True)
+    if frame['type'] == 'reconcile.report' and 'preopen_refusals' in frame:
+        from .preopen_refusal_r4 import validate_r4_preopen_report
+        seen = set()
+        for item in frame['preopen_refusals']:
+            checked = validate_r4_preopen_report(item)
+            source, recovery = checked['refusal']['source'], checked['refusal']['recovery']
+            if (source['operation_id'] in seen
+                    or any(source[k] != frame[k] for k in ('server_id', 'executor_id'))
+                    or recovery['connection_generation'] > frame['connection_generation']
+                    or recovery['connection_generation'] == frame['connection_generation']
+                    and recovery['connection_id'] != frame['connection_id']):
+                raise CoreError('SCOPE_MISMATCH', 'r4_preopen_report')
+            seen.add(source['operation_id'])
 
 
 def decode_r4_frame(raw: bytes, *, max_frame_bytes: int = MAX_FRAME_BYTES) -> dict[str, Any]:

@@ -54,6 +54,9 @@ def test_open_generations_are_atomic_immutable_claim_history(tmp_path):
             connection_generation=5, session_owner_generation=7)
         assert fresh
         page = await journal.claimed_sessions("srv", "exe")
+        assert await journal.get_session_claim(SessionKey('srv','exe','session')) == page.claims[0]
+        assert await journal.get_session_claim(SessionKey('foreign','exe','session')) is None
+        assert await journal.get_session_claim(SessionKey('srv','exe','absent')) is None
         assert page.claims[0].opening_connection_generation == 5
         assert page.claims[0].opening_owner_generation == 7
         journal.close()
@@ -61,6 +64,7 @@ def test_open_generations_are_atomic_immutable_claim_history(tmp_path):
         reopened = SQLiteJournal(path)
         try:
             page = await reopened.claimed_sessions("srv", "exe")
+            assert await reopened.get_session_claim(SessionKey('srv','exe','session')) == page.claims[0]
             assert page.claims[0].opening_connection_generation == 5
             assert page.claims[0].opening_owner_generation == 7
             replay, fresh = await reopened.admit(
@@ -177,6 +181,10 @@ def test_existing_journal_session_history_is_backfilled_as_claim(tmp_path):
         await journal.admit(OperationKey("srv", "exe", "old-operation"),
                             "old", "session")
         journal.close()
+        # This fixture represents the pre-claim schema, not a modern operation
+        # intentionally admitted without session ownership (e.g. a refusal).
+        with sqlite3.connect(path) as conn:
+            conn.execute("DROP TABLE session_claims")
         journal = SQLiteJournal(path)
         with pytest.raises(CoreError, match="SESSION_CONFLICT"):
             await journal.admit(OperationKey("srv", "exe", "new-open"),

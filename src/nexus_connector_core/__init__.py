@@ -8,7 +8,7 @@ from .models import (
     ExecutionContext,
     Operation,
     OperationReceipt,
-    OperationNotAdmitted,
+    OperationNotAdmitted, OperationCapacityDeferred,
     OperationKey,
     SessionKey,
     ClaimedSession,
@@ -55,6 +55,11 @@ from .receipt_binding_r4 import (
     prepare_r4_receipt_binding, validate_r4_receipt_binding, project_r4_bound_receipt,
 )
 from .resource_release_r4 import r4_resource_release_digest, project_r4_resource_release
+from .operation_refusal_r4 import prepare_r4_lease_refusal, validate_r4_lease_refusal, persist_r4_lease_refusal
+from .preopen_refusal_r4 import (
+    PREOPEN_REFUSAL_REVISION, prepare_r4_preopen_refusal, validate_r4_preopen_refusal,
+    persist_r4_preopen_refusal, validate_r4_preopen_report,
+)
 from .receipt_bridge_r4 import (
     project_r4_open_receipt, project_r4_turn_receipt, project_r4_steer_receipt,
     project_r4_interrupt_receipt, project_r4_close_receipt, project_r4_decision_receipt,
@@ -73,7 +78,22 @@ from .approval_reducer_r4 import (
     R4ApprovalProjection, reduce_r4_approval_request,
     reduce_r4_approval_decision,
 )
-from .ports import OwnedSlotLedger, RuntimeCore
+from .ports import OwnedSlotLedger, RuntimeCore, RuntimeCapacity, CapacitySlotLedger, RuntimeCapacityAuthority
+from .capacity_runtime import ExecutionCapacity
+from .capacity_publication import CapacityChangePublisher
+from .capacity_waiter import CapacityRetryWaiter
+from .control_codec import decode_control_frame
+from .capacity_control import execute_capacity_control, capacity_result_frame, capacity_denial_frame
+from .capacity_bundle import verify_capacity_bundle
+from .capacity import (
+    CAPACITY_CONTRACT_REVISION, CAPACITY_REASONS, RESERVATION_STATES,
+    CapacityScope, CapacityRequest, CapacityAssessment, CapacityConsumption,
+    CapacityReservation, CapacityReservationPage, require_same_capacity_request, capacity_contract_supported,
+    capacity_reservation_id,
+)
+from .capacity_codec import (
+    CAPACITY_FRAME_TYPES, CAPACITY_REQUEST_TYPES, encode_capacity_frame, decode_capacity_frame,
+)
 from .composition import create_runtime
 from .catalog import (
     RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog, get_runtime_connection_contract,
@@ -104,9 +124,18 @@ from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.0.9"
+__version__ = "0.0.11"
 
 __all__ = [
+    "CAPACITY_FRAME_TYPES", "CAPACITY_REQUEST_TYPES", "encode_capacity_frame", "decode_capacity_frame",
+    "RuntimeCapacity", "CAPACITY_CONTRACT_REVISION", "CAPACITY_REASONS", "RESERVATION_STATES",
+    "CapacitySlotLedger",
+    "ExecutionCapacity", "RuntimeCapacityAuthority", "CapacityChangePublisher",
+    "verify_capacity_bundle",
+    "decode_control_frame", "execute_capacity_control", "capacity_result_frame", "capacity_denial_frame",
+    "CapacityScope", "CapacityRequest", "CapacityAssessment", "CapacityConsumption",
+    "CapacityReservation", "CapacityReservationPage", "require_same_capacity_request", "capacity_contract_supported",
+    "capacity_reservation_id",
     "DEFAULT_RUNTIME_AUTOMATION", "RuntimeAutomationPolicy", "RuntimeAutomation",
     "native_input_response",
     "HarnessSettings", "validate_harness_settings", "harness_settings_dict", "validate_harness_configuration",
@@ -114,7 +143,10 @@ __all__ = [
     "probe_selected_configuration",
     "discover_harness_configuration", "query_harness_configuration", "CONFIGURATION_SCHEMA_VERSION",
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
-    "OperationNotAdmitted",
+    "prepare_r4_lease_refusal", "validate_r4_lease_refusal", "persist_r4_lease_refusal",
+    "prepare_r4_preopen_refusal", "validate_r4_preopen_refusal", "persist_r4_preopen_refusal",
+    "PREOPEN_REFUSAL_REVISION", "validate_r4_preopen_report",
+    "OperationNotAdmitted", "OperationCapacityDeferred", "CapacityRetryWaiter",
     "r4_close_operation",
     "ControlTargeting", "get_control_targeting", "validate_control_target",
     "R4Authority", "R4LeaseApplication",

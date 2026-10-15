@@ -75,6 +75,44 @@ def test_observation_timeout_preserves_mutation_and_identity(monkeypatch):
     asyncio.run(run())
 
 
+def test_pi_prelaunch_refusal_releases_slot_and_remains_safe_after_restart(tmp_path):
+    from nexus_connector_core import LaunchIntent, OpenOperation, OperationKey, SessionKey, ShutdownPolicy
+    from nexus_connector_core.journal import SQLiteJournal
+    from test_runtime import make_runtime, context
+    async def run():
+        runtime, journal, factory = make_runtime(tmp_path, adapter_id='pi_rpc', max_owned_sessions=1)
+        ctx = context()
+        service, _ = _service()
+        owner = PiNativeActionOwner(service._bridge, lambda: ctx,
+                                    capability_ref='native-cap:session', session_id='session')
+        async def refused(prepared, session_id, context, **kwargs):
+            return await owner.launch(prepared, session_id, context)
+        factory.open = refused
+        try:
+            # Missing scoped capability is a genuine pre-spawn refusal.
+            prepared = await runtime.prepare(LaunchIntent('agent', 'ws', 'pi_rpc'), ctx)
+            with pytest.raises(CoreError) as error:
+                await runtime.open(OpenOperation('opening', 'session', 'stream', prepared), ctx)
+            assert error.value.retry_safe and not error.value.possible_effect
+            receipt = await journal.get_receipt(OperationKey('srv', 'exe', 'opening'))
+            assert receipt.stage == 'FAILED' and not receipt.possible_effect and receipt.retry_safe
+            slot = await journal.owned_slot_state(SessionKey('srv', 'exe', 'session'))
+            assert slot.released
+            assert not (await journal.owned_slot_page()).reservations
+            report = await runtime.shutdown(ShutdownPolicy(.1, .1))
+            assert 'unknown' not in report.session_outcomes.values()
+        finally:
+            await owner.close(timeout_seconds=2)
+            await journal.aclose()
+        reopened = SQLiteJournal(tmp_path / 'journal.db')
+        try:
+            assert (await reopened.get_receipt(OperationKey('srv', 'exe', 'opening'))) == receipt
+            assert not (await reopened.owned_slot_page()).reservations
+        finally:
+            await reopened.aclose()
+    asyncio.run(run())
+
+
 def test_cancelled_close_waiter_cannot_cancel_backend_or_lose_ownership():
     async def run():
         backend = HeldBackend()
@@ -199,4 +237,47 @@ def test_pi_owner_starts_once_and_checks_prepared_secret_and_current_context():
                 await owner.launch(prepared, "session", current[0])
         finally:
             await owner.close(timeout_seconds=2)
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize('change', ['renew', 'authorization', 'scope', 'boot', 'serial_rollback', 'deadline_rollback'])
+def test_pi_launch_revalidates_renewal_during_listener_start(change):
+    from nexus_connector_core.models import R4Authority
+    async def run():
+        service, _ = _service()
+        context = replace(service._context_provider(), r4_authority=R4Authority(
+            'session', 'workspace-binding', 1, 1, 'grant', 'lease', 3, 'connection', 'boot'))
+        current = [context]
+        owner = PiNativeActionOwner(service._bridge, lambda: current[0],
+                                    capability_ref='native-cap:session', session_id='session')
+        prepared = SimpleNamespace(intent=SimpleNamespace(adapter_id='pi_rpc'),
+                                   secret_refs=('native-cap:session',))
+        start = owner._service.start
+        async def renewing_start():
+            port = await start()
+            renewed = replace(context, lease_deadline_monotonic=context.lease_deadline_monotonic + 30,
+                r4_authority=replace(context.r4_authority, lease_serial=4))
+            if change == 'authorization':
+                renewed = replace(renewed, authorization_revision=context.authorization_revision + 1)
+            elif change == 'scope':
+                renewed = replace(renewed, agent_id='other')
+            elif change == 'boot':
+                renewed = replace(renewed, r4_authority=replace(renewed.r4_authority, boot_id='other'))
+            elif change == 'serial_rollback':
+                renewed = replace(renewed, r4_authority=replace(renewed.r4_authority, lease_serial=2))
+            elif change == 'deadline_rollback':
+                renewed = replace(renewed, lease_deadline_monotonic=context.lease_deadline_monotonic - 1)
+            current[0] = renewed
+            return port
+        owner._service.start = renewing_start
+        try:
+            if change == 'renew':
+                assert (await owner.launch(prepared, 'session', context)).session_id == 'session'
+                assert (await owner.launch(prepared, 'session', context)).session_id == 'session'
+            else:
+                with pytest.raises(CoreError) as error:
+                    await owner.launch(prepared, 'session', context)
+                assert error.value.retry_safe and not error.value.possible_effect
+        finally:
+            assert await owner.close(timeout_seconds=2)
     asyncio.run(run())

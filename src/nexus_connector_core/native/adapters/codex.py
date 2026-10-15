@@ -48,6 +48,7 @@ from ..process import spawn_owned_process, observe_owned_process
 from ..framing import FrameLimitExceeded, protocol_lines, stderr_chunks
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe
+from ..delta_batches import coalesce_codex_delta
 
 from ..legacy_environment import child_environment
 
@@ -831,7 +832,8 @@ class CodexAppServerConnector:
         Idle waits only check shutdown and never poll native protocol status.
         """
         with self._history_lock:
-            my_queue, backlog = subscribe(self._event_history, self._subscribers, session_id=session_id)
+            my_queue, backlog = subscribe(self._event_history, self._subscribers,
+                                          session_id=session_id, coalesce=coalesce_codex_delta)
             self._subscriber_sessions[my_queue] = session_id
         try:
             for item in backlog:

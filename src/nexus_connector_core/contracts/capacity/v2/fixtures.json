@@ -1,0 +1,990 @@
+{
+  "valid": [
+    {
+      "name": "capacity.assess",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.assess",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        }
+      }
+    },
+    {
+      "name": "capacity.reserve",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        }
+      }
+    },
+    {
+      "name": "capacity.get",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.get",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        }
+      }
+    },
+    {
+      "name": "consume",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.consume",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        },
+        "reservation_id": "reservation-1",
+        "consumption": {
+          "turn_operation_id": "turn-1",
+          "turn_intent_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "opening_operation_id": "open-1",
+          "opening_intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+        }
+      }
+    },
+    {
+      "name": "release",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.release",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        },
+        "reservation_id": "reservation-1",
+        "reason": "LOST"
+      }
+    },
+    {
+      "name": "HELD",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "reservation",
+        "result": {
+          "reservation_id": "reservation-1",
+          "request": {
+            "contract_revision": "nexus-execution-capacity-v2",
+            "attempt_id": "attempt-1",
+            "scope": {
+              "server_id": "server",
+              "executor_id": "executor",
+              "agent_id": "agent",
+              "binding_id": "binding",
+              "workspace_id": "workspace",
+              "workspace_binding_id": "folder-binding",
+              "session_id": "session",
+              "connection_generation": 1,
+              "session_owner_generation": 1,
+              "authorization_revision": 2,
+              "configuration_revision": 3,
+              "binding_revision": 4,
+              "credential_epoch": 5,
+              "boot_id": "boot-1"
+            },
+            "unit": "new_session",
+            "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ttl_ms": 10000
+          },
+          "state": "HELD",
+          "capacity_revision": 2,
+          "remaining_ms": 1000,
+          "consumption": null
+        }
+      }
+    },
+    {
+      "name": "CONSUMED",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "reservation",
+        "result": {
+          "reservation_id": "reservation-1",
+          "request": {
+            "contract_revision": "nexus-execution-capacity-v2",
+            "attempt_id": "attempt-1",
+            "scope": {
+              "server_id": "server",
+              "executor_id": "executor",
+              "agent_id": "agent",
+              "binding_id": "binding",
+              "workspace_id": "workspace",
+              "workspace_binding_id": "folder-binding",
+              "session_id": "session",
+              "connection_generation": 1,
+              "session_owner_generation": 1,
+              "authorization_revision": 2,
+              "configuration_revision": 3,
+              "binding_revision": 4,
+              "credential_epoch": 5,
+              "boot_id": "boot-1"
+            },
+            "unit": "new_session",
+            "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ttl_ms": 10000
+          },
+          "state": "CONSUMED",
+          "capacity_revision": 2,
+          "remaining_ms": 0,
+          "consumption": {
+            "turn_operation_id": "turn-1",
+            "turn_intent_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "opening_operation_id": "open-1",
+            "opening_intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        }
+      }
+    },
+    {
+      "name": "RELEASE_PENDING",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "reservation",
+        "result": {
+          "reservation_id": "reservation-1",
+          "request": {
+            "contract_revision": "nexus-execution-capacity-v2",
+            "attempt_id": "attempt-1",
+            "scope": {
+              "server_id": "server",
+              "executor_id": "executor",
+              "agent_id": "agent",
+              "binding_id": "binding",
+              "workspace_id": "workspace",
+              "workspace_binding_id": "folder-binding",
+              "session_id": "session",
+              "connection_generation": 1,
+              "session_owner_generation": 1,
+              "authorization_revision": 2,
+              "configuration_revision": 3,
+              "binding_revision": 4,
+              "credential_epoch": 5,
+              "boot_id": "boot-1"
+            },
+            "unit": "new_session",
+            "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ttl_ms": 10000
+          },
+          "state": "RELEASE_PENDING",
+          "capacity_revision": 2,
+          "remaining_ms": 0,
+          "consumption": {
+            "turn_operation_id": "turn-1",
+            "turn_intent_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "opening_operation_id": "open-1",
+            "opening_intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        }
+      }
+    },
+    {
+      "name": "RELEASED",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "reservation",
+        "result": {
+          "reservation_id": "reservation-1",
+          "request": {
+            "contract_revision": "nexus-execution-capacity-v2",
+            "attempt_id": "attempt-1",
+            "scope": {
+              "server_id": "server",
+              "executor_id": "executor",
+              "agent_id": "agent",
+              "binding_id": "binding",
+              "workspace_id": "workspace",
+              "workspace_binding_id": "folder-binding",
+              "session_id": "session",
+              "connection_generation": 1,
+              "session_owner_generation": 1,
+              "authorization_revision": 2,
+              "configuration_revision": 3,
+              "binding_revision": 4,
+              "credential_epoch": 5,
+              "boot_id": "boot-1"
+            },
+            "unit": "new_session",
+            "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ttl_ms": 10000
+          },
+          "state": "RELEASED",
+          "capacity_revision": 2,
+          "remaining_ms": 0,
+          "consumption": null
+        }
+      }
+    },
+    {
+      "name": "EXPIRED_UNCONSUMED",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "reservation",
+        "result": {
+          "reservation_id": "reservation-1",
+          "request": {
+            "contract_revision": "nexus-execution-capacity-v2",
+            "attempt_id": "attempt-1",
+            "scope": {
+              "server_id": "server",
+              "executor_id": "executor",
+              "agent_id": "agent",
+              "binding_id": "binding",
+              "workspace_id": "workspace",
+              "workspace_binding_id": "folder-binding",
+              "session_id": "session",
+              "connection_generation": 1,
+              "session_owner_generation": 1,
+              "authorization_revision": 2,
+              "configuration_revision": 3,
+              "binding_revision": 4,
+              "credential_epoch": 5,
+              "boot_id": "boot-1"
+            },
+            "unit": "new_session",
+            "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ttl_ms": 10000
+          },
+          "state": "EXPIRED_UNCONSUMED",
+          "capacity_revision": 2,
+          "remaining_ms": 0,
+          "consumption": null
+        }
+      }
+    },
+    {
+      "name": "NEEDS_RECONCILIATION",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "reservation",
+        "result": {
+          "reservation_id": "reservation-1",
+          "request": {
+            "contract_revision": "nexus-execution-capacity-v2",
+            "attempt_id": "attempt-1",
+            "scope": {
+              "server_id": "server",
+              "executor_id": "executor",
+              "agent_id": "agent",
+              "binding_id": "binding",
+              "workspace_id": "workspace",
+              "workspace_binding_id": "folder-binding",
+              "session_id": "session",
+              "connection_generation": 1,
+              "session_owner_generation": 1,
+              "authorization_revision": 2,
+              "configuration_revision": 3,
+              "binding_revision": 4,
+              "credential_epoch": 5,
+              "boot_id": "boot-1"
+            },
+            "unit": "new_session",
+            "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ttl_ms": 10000
+          },
+          "state": "NEEDS_RECONCILIATION",
+          "capacity_revision": 2,
+          "remaining_ms": 0,
+          "consumption": {
+            "turn_operation_id": "turn-1",
+            "turn_intent_hash": "sha256:bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+            "opening_operation_id": "open-1",
+            "opening_intent_hash": "sha256:cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc"
+          }
+        }
+      }
+    },
+    {
+      "name": "busy",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "assessment",
+        "result": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+          "reason": "BUSY_AFFINITY",
+          "capacity_revision": 4,
+          "valid_for_ms": 100
+        }
+      }
+    },
+    {
+      "name": "not-found",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "not_found",
+        "result": null
+      }
+    },
+    {
+      "name": "changed",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.changed",
+        "binding_id": "binding",
+        "boot_id": "boot-1",
+        "capacity_revision": 5,
+        "reason": "AVAILABLE",
+        "valid_for_ms": 100
+      }
+    },
+    {
+      "name": "dispatch_waiting",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "type": "capacity.dispatch_state",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "binding_id": "binding",
+        "agent_id": "agent",
+        "session_id": "session",
+        "operation_id": "turn",
+        "intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "action": "turn.submit",
+        "state": "WAITING",
+        "sequence": 1
+      }
+    },
+    {
+      "name": "dispatch_resuming",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "type": "capacity.dispatch_state",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "binding_id": "binding",
+        "agent_id": "agent",
+        "session_id": "session",
+        "operation_id": "turn",
+        "intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "action": "turn.submit",
+        "state": "RUNNING",
+        "sequence": 2
+      }
+    }
+  ],
+  "invalid": [
+    {
+      "name": "cross-host",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "other",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "future-revision",
+      "frame": {
+        "contract_revision": "future",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        }
+      },
+      "error_code": "VERSION_INCOMPATIBLE"
+    },
+    {
+      "name": "extra-field",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        },
+        "secret": "forbidden-field"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "extra-valid-field-from-another-variant",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        },
+        "reason": "AVAILABLE"
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "boolean-generation",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": true,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "stale-generation",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 2,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 10000
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "bad-ttl-0",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 0
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "bad-ttl-True",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": true
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "bad-ttl-60001",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.reserve",
+        "request_id": "rpc-1",
+        "request": {
+          "contract_revision": "nexus-execution-capacity-v2",
+          "attempt_id": "attempt-1",
+          "scope": {
+            "server_id": "server",
+            "executor_id": "executor",
+            "agent_id": "agent",
+            "binding_id": "binding",
+            "workspace_id": "workspace",
+            "workspace_binding_id": "folder-binding",
+            "session_id": "session",
+            "connection_generation": 1,
+            "session_owner_generation": 1,
+            "authorization_revision": 2,
+            "configuration_revision": 3,
+            "binding_revision": 4,
+            "credential_epoch": 5,
+            "boot_id": "boot-1"
+          },
+          "unit": "new_session",
+          "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+          "ttl_ms": 60001
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "consumed-without-operation",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "type": "capacity.result",
+        "request_id": "rpc-1",
+        "request_hash": "sha256:844533ed13168da6c0a496379835d360d496e065de9713a7503a502a31ea572c",
+        "result_type": "reservation",
+        "result": {
+          "reservation_id": "reservation-1",
+          "request": {
+            "contract_revision": "nexus-execution-capacity-v2",
+            "attempt_id": "attempt-1",
+            "scope": {
+              "server_id": "server",
+              "executor_id": "executor",
+              "agent_id": "agent",
+              "binding_id": "binding",
+              "workspace_id": "workspace",
+              "workspace_binding_id": "folder-binding",
+              "session_id": "session",
+              "connection_generation": 1,
+              "session_owner_generation": 1,
+              "authorization_revision": 2,
+              "configuration_revision": 3,
+              "binding_revision": 4,
+              "credential_epoch": 5,
+              "boot_id": "boot-1"
+            },
+            "unit": "new_session",
+            "affinity_key": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "ttl_ms": 10000
+          },
+          "state": "CONSUMED",
+          "capacity_revision": 2,
+          "remaining_ms": 0,
+          "consumption": null
+        }
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "invalid_dispatch_action",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "type": "capacity.dispatch_state",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "binding_id": "binding",
+        "agent_id": "agent",
+        "session_id": "session",
+        "operation_id": "turn",
+        "intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "action": "turn.interrupt",
+        "state": "WAITING",
+        "sequence": 1
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "invalid_dispatch_sequence",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "type": "capacity.dispatch_state",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "binding_id": "binding",
+        "agent_id": "agent",
+        "session_id": "session",
+        "operation_id": "turn",
+        "intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "action": "turn.submit",
+        "state": "WAITING",
+        "sequence": 0
+      },
+      "error_code": "VALIDATION_ERROR"
+    },
+    {
+      "name": "dispatch_is_not_completion",
+      "frame": {
+        "contract_revision": "nexus-execution-capacity-v2",
+        "type": "capacity.dispatch_state",
+        "server_id": "server",
+        "executor_id": "executor",
+        "connection_id": "connection",
+        "connection_generation": 1,
+        "binding_id": "binding",
+        "agent_id": "agent",
+        "session_id": "session",
+        "operation_id": "turn",
+        "intent_hash": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        "action": "turn.submit",
+        "state": "COMPLETED",
+        "sequence": 1
+      },
+      "error_code": "VALIDATION_ERROR"
+    }
+  ]
+}

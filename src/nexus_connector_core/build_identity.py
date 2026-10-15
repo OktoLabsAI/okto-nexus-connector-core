@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .discovery_control import check_discovery_cancelled
 from .protocol import canonical_json
+from .validation_flights import overlapping_validation
 
 __all__ = ["executable_build_identity", "pi_build_identity",
            "BUILD_IDENTITY_ALGORITHM"]
@@ -82,6 +83,7 @@ def _file_digest_counted(path: Path, expected: int) -> str:
     return "sha256:" + digest.hexdigest()
 
 
+@overlapping_validation
 def executable_build_identity(executable: str | os.PathLike) -> str:
     """Portable identity of a single-file executable: content only."""
     path = Path(executable)
@@ -100,7 +102,7 @@ def executable_build_identity(executable: str | os.PathLike) -> str:
         canonical_json(identity)).hexdigest()
 
 
-def _iter_tree_files(directory: Path):
+def _iter_tree_entries(directory: Path):
     """Bounded, INCREMENTAL enumeration (C4/T07 + C5/U07): os.scandir
     consumed entry-by-entry with a per-NAME budget - a wide directory
     never materializes a full name list before the cap refuses. Regular
@@ -135,18 +137,22 @@ def _iter_tree_files(directory: Path):
                     # materializing the directory.
                     raise ValueError(
                         "pi package manifest exceeds bounded size")
-                names.append(entry.name)
+                names.append(entry)
         except OSError as exc:
             raise ValueError("unreadable entry in package") from exc
         finally:
             iterator.close()
-        for name in sorted(names):
+        for entry in sorted(names, key=lambda item: item.name):
+            name = entry.name
             check_discovery_cancelled()
             if len(collected) > _MAX_MANIFEST_ENTRIES:
                 raise ValueError("pi package manifest exceeds bounded size")
             path = current / name
             try:
-                st = os.lstat(path)
+                # On Windows scandir already obtained this metadata. Reuse
+                # it within this traversal only; each frontier enumerates
+                # again, so no metadata survives into a later validation.
+                st = entry.stat(follow_symlinks=False)
             except OSError as exc:
                 raise ValueError("unreadable entry in package") from exc
             if stat.S_ISLNK(st.st_mode):
@@ -165,7 +171,7 @@ def _iter_tree_files(directory: Path):
             if stat.S_ISDIR(st.st_mode):
                 walk(path, depth + 1)
             elif stat.S_ISREG(st.st_mode):
-                collected.append(path)
+                collected.append((path, st))
             else:
                 # FIFOs, devices, sockets: refused BEFORE any blocking
                 # read (C4/T07).
@@ -176,6 +182,11 @@ def _iter_tree_files(directory: Path):
     return collected
 
 
+def _iter_tree_files(directory: Path):
+    return [path for path, _ in _iter_tree_entries(directory)]
+
+
+@overlapping_validation
 def pi_build_identity(node: str | os.PathLike,
                       package_root: str | os.PathLike) -> str:
     """Portable identity of the Node + Pi-package launch pair.
@@ -217,26 +228,46 @@ def pi_build_identity(node: str | os.PathLike,
         def _add_tree(directory: Path, prefix: str) -> None:
             nonlocal total
             pending = deque()
+            reserved = 0
+            def read_batch(batch):
+                return [(relative, size, _file_digest_counted(current, size))
+                        for current, relative, size in batch]
+
             def append_first():
-                relative, size, future = pending.popleft()
-                digest = future.result()
+                nonlocal reserved
+                count, future = pending.popleft()
+                results = future.result()
                 check_discovery_cancelled()
-                entries.append({"path": relative, "sha256": digest.split(":", 1)[1],
-                                "size": size})
+                for relative, size, digest in results:
+                    entries.append({"path": relative, "sha256": digest.split(":", 1)[1],
+                                    "size": size})
+                reserved -= count
+
+            def submit(batch):
+                pending.append((len(batch), readers.submit(copy_context().run, read_batch, batch)))
+                if len(pending) >= _IDENTITY_READ_WORKERS:
+                    append_first()
+
             try:
-                for current in _iter_tree_files(directory):
+                batch = []
+                paths = _iter_tree_files(directory)
+                batch_size = 64 if len(paths) >= 256 else 1
+                for current in paths:
                     check_discovery_cancelled()
                     relative = prefix + current.relative_to(directory).as_posix()
-                    size = _entry_size(len(entries) + len(pending), total, current)
+                    size = _entry_size(len(entries) + reserved, total, current)
                     total += size  # Reserve count/bytes before scheduling any read.
-                    future = readers.submit(copy_context().run, _file_digest_counted, current, size)
-                    pending.append((relative, size, future))
-                    if len(pending) >= _IDENTITY_READ_WORKERS:
-                        append_first()
+                    reserved += 1
+                    batch.append((current, relative, size))
+                    if len(batch) == batch_size:
+                        submit(batch)
+                        batch = []
+                if batch:
+                    submit(batch)
                 while pending:
                     append_first()
             finally:
-                for _, _, future in pending:
+                for _, future in pending:
                     future.cancel()
 
         _add_tree(root_resolved, "")
@@ -392,6 +423,7 @@ def _resolve_node_modules_package(package_dir: Path, name: str,
         current = current.parent
     return None
 
+@overlapping_validation
 def launch_artifact_signature(node: str | os.PathLike,
                               cli: str | os.PathLike) -> tuple:
     """Lightweight launch seal for the Pi Node+CLI pair (C5/U05).
@@ -412,11 +444,7 @@ def launch_artifact_signature(node: str | os.PathLike,
     count = 0
     total = 0
     newest = 0
-    for path in _iter_tree_files(package_root):
-        try:
-            st = path.stat()
-        except OSError as exc:
-            raise ValueError("unreadable file in launch seal") from exc
+    for path, st in _iter_tree_entries(package_root):
         count += 1
         total += st.st_size
         newest = max(newest, st.st_mtime_ns)
@@ -430,12 +458,7 @@ def launch_artifact_signature(node: str | os.PathLike,
             if resolved is None or resolved in seen:
                 continue
             seen.add(resolved)
-            for path in _iter_tree_files(resolved):
-                try:
-                    st = path.stat()
-                except OSError as exc:
-                    raise ValueError(
-                        "unreadable file in launch seal") from exc
+            for path, st in _iter_tree_entries(resolved):
                 count += 1
                 total += st.st_size
                 newest = max(newest, st.st_mtime_ns)

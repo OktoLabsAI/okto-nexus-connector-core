@@ -37,6 +37,7 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
                     prepared.intent.adapter_id != payload['adapter_id'] or
                     prepared.intent.mode != payload['mode'] or prepared.intent.model != payload.get('model') or
                     harness_settings_dict(prepared.intent.harness_settings) != payload.get('harness_settings', {}) or
+                    list(prepared.intent.mcp_preset) != payload.get('mcp_preset', []) or
                     effective_installation_ref(prepared.candidate) != payload['candidate_ref']):
                 raise CoreError('PROFILE_DRIFT', 'r4_receipt_binding')
             semantic = Operation(frame['operation_id'], frame['session_id'], action,

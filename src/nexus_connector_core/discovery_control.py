@@ -10,6 +10,10 @@ class DiscoveryCancelled(Exception):
 _cancel_requested = ContextVar("discovery_cancel_requested", default=None)
 
 
+def has_discovery_cancellation_scope():
+    return _cancel_requested.get() is not None
+
+
 def check_discovery_cancelled():
     callback = _cancel_requested.get()
     if callback is not None and callback():

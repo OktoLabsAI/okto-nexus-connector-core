@@ -254,10 +254,27 @@ class PiNativeActionOwner:
         return self._service.pending_count
 
     def _authorize(self, prepared, session_id, context):
+        from dataclasses import replace
+        # Opening performs asynchronous identity/environment checks. A lease
+        # renewal during those checks changes its serial and deadline, not the
+        # authorized subject. The provider still verifies live lease validity.
+        try:
+            current = self._context_provider()
+        except CoreError as error:
+            raise CoreError(error.code, 'native_action_launch', retry_safe=True) from error
+        comparable = current
+        if context.r4_authority is not None and current.r4_authority is not None:
+            if current.r4_authority.lease_serial >= context.r4_authority.lease_serial:
+                comparable = replace(current, r4_authority=replace(current.r4_authority,
+                    lease_serial=context.r4_authority.lease_serial))
+        if current.lease_deadline_monotonic >= context.lease_deadline_monotonic:
+            comparable = replace(comparable, lease_deadline_monotonic=context.lease_deadline_monotonic)
         if (self._closing or prepared.intent.adapter_id != "pi_rpc"
                 or session_id != self._session_id or self._reference not in prepared.secret_refs
-                or context != self._context_provider()):
-            raise CoreError("BINDING_NOT_AUTHORIZED", "native_action_launch")
+                or context != comparable):
+            # This hook runs before harness creation. A refusal must release
+            # the opening reservation instead of becoming OUTCOME_UNKNOWN.
+            raise CoreError("BINDING_NOT_AUTHORIZED", "native_action_launch", retry_safe=True)
 
     async def launch(self, prepared, session_id, context):
         from .pi_extension_resource import PiNativeActionLaunch

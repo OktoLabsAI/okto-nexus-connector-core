@@ -1,0 +1,661 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:okto:nexus:execution-capacity:v1",
+  "title": "Nexus execution capacity control extension v1",
+  "$defs": {
+    "id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 256,
+      "pattern": "^[^\\u0000-\\u0020]+$"
+    },
+    "positive": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "duration": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 60000
+    },
+    "hash": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "reason": {
+      "enum": [
+        "AVAILABLE",
+        "BUSY_AFFINITY",
+        "POOL_FULL",
+        "HOST_FULL",
+        "EARLIER_WORK_PENDING",
+        "RECOVERING",
+        "STALE_OBSERVATION",
+        "NOT_AUTHORIZED",
+        "CAPACITY_PROTOCOL_UNSUPPORTED",
+        "RESERVATION_CONFLICT",
+        "RESERVATION_EXPIRED",
+        "NEEDS_RECONCILIATION"
+      ]
+    },
+    "scope": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "server_id",
+        "executor_id",
+        "agent_id",
+        "binding_id",
+        "workspace_id",
+        "workspace_binding_id",
+        "session_id",
+        "connection_generation",
+        "session_owner_generation",
+        "authorization_revision",
+        "configuration_revision",
+        "binding_revision",
+        "credential_epoch",
+        "boot_id"
+      ],
+      "properties": {
+        "server_id": {
+          "$ref": "#/$defs/id"
+        },
+        "executor_id": {
+          "$ref": "#/$defs/id"
+        },
+        "agent_id": {
+          "$ref": "#/$defs/id"
+        },
+        "binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "workspace_id": {
+          "$ref": "#/$defs/id"
+        },
+        "workspace_binding_id": {
+          "$ref": "#/$defs/id"
+        },
+        "session_id": {
+          "$ref": "#/$defs/id"
+        },
+        "boot_id": {
+          "$ref": "#/$defs/id"
+        },
+        "connection_generation": {
+          "$ref": "#/$defs/positive"
+        },
+        "session_owner_generation": {
+          "$ref": "#/$defs/positive"
+        },
+        "authorization_revision": {
+          "$ref": "#/$defs/positive"
+        },
+        "configuration_revision": {
+          "$ref": "#/$defs/positive"
+        },
+        "binding_revision": {
+          "$ref": "#/$defs/positive"
+        },
+        "credential_epoch": {
+          "$ref": "#/$defs/positive"
+        }
+      }
+    },
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_revision",
+        "attempt_id",
+        "scope",
+        "unit",
+        "affinity_key",
+        "ttl_ms"
+      ],
+      "properties": {
+        "contract_revision": {
+          "const": "nexus-execution-capacity-v2"
+        },
+        "attempt_id": {
+          "$ref": "#/$defs/id"
+        },
+        "scope": {
+          "$ref": "#/$defs/scope"
+        },
+        "unit": {
+          "enum": [
+            "next_turn",
+            "new_session"
+          ]
+        },
+        "affinity_key": {
+          "$ref": "#/$defs/hash"
+        },
+        "ttl_ms": {
+          "type": "integer",
+          "minimum": 100,
+          "maximum": 60000
+        }
+      }
+    },
+    "consumption": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "turn_operation_id",
+        "turn_intent_hash",
+        "opening_operation_id",
+        "opening_intent_hash"
+      ],
+      "properties": {
+        "turn_operation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "turn_intent_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "opening_operation_id": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/id"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "opening_intent_hash": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hash"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "if": {
+        "properties": {
+          "opening_operation_id": {
+            "type": "null"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "opening_intent_hash": {
+            "type": "null"
+          }
+        }
+      },
+      "else": {
+        "properties": {
+          "opening_intent_hash": {
+            "$ref": "#/$defs/hash"
+          }
+        }
+      }
+    },
+    "assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contract_revision",
+        "request_hash",
+        "reason",
+        "capacity_revision",
+        "valid_for_ms"
+      ],
+      "properties": {
+        "contract_revision": {
+          "const": "nexus-execution-capacity-v2"
+        },
+        "request_hash": {
+          "$ref": "#/$defs/hash"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        },
+        "capacity_revision": {
+          "$ref": "#/$defs/revision"
+        },
+        "valid_for_ms": {
+          "$ref": "#/$defs/duration"
+        }
+      }
+    },
+    "reservation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "reservation_id",
+        "request",
+        "state",
+        "capacity_revision",
+        "remaining_ms",
+        "consumption"
+      ],
+      "properties": {
+        "reservation_id": {
+          "$ref": "#/$defs/id"
+        },
+        "request": {
+          "$ref": "#/$defs/request"
+        },
+        "state": {
+          "enum": [
+            "HELD",
+            "CONSUMED",
+            "RELEASE_PENDING",
+            "RELEASED",
+            "EXPIRED_UNCONSUMED",
+            "NEEDS_RECONCILIATION"
+          ]
+        },
+        "capacity_revision": {
+          "$ref": "#/$defs/positive"
+        },
+        "remaining_ms": {
+          "$ref": "#/$defs/duration"
+        },
+        "consumption": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/consumption"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "HELD",
+                  "EXPIRED_UNCONSUMED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "consumption": {
+                "type": "null"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "const": "CONSUMED"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "consumption": {
+                "$ref": "#/$defs/consumption"
+              }
+            }
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "state": {
+                "enum": [
+                  "RELEASED",
+                  "EXPIRED_UNCONSUMED"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "remaining_ms": {
+                "const": 0
+              }
+            }
+          }
+        }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_revision",
+    "type",
+    "server_id",
+    "executor_id",
+    "connection_id",
+    "connection_generation"
+  ],
+  "properties": {
+    "contract_revision": {
+      "const": "nexus-execution-capacity-v2"
+    },
+    "type": {
+      "enum": [
+        "capacity.assess",
+        "capacity.reserve",
+        "capacity.get",
+        "capacity.consume",
+        "capacity.release",
+        "capacity.result",
+        "capacity.changed",
+        "capacity.dispatch_state"
+      ]
+    },
+    "server_id": {
+      "$ref": "#/$defs/id"
+    },
+    "executor_id": {
+      "$ref": "#/$defs/id"
+    },
+    "connection_id": {
+      "$ref": "#/$defs/id"
+    },
+    "connection_generation": {
+      "$ref": "#/$defs/positive"
+    },
+    "request_id": {
+      "$ref": "#/$defs/id"
+    },
+    "request": {
+      "$ref": "#/$defs/request"
+    },
+    "reservation_id": {
+      "$ref": "#/$defs/id"
+    },
+    "consumption": {
+      "$ref": "#/$defs/consumption"
+    },
+    "reason": {
+      "type": "string"
+    },
+    "request_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "result_type": {
+      "enum": [
+        "reservation",
+        "assessment",
+        "not_found"
+      ]
+    },
+    "result": {},
+    "binding_id": {
+      "$ref": "#/$defs/id"
+    },
+    "boot_id": {
+      "$ref": "#/$defs/id"
+    },
+    "capacity_revision": {
+      "$ref": "#/$defs/revision"
+    },
+    "valid_for_ms": {
+      "$ref": "#/$defs/duration"
+    },
+    "agent_id": {
+      "$ref": "#/$defs/id"
+    },
+    "session_id": {
+      "$ref": "#/$defs/id"
+    },
+    "operation_id": {
+      "$ref": "#/$defs/id"
+    },
+    "intent_hash": {
+      "$ref": "#/$defs/hash"
+    },
+    "action": {
+      "enum": [
+        "runtime.open",
+        "turn.submit"
+      ]
+    },
+    "state": {
+      "enum": [
+        "WAITING",
+        "RUNNING"
+      ]
+    },
+    "sequence": {
+      "$ref": "#/$defs/positive"
+    }
+  },
+  "oneOf": [
+    {
+      "properties": {
+        "type": {
+          "enum": [
+            "capacity.assess",
+            "capacity.reserve",
+            "capacity.get"
+          ]
+        }
+      },
+      "required": [
+        "request_id",
+        "request"
+      ],
+      "propertyNames": {
+        "enum": [
+          "contract_revision",
+          "type",
+          "server_id",
+          "executor_id",
+          "connection_id",
+          "connection_generation",
+          "request_id",
+          "request"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "capacity.consume"
+        }
+      },
+      "required": [
+        "request_id",
+        "request",
+        "reservation_id",
+        "consumption"
+      ],
+      "propertyNames": {
+        "enum": [
+          "contract_revision",
+          "type",
+          "server_id",
+          "executor_id",
+          "connection_id",
+          "connection_generation",
+          "request_id",
+          "request",
+          "reservation_id",
+          "consumption"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "capacity.release"
+        },
+        "reason": {
+          "enum": [
+            "LOST",
+            "CANCELLED",
+            "REVOKED",
+            "ROLLBACK",
+            "COMPLETED",
+            "SHUTDOWN"
+          ]
+        }
+      },
+      "required": [
+        "request_id",
+        "request",
+        "reservation_id",
+        "reason"
+      ],
+      "propertyNames": {
+        "enum": [
+          "contract_revision",
+          "type",
+          "server_id",
+          "executor_id",
+          "connection_id",
+          "connection_generation",
+          "request_id",
+          "request",
+          "reservation_id",
+          "reason"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "capacity.result"
+        }
+      },
+      "required": [
+        "request_id",
+        "request_hash",
+        "result_type",
+        "result"
+      ],
+      "oneOf": [
+        {
+          "properties": {
+            "result_type": {
+              "const": "reservation"
+            },
+            "result": {
+              "$ref": "#/$defs/reservation"
+            }
+          }
+        },
+        {
+          "properties": {
+            "result_type": {
+              "const": "assessment"
+            },
+            "result": {
+              "$ref": "#/$defs/assessment"
+            }
+          }
+        },
+        {
+          "properties": {
+            "result_type": {
+              "const": "not_found"
+            },
+            "result": {
+              "type": "null"
+            }
+          }
+        }
+      ],
+      "propertyNames": {
+        "enum": [
+          "contract_revision",
+          "type",
+          "server_id",
+          "executor_id",
+          "connection_id",
+          "connection_generation",
+          "request_id",
+          "request_hash",
+          "result_type",
+          "result"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "capacity.changed"
+        },
+        "reason": {
+          "$ref": "#/$defs/reason"
+        }
+      },
+      "required": [
+        "binding_id",
+        "boot_id",
+        "capacity_revision",
+        "reason",
+        "valid_for_ms"
+      ],
+      "propertyNames": {
+        "enum": [
+          "contract_revision",
+          "type",
+          "server_id",
+          "executor_id",
+          "connection_id",
+          "connection_generation",
+          "binding_id",
+          "boot_id",
+          "capacity_revision",
+          "reason",
+          "valid_for_ms"
+        ]
+      }
+    },
+    {
+      "properties": {
+        "type": {
+          "const": "capacity.dispatch_state"
+        }
+      },
+      "required": [
+        "binding_id",
+        "agent_id",
+        "session_id",
+        "operation_id",
+        "intent_hash",
+        "action",
+        "state",
+        "sequence"
+      ],
+      "propertyNames": {
+        "enum": [
+          "contract_revision",
+          "type",
+          "server_id",
+          "executor_id",
+          "connection_id",
+          "connection_generation",
+          "binding_id",
+          "agent_id",
+          "session_id",
+          "operation_id",
+          "intent_hash",
+          "action",
+          "state",
+          "sequence"
+        ]
+      }
+    }
+  ]
+}

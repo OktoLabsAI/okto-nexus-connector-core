@@ -8,17 +8,52 @@ from .models import (
     CloseOperation, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
     ExecutionContext, Inventory, LaunchIntent, OpenOperation, OperationReceipt,
     R4LeaseApplication,
-    OperationKey, OwnedSlotPage, OwnedSlotState, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
-    SessionKey, SessionClaimPage, SessionLeaseState, ProcessBirthEvidence,
+    OperationKey, OwnedSlotPage, OwnedSlotReservation, OwnedSlotState, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
+    SessionKey, SessionClaimPage, ClaimedSession, SessionLeaseState, ProcessBirthEvidence,
     ProcessBirthRecord,
     ProcessBirthObservation,
     RuntimeSnapshot, ShutdownPolicy, ShutdownReport, StorageStatus,
     TurnOperation,
 )
 from .lease_reducer_r4 import R4LeaseAttempt
+from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption, CapacityReservationPage
+
+
+class RuntimeCapacity(Protocol):
+    """Trusted host port; reservations alone never authorize a native effect.
+
+    Lookup uses the original immutable attempt after an uncertain response.
+    Release is a request: the implementation retains consumed/uncertain
+    resources until its own journal and containment evidence permit release.
+    For an absent attempt, release with capacity_reservation_id(request) can
+    persist a terminal unconsumed record that fences any delayed reserve.
+    An existing historical reservation ID always takes precedence.
+    No network call or provider launch belongs inside a Server transaction.
+    """
+    async def assess_capacity(self, request: CapacityRequest) -> CapacityAssessment: ...
+    async def try_reserve_capacity(self, request: CapacityRequest) -> CapacityReservation | CapacityAssessment: ...
+    async def get_capacity_reservation(self, request: CapacityRequest) -> CapacityReservation | None: ...
+    async def consume_capacity(self, request: CapacityRequest, reservation_id: str,
+                               admitted: CapacityConsumption) -> CapacityReservation: ...
+    async def release_capacity(self, request: CapacityRequest, reservation_id: str,
+                               reason: str) -> CapacityReservation: ...
+    async def bind_capacity_operation(self, request: CapacityRequest, reservation_id: str,
+                                      binding: Mapping) -> None: ...
+
+
+class RuntimeCapacityAuthority(Protocol):
+    """Host's current authenticated owner checks scope/readiness without a CLI.
+
+    Returns AVAILABLE or a stable capacity reason. New acquisitions/consumption
+    require exact current revisions/generations and approved binding. Historical
+    get/release allow the original attempt under the current authorized owner.
+    No implementation may treat a reservation as permission for native execution.
+    """
+    async def check_capacity_scope(self, request: CapacityRequest, *, action: str) -> str: ...
 
 
 class RuntimeCore(Protocol):
+    async def capacity_readiness(self, request: CapacityRequest) -> str: ...
     @property
     def r4_boot_id(self) -> str: ...
     async def begin_r4_lease_request(self, *, scope: Mapping[str, Any], grant_id: str,
@@ -90,6 +125,41 @@ class OwnedSlotLedger(Protocol):
                               limit: int = 128) -> OwnedSlotPage: ...
 
 
+class CapacitySlotLedger(OwnedSlotLedger, Protocol):
+    """Optional durable exclusion port; Core supplies its own clock/boot.
+
+    Hosts never call this storage port as an authorization shortcut. A Core
+    without this port must not advertise execution-capacity support.
+    """
+    async def reserve_owned_slot(self, key: OperationKey, session_id: str, *,
+                                 intent_hash: str | None = None) -> None: ...
+    async def capacity_revision(self) -> int: ...
+    async def capacity_opening_for_slot(self, slot: OwnedSlotReservation) -> str | None: ...
+    async def capacity_for_operation(self, key: OperationKey, *, action: str,
+                                     now: float, boot_id: str) -> CapacityReservation | None: ...
+    async def capacity_reservation_page(self, server_id: str, executor_id: str, *,
+                                       after_rowid: int = 0, high_water_rowid: int | None = None,
+                                       limit: int = 128) -> "CapacityReservationPage": ...
+    async def release_fenced_capacity_holds(self, server_id: str, executor_id: str, *,
+                                           connection_generation: int, limit: int = 128) -> int: ...
+    async def assess_capacity_slot(self, request: CapacityRequest, *, now: float,
+                                   boot_id: str) -> CapacityAssessment: ...
+    async def reserve_capacity_slot(self, request: CapacityRequest, *, now: float,
+                                    boot_id: str) -> CapacityReservation | CapacityAssessment: ...
+    async def get_capacity_slot(self, request: CapacityRequest, *, now: float,
+                                boot_id: str) -> CapacityReservation | None: ...
+    async def consume_capacity_slot(self, request: CapacityRequest, reservation_id: str,
+                                    consumption: CapacityConsumption, *, now: float,
+                                    boot_id: str) -> CapacityReservation: ...
+    async def release_capacity_slot(self, request: CapacityRequest, reservation_id: str, *,
+                                    now: float, boot_id: str) -> CapacityReservation: ...
+    async def acquire_turn_slot(self, key: OperationKey, session_id: str, intent_hash: str) -> bool: ...
+    async def finish_turn_slot(self, key: OperationKey, session_id: str) -> bool: ...
+    async def expire_capacity_slots(self, *, now: float, boot_id: str, limit: int = 128) -> int: ...
+    async def bind_capacity_operation(self, request: CapacityRequest, reservation_id: str,
+                                      binding: Mapping, *, now: float, boot_id: str) -> None: ...
+
+
 class Journal(OwnedSlotLedger, Protocol):
     async def admit(self, key: OperationKey, intent_hash: str, session_id: str,
                     *, critical: bool = False,
@@ -112,6 +182,7 @@ class Journal(OwnedSlotLedger, Protocol):
     async def record_not_sent(self, key: OperationKey, error_code: str) -> OperationReceipt: ...
     async def record_receipt(self, key: OperationKey, receipt: OperationReceipt) -> OperationReceipt: ...
     async def get_receipt(self, key: OperationKey) -> OperationReceipt | None: ...
+    async def get_session_claim(self, session: SessionKey) -> ClaimedSession | None: ...
     async def claimed_sessions(self, server_id: str, executor_id: str, *,
                                after_rowid: int = 0,
                                high_water_rowid: int | None = None,
