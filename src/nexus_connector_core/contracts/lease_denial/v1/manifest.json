@@ -4,7 +4,7 @@
   "max_frame_bytes": 16384,
   "status": "development",
   "sha256": {
-    "schema.json": "3a266c0aec9b3df5a77fd55f918b23bae3e594d5df10f062022cce2f1fda7c0c",
-    "fixtures.json": "b79386c2ca029beea18f3e570c419af461dd54d1d534a02cee5d869f902e607b"
+    "schema.json": "deca4e726bb7ddfe37604ed0bac621a049aa91e29c8003bcbf547850c1958ab6",
+    "fixtures.json": "155c80408509ec46088a863f864cff87140bedac1f04fd73d4e550c47828acdd"
   }
 }

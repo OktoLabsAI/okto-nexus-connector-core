@@ -4,7 +4,7 @@
   "negotiation_capability": "nexus-execution-capacity-v2",
   "max_frame_bytes": 16384,
   "sha256": {
-    "schema.json": "b0fabd2f905cd517fa9d81e32d1fff458c81564ce2c0073511eedf13fc6e4f0e",
+    "schema.json": "7a6cb00f909bf3fb7b0271613ca1671adad3ca4f3962a5612cb920f66533170b",
     "fixtures.json": "7a9aacef9eeedcaa3e7e9351963003e6a3f9e10ac4b4617a088ae73a07afef9d"
   }
 }

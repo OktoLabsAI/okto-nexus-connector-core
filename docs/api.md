@@ -328,6 +328,28 @@ message or answer acknowledgement is `OUTCOME_UNKNOWN`, never an instruction to
 retry with a new ID. Requests and responses remain bounded to 16 KiB.
 ## Technical execution capacity
 
+`CAPACITY_CONTRACT_REVISION` identifies the independently negotiated capacity
+protocol. `CAPACITY_REASONS` and `RESERVATION_STATES` define its bounded outcomes.
+`CapacityScope` binds an attempt to the authenticated connection, session and
+authorization revisions. `CapacityAssessment` is an advisory observation;
+`CapacityConsumption` correlates admission with an operation; `CapacityReservation`
+and `CapacityReservationPage` expose durable reservations and paginated recovery.
+`require_same_capacity_request` rejects reuse of an attempt with changed scope,
+and `capacity_contract_supported` checks protocol compatibility.
+
+`CapacitySlotLedger` is the storage port and `RuntimeCapacityAuthority` revalidates
+host authority. `CapacityChangePublisher` publishes bounded change hints; it does
+not authorize admission. `OperationCapacityDeferred` signals pre-effect capacity
+deferral and `CapacityRetryWaiter` waits for relevant changes without retaining an
+execution worker.
+
+`CAPACITY_FRAME_TYPES` and `CAPACITY_REQUEST_TYPES` enumerate control frames.
+`encode_capacity_frame` and `decode_capacity_frame` validate the byte-pinned schema,
+while `verify_capacity_bundle` checks packaged resources and fixtures.
+`decode_control_frame` routes negotiated extensions; `execute_capacity_control`
+dispatches an authenticated capacity request and `capacity_result_frame` or
+`capacity_denial_frame` correlates its result with the original request.
+
 `ExecutionCapacity` implements the public `RuntimeCapacity` port over the host's
 physical slot ledger. Assessment is advisory. Reservation, lookup, consumption
 and release use the exact immutable `CapacityRequest`; the host still checks its
@@ -336,7 +358,7 @@ decide ownership of application work.
 
 If a reserve response is lost, look up the original request before retrying.
 To abandon an attempt that has no host record, call `release_capacity` with
-`capacity_reservation_id(request)` and reason `CANCELLED`. The host atomically
+the ID returned by `capacity_reservation_id` for that request and reason `CANCELLED`. The host atomically
 persists a `RELEASED` record with no consumption in the same journal used by
 reserve. A delayed reserve replays that record without taking a slot. An empty
 lookup alone is not proof that a delayed request cannot still arrive.
@@ -347,6 +369,15 @@ versions; never replace one with the proposed ID. If known history disappears,
 retain uncertainty rather than manufacture a replacement no-effect record.
 Older hosts may refuse cancellation before reservation. Treat that refusal as
 unresolved; it must not grant permission to create a competing attempt.
+
+`prepare_r4_lease_refusal`, `validate_r4_lease_refusal` and
+`persist_r4_lease_refusal` preserve a correlated refusal before productive work.
+`prepare_r4_preopen_refusal`, `validate_r4_preopen_refusal` and
+`persist_r4_preopen_refusal` provide the corresponding preopening evidence.
+`PREOPEN_REFUSAL_REVISION` versions that negotiated extension, and
+`validate_r4_preopen_report` validates its recovery report. These records prove
+only their original attempt's outcome; they do not authorize replay of uncertain
+native effects.
 
 Cancellation does not release another attempt's session or an active turn.
 Consumed reservations enter `RELEASE_PENDING` until the existing journal and
