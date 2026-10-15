@@ -131,6 +131,7 @@ from ..process import spawn_owned_process, observe_owned_process
 from ..framing import FrameLimitExceeded, MAX_FRAME_CHARS, protocol_lines, stderr_chunks
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
+from ..delta_batches import coalesce_claude_delta
 
 from ..legacy_environment import child_environment
 from .compatibility import claude_version_observation
@@ -498,7 +499,8 @@ class ClaudeCodeStreamConnector:
         Idle waits only check shutdown and never poll native protocol status.
         """
         with self._history_lock:
-            my_queue, backlog = subscribe(self._event_history, self._subscribers)
+            my_queue, backlog = subscribe(self._event_history, self._subscribers,
+                                          coalesce=coalesce_claude_delta)
         try:
             for item in backlog:
                 yield item
