@@ -126,3 +126,112 @@ def test_unbatchable_overload_is_still_explicit():
     assert q.get(timeout=0) == boundary and q.get(timeout=0) == boundary
     with pytest.raises(NativeEventOverflow):
         q.get(timeout=0)
+
+
+def test_codex_command_output_burst_preserves_output_and_completion():
+    connector = CodexAppServerConnector(command=('unused',))
+    def push(method, payload):
+        connector._push_event('native', method, payload, thread_id='thread', turn_id='turn')
+    push('turn/started', {'turn': {'id': 'turn'}})
+    stream = connector.events(session_id='native')
+    next(stream)
+    try:
+        # Stall the consumer, as happens while durable journal writes run.
+        # Include two separate tools and a quiet sibling subscription.
+        connector._push_event('quiet', 'turn/started', {}, thread_id='quiet', turn_id='quiet')
+        quiet = connector.events(session_id='quiet')
+        next(quiet)
+        expected = {}
+        for item in ('command-1', 'command-2'):
+            push('item/started', {'item': {'id': item, 'type': 'commandExecution'}})
+            chunks = [f'{i}: execução 🟢\n' for i in range(1800)]
+            expected[item] = ''.join(chunks)
+            for chunk in chunks:
+                push('item/commandExecution/outputDelta', {'threadId': 'thread', 'turnId': 'turn',
+                    'itemId': item, 'delta': chunk})
+            push('item/completed', {'item': {'id': item, 'type': 'commandExecution', 'exitCode': 0}})
+        push('item/agentMessage/delta', {'itemId': 'reply', 'delta': 'COMMANDS_OK'})
+        push('turn/completed', {'turn': {'id': 'turn', 'status': 'completed'}})
+        observed, boundaries, reply = {}, [], ''
+        while True:
+            e = next(stream)
+            if e.native_event == 'item/commandExecution/outputDelta':
+                assert e.kind == 'tool_activity'
+                assert connector.delivery_output(e) is None
+                item = e.payload['itemId']
+                observed[item] = observed.get(item, '') + e.payload['delta']
+            elif e.native_event in {'item/started', 'item/completed'}:
+                boundaries.append((e.native_event, e.payload['item']['id']))
+            elif e.native_event == 'item/agentMessage/delta':
+                reply += e.payload['delta']
+            elif e.native_event == 'turn/completed':
+                break
+        assert observed == expected
+        assert reply == 'COMMANDS_OK'
+        assert boundaries == [(m, i) for i in ('command-1','command-2')
+                              for m in ('item/started','item/completed')]
+        connector._push_event('quiet', 'turn/completed', {}, thread_id='quiet', turn_id='quiet')
+        assert next(quiet).native_event == 'turn/completed'
+    finally:
+        stream.close()
+        quiet.close()
+
+
+@pytest.mark.parametrize('change', [
+    {'itemId': 'other'}, {'turnId': 'other'}, {'threadId': 'other'},
+    {'stream': 'stderr'}, {'delta': {'unexpected': 'object'}},
+])
+def test_command_output_never_merges_other_items_turns_or_channels(change):
+    a = event('codex', kind='tool_activity', native_event='item/commandExecution/outputDelta',
+        payload={'itemId': 'one', 'threadId': 'thread', 'turnId': 'turn', 'stream': 'stdout', 'delta': 'one'})
+    b = replace(a, payload=dict(a.payload, **change))
+    assert coalesce_codex_delta(a, b) is None
+
+
+def test_command_burst_survives_bridge_and_durable_replay(tmp_path):
+    import asyncio
+    from nexus_connector_core import EventCursor
+    from nexus_connector_core.journal import SQLiteJournal
+    from nexus_connector_core.native.runtime_bridge import CopiedAdapterSession
+
+    async def run():
+        connector = CodexAppServerConnector(command=('unused',))
+        def push(method, payload):
+            connector._push_event('native', method, payload, thread_id='thread', turn_id='turn')
+        bridge = CopiedAdapterSession(connector, SimpleNamespace(session_id='native'),
+            session_id='session', stream_epoch='epoch',
+            context=SimpleNamespace(server_id='server', executor_id='executor'))
+        bridge._active_operation_id = 'operation'
+        journal = SQLiteJournal(tmp_path / 'journal.db')
+        stream = bridge.events()
+        try:
+            push('turn/started', {'turn': {'id': 'turn'}})
+            while True:
+                initial = await anext(stream)
+                await journal.record_event(initial)
+                if initial.native_type == 'turn/started':
+                    break
+            expected = ''.join(f'{i}: command log 🟢\n' for i in range(1800))
+            for line in expected.splitlines(keepends=True):
+                push('item/commandExecution/outputDelta', {'itemId': 'command', 'delta': line})
+            push('item/completed', {'item': {'id': 'command', 'type': 'commandExecution', 'exitCode': 0}})
+            push('item/agentMessage/delta', {'itemId': 'reply', 'delta': 'COMPLETE'})
+            push('turn/completed', {'turn': {'id': 'turn', 'status': 'completed'}})
+            async for e in stream:
+                await journal.record_event(e)
+                if e.payload.get('delivery_phase') == 'terminal':
+                    break
+            replay = [e async for e in journal.events(EventCursor('server','executor','session','epoch'))]
+            output = [e for e in replay if e.native_type == 'item/commandExecution/outputDelta']
+            assert ''.join(e.payload['delta'] for e in output) == expected
+            assert all(e.session_id == 'session' and e.payload['turn_id'] == 'turn'
+                       and not e.payload.get('output_text') for e in output)
+            assert ''.join(e.payload.get('output_text', '') for e in replay) == 'COMPLETE'
+            assert replay[-1].payload['delivery_outcome'] == 'success'
+            assert replay[-1].operation_id == 'operation'
+        finally:
+            await stream.aclose()
+            journal.close()
+            bridge._control_executor.shutdown()
+            bridge._force_executor.shutdown()
+    asyncio.run(run())

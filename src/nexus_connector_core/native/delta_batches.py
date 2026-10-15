@@ -62,7 +62,9 @@ def coalesce_claude_delta(first, last):
 def coalesce_codex_delta(first, last):
     if (not _compatible(first, last) or first.native_event not in {
             'item/agentMessage/delta', 'item/reasoning/summaryTextDelta',
-            'item/reasoning/textDelta', 'item/plan/delta'}):
+            'item/reasoning/textDelta', 'item/plan/delta',
+            'item/commandExecution/outputDelta'}):
         return None
-    # Includes exact thread/turn/item and reasoning index equality.
+    # Includes exact thread/turn/item, output channel and reasoning index
+    # equality. Command output remains tool activity, never reply text.
     return _bounded(last, _merge(first.payload, last.payload, 'delta'))
