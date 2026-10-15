@@ -11,13 +11,13 @@ def test_wheel_import_audit_accepts_stdlib_core_and_declared_dependencies():
     verify_import_boundaries(
         "import asyncio\nfrom nexus_connector_core.models import CoreError\n"
         "import rfc8785\nfrom jsonschema import Draft202012Validator\n"
+        "import anyio\nfrom mcp.shared.session import SessionMessage\n"
         "from .native import registry\n", "sample.py")
 
 
 @pytest.mark.parametrize("source", [
     "import okto_nexus.domain.harness",
     "from okto_nexus_connector import client",
-    "import mcp",
     "from pydantic import BaseModel",
     "import fastapi",
     "import sentence_transformers",
