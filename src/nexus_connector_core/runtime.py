@@ -406,6 +406,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             self._factory_accepts_birth_recorder = False
             self._factory_accepts_process_launch = False
         self._uncertain_opens: set[SessionKey] = set()
+        self._uncertain_launches = {}
+        self._launch_recovery_tasks = {}
         self._lock = asyncio.Lock()
         self._event_changed = asyncio.Condition()
         self._shutting_down = False
@@ -693,6 +695,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                     attempt.waiter_done = True
                 if (effect_started and not binding_registered) or pre_reserve_uncertain:
                     self._uncertain_opens.add(session_key)
+                    if launch_identity is not None:
+                        self._uncertain_launches[session_key] = launch_identity
                 if self._shutting_down and (binding := self._sessions.get(session_key)):
                     if binding.shutdown_task is None or binding.shutdown_task.done():
                         binding.shutdown_task = asyncio.create_task(
@@ -1453,8 +1457,65 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         for session, attempt in self._policy_closes.items():
             if not attempt.task.done():
                 outcomes[session] = "unknown"
+        # Failed factories can leave no adapter handle at all. Recover their
+        # exact durable launch under producer exclusion, without restarting the
+        # host or treating a missing PID as proof. Each worker survives the
+        # caller's observation budget and is shared by subsequent shutdowns.
+        await self._recover_failed_launches(deadline)
+        for session in uncertain:
+            if self._session_tombstones.get(session) == "released":
+                outcomes[session] = "already_closed"
         self._dispose_factory_if_resolved()
         return ShutdownReport(outcomes)
+
+    async def _recover_failed_launches(self, deadline):
+        for session, task in list(self._launch_recovery_tasks.items()):
+            if task.done():
+                try:
+                    task.result()
+                except Exception:
+                    pass  # The identity/slot remain retained for the next pass.
+                del self._launch_recovery_tasks[session]
+        for session, identity in list(self._uncertain_launches.items()):
+            if session not in self._uncertain_opens:
+                self._uncertain_launches.pop(session, None)
+                continue
+            if (session in self._opening or session in self._sessions or
+                    session in self._late_handles or session in self._release_obligations or
+                    session in self._launch_recovery_tasks):
+                continue
+            self._launch_recovery_tasks[session] = asyncio.create_task(
+                self._contain_failed_launch(session, identity))
+        if self._launch_recovery_tasks:
+            await asyncio.wait(tuple(self._launch_recovery_tasks.values()),
+                timeout=max(0, deadline - asyncio.get_running_loop().time()))
+
+    async def _contain_failed_launch(self, session, identity):
+        from .process_launch_control import ProcessLaunchController
+        from .native.process.launch_exclusion import HostLaunchExclusion
+        from .native.process.recovery import recover_launch_container
+
+        def authority():
+            # This is containment of THIS runtime's admitted opening, not a
+            # replacement host taking over arbitrary historical resources.
+            # Shutdown has closed admission; the OS gate also fences a thread
+            # whose async producer returned/cancelled before that thread did.
+            if (not self._shutting_down or self._uncertain_launches.get(session) != identity
+                    or session in self._opening or session in self._sessions or session in self._late_handles):
+                raise CoreError('RECONCILIATION_REQUIRED', 'failed_launch_containment')
+
+        controller = ProcessLaunchController(self._journal, HostLaunchExclusion())
+        recovered = await controller.recover(identity, validate_authority=authority,
+            stop_container=recover_launch_container)
+        if recovered.state != 'STOPPED':
+            return
+        if recovered.record.stop_proof == 'NEVER_CLAIMED':
+            await self._journal.settle_unclaimed_process_launch(identity)
+        # The opening's unknown receipt remains unknown for a claimed launch.
+        # Stopped resources and durable release are separate observations.
+        self._session_tombstones.record(session, 'unknown')
+        await self._durable_release(session,
+            OperationKey(session.server_id, session.executor_id, identity.opening_operation_id), None)
 
     def _dispose_factory_if_resolved(self) -> None:
         if self._factory_disposed:
@@ -1463,7 +1524,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         # queued spawn units) - its capacity is NOT disposable.
         if (self._opening or self._uncertain_opens or self._cleanup_tasks
                 or self._late_handles or self._release_obligations or self._r4_lease_tasks
-                or self._policy_closes):
+                or self._policy_closes or self._launch_recovery_tasks):
             return
         for binding in self._sessions.values():
             if not binding.closed:

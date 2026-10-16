@@ -83,3 +83,13 @@ and possible-effect markers remain unchanged. See
 [`runtime-lifecycle-m2e.md`](runtime-lifecycle-m2e.md). Consumer recovery uses
 the same M2c controller. Live UI results and joint installation belong to the
 Nexus canonical ledger; full M2 qualification remains open.
+
+## M3c — Original-owner failed-start recovery (validated checkpoint)
+
+Core now contains an uncertain planned launch even when startup returned no
+native handle. A retained worker fences the producer and observes its exact
+container before durable slot release. Receipts remain honest and calls are
+never replayed. **111 installed tests passed**, including disposable Windows
+processes and the real Pi adapter with an injected probe failure. See
+[`runtime-lifecycle-m3c.md`](runtime-lifecycle-m3c.md). Nexus/Connector integration,
+live rollout and remaining M3 criteria are recorded in the canonical ledger.
