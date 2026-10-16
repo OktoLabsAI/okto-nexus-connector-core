@@ -93,7 +93,8 @@ reported instead of smoothed over, per instructions.
 
 from __future__ import annotations
 
-from ..process import spawn_owned_process, observe_owned_process
+from ..process import (spawn_owned_process, observe_owned_process,
+                       record_owned_process_birth)
 from ..framing import (ByteFrameLimitExceeded, IncompleteByteFrame,
                        byte_protocol_lines, stderr_chunks)
 from ...protocol import strict_json
@@ -843,6 +844,9 @@ class PiRpcConnector:
                 transport._response_ids_required = (
                     compatibility.get("native_version") == "0.87.1")
                 transport.start()
+                record_owned_process_birth(
+                    getattr(transport, "_proc", None),
+                    getattr(self, "_process_birth_observer", None))
                 # Readiness requires a successful response in the documented
                 # object shape; a rejected command only proves pipe connectivity.
                 response = transport.request(_VERB_GET_STATE, {}, timeout_s=self._handshake_timeout_s)

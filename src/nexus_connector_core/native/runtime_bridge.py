@@ -32,6 +32,10 @@ _CONTROL_POOL_SIZE = 4
 #: backend cannot starve the emergency dispatch.
 _FORCE_POOL_SIZE = 2
 
+# Bound only the waiting startup thread, never cancel a possibly committed
+# journal write. A timeout retains the conservative post-spawn outcome.
+_PROCESS_BIRTH_RECORD_TIMEOUT = 10.0
+
 from .event_ingest import translate_native_event
 from .registry import adapter_spec, load_adapter, registered_managed_contract
 from .redaction import NativeSecretRedactor, credential_values
@@ -745,18 +749,22 @@ class CopiedAdapterFactory:
 
     async def open(self, prepared: PreparedLaunch, session_id: str,
                    context: ExecutionContext, *, stream_epoch: str,
-                   opening_guard=None) -> CopiedAdapterSession:
+                   opening_guard=None,
+                   process_birth_recorder: Callable[[ProcessBirthEvidence], Awaitable[None]] | None = None,
+                   ) -> CopiedAdapterSession:
         resources = []
         try:
             return await self._open(prepared, session_id, context, stream_epoch=stream_epoch,
-                                    opening_guard=opening_guard, resources=resources)
+                                    opening_guard=opening_guard, resources=resources,
+                                    process_birth_recorder=process_birth_recorder)
         except BaseException:
             for resource in resources:
                 resource.close()
             raise
 
     async def _open(self, prepared: PreparedLaunch, session_id: str,
-                    context: ExecutionContext, *, stream_epoch: str, opening_guard, resources):
+                    context: ExecutionContext, *, stream_epoch: str, opening_guard, resources,
+                    process_birth_recorder=None):
         spec = adapter_spec(prepared.intent.adapter_id)
         registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
@@ -988,6 +996,29 @@ class CopiedAdapterFactory:
         # queue/thread frontiers; this callable is tiny and I/O-free.
         if hasattr(connector, "_launch_guard") or True:
             connector._launch_guard = _revalidate_launch
+        if process_birth_recorder is not None:
+            loop = asyncio.get_running_loop()
+
+            def _record_birth(evidence: ProcessBirthEvidence) -> None:
+                # Runs in this opening's worker, not on the event loop. The
+                # adapter retains its process handle before invoking us and
+                # performs no handshake until the journal commit completes.
+                async def _persist():
+                    await process_birth_recorder(evidence)
+
+                pending = _persist()
+                try:
+                    recorded = asyncio.run_coroutine_threadsafe(pending, loop)
+                except BaseException:
+                    pending.close()
+                    raise
+                recorded.result(timeout=_PROCESS_BIRTH_RECORD_TIMEOUT)
+                # Recording may have waited for storage while the lease was
+                # revoked or the runtime drained. Do not start protocol I/O
+                # under that stale authority after the wait.
+                _revalidate_launch("process_birth")
+
+            connector._process_birth_observer = _record_birth
         try:
             if preset_bridge is not None:
                 env.update(await preset_bridge.start())

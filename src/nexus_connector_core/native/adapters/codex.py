@@ -44,7 +44,8 @@ frozen port cleanly - reported instead of smoothed over, per instructions.
 
 from __future__ import annotations
 
-from ..process import spawn_owned_process, observe_owned_process
+from ..process import (spawn_owned_process, observe_owned_process,
+                       record_owned_process_birth)
 from ..framing import FrameLimitExceeded, protocol_lines, stderr_chunks
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe
@@ -1050,6 +1051,9 @@ class CodexAppServerConnector:
         self._startup_close_outcome = "unknown"
         try:
             transport.start()
+            record_owned_process_birth(
+                getattr(transport, "_proc", None),
+                getattr(self, "_process_birth_observer", None))
             initialize_result = transport.request(
                 _METHOD_INITIALIZE, {"clientInfo": self._client_info}, timeout_s=self._handshake_timeout_s
             )

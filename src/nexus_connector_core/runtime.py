@@ -27,7 +27,7 @@ from .models import (
     PreparedLaunch, OperationCapacityDeferred,
     ReconcileReport, ReconcileRequest, RuntimeEvent, RuntimeSnapshot,
     SessionKey, ShutdownPolicy, ShutdownReport, TurnOperation,
-    StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord,
+    StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord, ProcessBirthEvidence,
     ProcessBirthObservation,
 )
 from .profiles import prepare_launch, verify_prepared
@@ -106,6 +106,13 @@ class NativeSession(Protocol):
 
 
 class NativeFactory(Protocol):
+    """Legacy minimum port; optional declared seams are detected at construction.
+
+    Managed factories may declare ``opening_guard`` and the async
+    ``process_birth_recorder`` callback. The latter must finish after spawn
+    and before handshake, with the factory retaining containment on failure.
+    """
+
     async def open(self, prepared: PreparedLaunch, session_id: str,
                    context: ExecutionContext, *,
                    stream_epoch: str) -> NativeSession: ...
@@ -389,10 +396,13 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         # C4/T04: additive opening_guard seam - passed only when declared.
         import inspect as _inspect
         try:
-            self._factory_accepts_opening_guard = "opening_guard" in                 _inspect.signature(self._native_factory.open).parameters
+            factory_parameters = _inspect.signature(self._native_factory.open).parameters
+            self._factory_accepts_opening_guard = "opening_guard" in factory_parameters
+            self._factory_accepts_birth_recorder = "process_birth_recorder" in factory_parameters
         except (TypeError, ValueError, AttributeError):
             # Legacy seams (bare async functions) do not declare it.
             self._factory_accepts_opening_guard = False
+            self._factory_accepts_birth_recorder = False
         self._uncertain_opens: set[SessionKey] = set()
         self._lock = asyncio.Lock()
         self._event_changed = asyncio.Condition()
@@ -502,6 +512,14 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         preowned_slot = False
         pre_reserve_uncertain = False
         opening_key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
+        if self._factory_accepts_birth_recorder:
+            async def record_birth(evidence: ProcessBirthEvidence) -> None:
+                # The original opening claim scopes this callback, including
+                # producers that return after their caller stopped waiting.
+                await self._journal.record_process_birth(
+                    opening_key, operation.session_id, evidence)
+
+            open_kwargs["process_birth_recorder"] = record_birth
         try:
             refreshed = await asyncio.to_thread(prepare_launch,
                                                 prepared.intent, selected, root)
