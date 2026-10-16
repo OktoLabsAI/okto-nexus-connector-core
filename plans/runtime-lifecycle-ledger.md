@@ -93,3 +93,9 @@ never replayed. **111 installed tests passed**, including disposable Windows
 processes and the real Pi adapter with an injected probe failure. See
 [`runtime-lifecycle-m3c.md`](runtime-lifecycle-m3c.md). Nexus/Connector integration,
 live rollout and remaining M3 criteria are recorded in the canonical ledger.
+
+## M3e — Scoped local lease failure (validated checkpoint)
+
+43 installed cases passed. See [runtime-lifecycle-m3e.md](runtime-lifecycle-m3e.md) for scope,
+artifact identities, initial test failures and remaining boundaries.
+No global rollout; M3/M5 remain in progress.

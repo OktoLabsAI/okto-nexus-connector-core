@@ -56,6 +56,10 @@ from .receipt_binding_r4 import (
 )
 from .resource_release_r4 import r4_resource_release_digest, project_r4_resource_release
 from .operation_refusal_r4 import prepare_r4_lease_refusal, validate_r4_lease_refusal, persist_r4_lease_refusal
+from .operation_refusal_r4 import (
+    prepare_r4_stopped_refusal, validate_r4_stopped_refusal,
+    validate_r4_operation_refusal, persist_r4_operation_refusal,
+)
 from .preopen_refusal_r4 import (
     PREOPEN_REFUSAL_REVISION, prepare_r4_preopen_refusal, validate_r4_preopen_refusal,
     persist_r4_preopen_refusal, validate_r4_preopen_report,
@@ -144,6 +148,8 @@ __all__ = [
     "discover_harness_configuration", "query_harness_configuration", "CONFIGURATION_SCHEMA_VERSION",
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
     "prepare_r4_lease_refusal", "validate_r4_lease_refusal", "persist_r4_lease_refusal",
+    "prepare_r4_stopped_refusal", "validate_r4_stopped_refusal",
+    "validate_r4_operation_refusal", "persist_r4_operation_refusal",
     "prepare_r4_preopen_refusal", "validate_r4_preopen_refusal", "persist_r4_preopen_refusal",
     "PREOPEN_REFUSAL_REVISION", "validate_r4_preopen_report",
     "OperationNotAdmitted", "OperationCapacityDeferred", "CapacityRetryWaiter",
