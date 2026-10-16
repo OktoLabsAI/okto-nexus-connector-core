@@ -267,9 +267,11 @@ class _PiTransport:
         native_action: PiNativeActionLaunch | None = None,
         dispatch_guards: "object | None" = None,
         on_ui_request: Callable[[dict[str, Any]], bool] | None = None,
+        container_id: str | None = None,
     ) -> None:
         self._dispatch_guards = dispatch_guards
         self._on_ui_request = on_ui_request
+        self._container_id = container_id
         self._argv = list(argv)
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
@@ -326,7 +328,7 @@ class _PiTransport:
             # New process group so close() can kill the whole tree, not just
             # the immediate child (quality bar: leave no orphans).
             popen_kwargs["start_new_session"] = True
-        self._proc = spawn_owned_process(self._argv, **popen_kwargs)
+        self._proc = spawn_owned_process(self._argv, container_id=self._container_id, **popen_kwargs)
         threading.Thread(target=self._read_stdout, daemon=True, name="pi-stdout").start()
         threading.Thread(target=self._read_stderr, daemon=True, name="pi-stderr").start()
 
@@ -826,6 +828,7 @@ class PiRpcConnector:
                 on_malformed_line=self._on_malformed_line,
                 on_line_processing_error=self._on_line_processing_error,
                 on_reader_exit=self._on_reader_exit,
+                container_id=getattr(self, '_process_container_id', None),
             )
             # Retain process ownership even if readiness negotiation fails;
             # Core must be able to confirm cleanup and retry containment.

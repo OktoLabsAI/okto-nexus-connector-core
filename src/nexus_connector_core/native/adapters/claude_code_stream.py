@@ -392,6 +392,7 @@ class ClaudeCodeStreamConnector:
                 [self._binary, *self._version_argv], cwd=self._cwd, env=spawn_env)
             proc = spawn_owned_process(  # noqa: S603 - argv is fixed/injected by the caller, not user input
                 argv,
+                container_id=getattr(self, '_process_container_id', None),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,

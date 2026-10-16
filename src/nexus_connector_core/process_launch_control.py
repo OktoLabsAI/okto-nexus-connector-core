@@ -21,6 +21,16 @@ class LaunchRecovery:
     record: ProcessLaunchRecord | None = None
 
 
+@dataclass(frozen=True, slots=True)
+class ControlledProcessLaunch:
+    identity: ProcessLaunchIdentity
+    controller: 'ProcessLaunchController'
+
+    async def produce(self, *, validate_authority, start):
+        return await self.controller.produce(self.identity,
+            validate_authority=validate_authority, start=start)
+
+
 class ProcessLaunchController:
     def __init__(self, store: ProcessLaunchStore, exclusion: LaunchExclusion):
         self._store = store

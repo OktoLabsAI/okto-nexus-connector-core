@@ -269,8 +269,10 @@ class _CodexTransport:
         on_dispatch_error: Callable[[str, str], None],
         on_server_request: Callable | None = None,
         dispatch_guards: "object | None" = None,
+        container_id: str | None = None,
     ) -> None:
         self._dispatch_guards = dispatch_guards
+        self._container_id = container_id
         self._command = list(command)
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
@@ -297,6 +299,7 @@ class _CodexTransport:
         try:
             self._proc = spawn_owned_process(
                 self._command,
+                container_id=self._container_id,
                 cwd=self._cwd,
                 env=full_env,
                 stdin=subprocess.PIPE,
@@ -1044,6 +1047,7 @@ class CodexAppServerConnector:
             on_malformed_line=self._on_malformed_line,
             on_dispatch_error=self._on_dispatch_error,
             on_server_request=self._on_server_request,
+            container_id=getattr(self, '_process_container_id', None),
         )
         # Initialization owns a transport before it can publish a ready one.
         # Preserve its observed containment result for the factory's failure

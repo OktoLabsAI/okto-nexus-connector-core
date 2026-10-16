@@ -751,12 +751,14 @@ class CopiedAdapterFactory:
                    context: ExecutionContext, *, stream_epoch: str,
                    opening_guard=None,
                    process_birth_recorder: Callable[[ProcessBirthEvidence], Awaitable[None]] | None = None,
+                   process_launch=None,
                    ) -> CopiedAdapterSession:
         resources = []
         try:
             return await self._open(prepared, session_id, context, stream_epoch=stream_epoch,
                                     opening_guard=opening_guard, resources=resources,
-                                    process_birth_recorder=process_birth_recorder)
+                                    process_birth_recorder=process_birth_recorder,
+                                    process_launch=process_launch)
         except BaseException:
             for resource in resources:
                 resource.close()
@@ -764,7 +766,7 @@ class CopiedAdapterFactory:
 
     async def _open(self, prepared: PreparedLaunch, session_id: str,
                     context: ExecutionContext, *, stream_epoch: str, opening_guard, resources,
-                    process_birth_recorder=None):
+                    process_birth_recorder=None, process_launch=None):
         spec = adapter_spec(prepared.intent.adapter_id)
         registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
@@ -996,6 +998,12 @@ class CopiedAdapterFactory:
         # queue/thread frontiers; this callable is tiny and I/O-free.
         if hasattr(connector, "_launch_guard") or True:
             connector._launch_guard = _revalidate_launch
+        if process_launch is not None:
+            identity = process_launch.identity
+            if (identity.key.server_id, identity.key.executor_id, identity.key.session_id) != (
+                    context.server_id, context.executor_id, session_id):
+                raise CoreError('PROCESS_LAUNCH_CONFLICT', 'launch', retry_safe=True)
+            connector._process_container_id = identity.container_id
         if process_birth_recorder is not None:
             loop = asyncio.get_running_loop()
 
@@ -1037,7 +1045,11 @@ class CopiedAdapterFactory:
                 _revalidate_content("launch", content_snapshot)
                 return connector.start(**start_kwargs)
 
-            native_session = await asyncio.to_thread(_guarded_start)
+            if process_launch is None:
+                native_session = await asyncio.to_thread(_guarded_start)
+            else:
+                native_session = await process_launch.produce(
+                    validate_authority=lambda: _revalidate_launch('launch'), start=_guarded_start)
             if registered is not None:
                 # Registration alone is not observed support. This handshake
                 # belongs to the loaded connector and cannot be supplied over

@@ -1,5 +1,5 @@
 """SQLite adapter for the launch-intent port, on the journal's own worker."""
-from .models import CoreError, SessionKey
+from .models import CoreError, OperationKey, SessionKey
 from .process_launch import (ProcessLaunchIdentity, ProcessLaunchRecord,
                              transition_launch, validate_launch_identity)
 
@@ -102,6 +102,52 @@ class ProcessLaunchStorageMixin:
     async def get_process_launch(self, session):
         _namespace(session)
         return await self._run(lambda db: _read(db, session), urgent=False)
+
+    async def settle_unclaimed_process_launch(self, identity):
+        """A fenced NEVER_CLAIMED proof can settle only its original opening.
+
+        This is stronger than an absent birth. The durable fence prevents a
+        queued producer from ever claiming later; no native result is invented.
+        Capacity release remains the current host's separate obligation.
+        """
+        validate_launch_identity(identity)
+        key = OperationKey(identity.key.server_id, identity.key.executor_id, identity.opening_operation_id)
+        def write(db):
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                launch = _read(db, identity.key)
+                if (launch is None or launch.identity != identity or launch.spawn_claimed
+                        or not launch.producer_fenced or launch.stop_proof != 'NEVER_CLAIMED'):
+                    raise CoreError('PROCESS_LAUNCH_PROOF_REQUIRED', 'process_launch_settle', possible_effect=True)
+                old = self._get(db, key)
+                if (old is None or old.session_id != identity.key.session_id or old.native_id is not None
+                        or db.execute('SELECT 1 FROM process_births WHERE server_id=? AND executor_id=? AND session_id=?',
+                            _namespace(identity.key)).fetchone()):
+                    raise CoreError('PROCESS_LAUNCH_CONFLICT', 'process_launch_settle', possible_effect=True)
+                if old.stage == 'FAILED':
+                    # Preserve an already published terminal fact unchanged.
+                    db.execute('COMMIT')
+                    return old
+                if old.stage not in {'RECEIVED_DURABLE','PREPARED','SUBMISSION_STARTED','OUTCOME_UNKNOWN'}:
+                    raise CoreError('OPERATION_STAGE_CONFLICT', 'process_launch_settle', possible_effect=True)
+                # possible_effect is monotonic on the receipt wire. Even
+                # stronger later evidence must not rewrite a published fact
+                # or silently authorize replay. The separate launch proof
+                # describes the producer that never reached native creation.
+                db.execute("UPDATE operations_v2 SET stage='FAILED',retry_safe=?,"
+                    "error_code='PROCESS_LAUNCH_FENCED' WHERE server_id=? AND executor_id=? AND operation_id=?",
+                    (int(not old.possible_effect), key.server_id, key.executor_id, key.operation_id))
+                result = self._get(db, key)
+                db.execute('COMMIT')
+                return result
+            except BaseException as error:
+                self._rollback_if_active(db)
+                from .journal import _sqlite_full
+                if _sqlite_full(error):
+                    raise CoreError('JOURNAL_FULL', 'process_launch_settle', possible_effect=True,
+                        operation_id=identity.opening_operation_id) from error
+                raise
+        return await self._run(write, urgent=True)
 
     async def transition_process_launch(self, identity, *, expected_revision, action, stop_proof=None):
         validate_launch_identity(identity)

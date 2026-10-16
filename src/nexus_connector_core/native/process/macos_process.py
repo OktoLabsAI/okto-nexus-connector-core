@@ -119,6 +119,13 @@ class OwnedDarwinPopen:
     _slots = threading.BoundedSemaphore(32)
 
     def __init__(self, argv, **kwargs):
+        planned_container = kwargs.pop('container_id', None)
+        if planned_container is not None:
+            import re
+            if (type(planned_container) is not str or not re.fullmatch(
+                    r'darwin-launchd:ai\.oktolabs\.nexus-owned\.[0-9]+\.[0-9a-f]{16}', planned_container)):
+                raise ValueError('Invalid planned Darwin container')
+        self._planned_label = planned_container.split(':', 1)[1] if planned_container else None
         if sys.platform != 'darwin':
             raise RuntimeError(
                 'Darwin process ownership requires the launchd coalition backend')
@@ -208,7 +215,7 @@ class OwnedDarwinPopen:
         self._listener.listen(1)
         self._listener.settimeout(ACCEPT_TIMEOUT_SECONDS)
         self._token = secrets.token_hex(32)
-        self._label = new_job_label()
+        self._label = self._planned_label or new_job_label()
         caller_pair = coalition_pair(os.getpid())
         config = dict(socket=str(self._root / 'control.sock'),
                       token=self._token, owner_pid=os.getpid(),

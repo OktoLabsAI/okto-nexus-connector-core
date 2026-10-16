@@ -106,6 +106,11 @@ def test_birth_is_durable_before_startup_finishes_and_write_failure_contains(
             assert not task.done(), "startup finished before the birth recorder returned"
             key = SessionKey("srv", "exe", "session")
             evidence = await journal.get_process_birth(key)
+            launch = await journal.get_process_launch(key)
+            assert launch is not None and launch.spawn_claimed
+            assert launch.identity.opening_operation_id == 'open'
+            assert launch.identity.container_id == births[0].container_id
+            assert launch.identity.platform == births[0].platform
             assert (evidence is None) == fail_write
             assert observe_recorded_process_birth(births[0]) == "MATCHING_LIVE"
             if evidence is not None:

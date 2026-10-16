@@ -10,7 +10,7 @@ from dataclasses import dataclass, replace
 import re
 from typing import ContextManager, Protocol
 
-from .models import CoreError, SessionKey
+from .models import CoreError, OperationReceipt, SessionKey
 
 
 @dataclass(frozen=True, slots=True)
@@ -113,6 +113,7 @@ def transition_launch(record: ProcessLaunchRecord, *, expected_revision: int,
 class ProcessLaunchStore(Protocol):
     async def prepare_process_launch(self, identity: ProcessLaunchIdentity) -> ProcessLaunchRecord: ...
     async def get_process_launch(self, session: SessionKey) -> ProcessLaunchRecord | None: ...
+    async def settle_unclaimed_process_launch(self, identity: ProcessLaunchIdentity) -> OperationReceipt: ...
     async def transition_process_launch(self, identity: ProcessLaunchIdentity, *,
         expected_revision: int, action: str, stop_proof: str | None = None) -> ProcessLaunchRecord: ...
 

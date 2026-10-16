@@ -399,10 +399,12 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             factory_parameters = _inspect.signature(self._native_factory.open).parameters
             self._factory_accepts_opening_guard = "opening_guard" in factory_parameters
             self._factory_accepts_birth_recorder = "process_birth_recorder" in factory_parameters
+            self._factory_accepts_process_launch = "process_launch" in factory_parameters
         except (TypeError, ValueError, AttributeError):
             # Legacy seams (bare async functions) do not declare it.
             self._factory_accepts_opening_guard = False
             self._factory_accepts_birth_recorder = False
+            self._factory_accepts_process_launch = False
         self._uncertain_opens: set[SessionKey] = set()
         self._lock = asyncio.Lock()
         self._event_changed = asyncio.Condition()
@@ -511,6 +513,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         binding_registered = False
         preowned_slot = False
         pre_reserve_uncertain = False
+        launch_identity = None
         opening_key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
         if self._factory_accepts_birth_recorder:
             async def record_birth(evidence: ProcessBirthEvidence) -> None:
@@ -526,6 +529,13 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             if prepared != refreshed:
                 raise CoreError("PROFILE_DRIFT", "open")
             await asyncio.to_thread(verify_prepared, prepared)
+            if self._factory_accepts_process_launch and prepared.intent.mode == 'managed':
+                from .native.process.launch_identity import plan_process_launch
+                from .native.process.launch_exclusion import HostLaunchExclusion
+                from .process_launch_control import ControlledProcessLaunch, ProcessLaunchController
+                launch_identity = plan_process_launch(session_key, operation.operation_id, context)
+                open_kwargs['process_launch'] = ControlledProcessLaunch(launch_identity,
+                    ProcessLaunchController(self._journal, HostLaunchExclusion()))
             if self._capacity_enabled and prepared.intent.mode == 'managed':
                 # Exclude competing opens BEFORE journal.admit claims the
                 # session identity. A refused ordinary open must not poison
@@ -660,6 +670,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 return native.native_id
 
             return await self._kernel.execute(semantic, context, effect,
+                process_launch_identity=launch_identity,
                 opening_deadline=lambda: self._current_open_context(
                     context, operation.session_id).lease_deadline_monotonic)
         finally:

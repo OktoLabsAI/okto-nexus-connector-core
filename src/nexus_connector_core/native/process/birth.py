@@ -109,7 +109,7 @@ def snapshot_owned_process_birth(process: subprocess.Popen) -> ProcessBirthEvide
             raise RuntimeError("owned process is already stopped")
         return ProcessBirthEvidence(
             "darwin", process.pid, token,
-            "darwin_launchd_coalition")
+            "darwin_launchd_coalition", 'darwin-launchd:'+process._label)
 
     raise RuntimeError("owned process birth identity unqualified on this platform")
 

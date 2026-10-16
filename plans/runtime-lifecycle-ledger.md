@@ -68,3 +68,11 @@ Installed Windows campaign: **80 passed**, including M2a regressions and lost
 authority/cancelled waiter/independent sibling scenarios. Dependencies valid.
 See [`runtime-lifecycle-m2b.md`](runtime-lifecycle-m2b.md). Native factory and
 consumer recovery integration remain pending; live install still uses M1 Core.
+
+M2c validated: managed native adapters consume the admitted identity and shared
+producer controller. Installed Windows campaign: **159 passed**, including real
+disposable owner crashes at five pre-handshake boundaries, exact-container
+containment, sibling isolation and monotonic opening settlement. Dependencies
+valid. See [`runtime-lifecycle-m2c.md`](runtime-lifecycle-m2c.md). Consumer
+recovery/publication, later crash boundaries and Linux/macOS qualification remain
+open; this is not an M2 completion or live rollout.
