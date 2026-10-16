@@ -21,6 +21,7 @@ from .models import (ClaimedSession, CoreError, EventCursor, OperationKey,
                      SessionLeaseState, SessionKey, StorageStatus)
 from .offloop import (ExecutorClosed, ExecutorFull, OffLoopExecutor)
 from .protocol import canonical_json
+from .process_launch_storage import PROCESS_LAUNCH_SCHEMA, ProcessLaunchStorageMixin
 
 
 @dataclass(frozen=True, slots=True)
@@ -169,7 +170,7 @@ async def open_journal(path, *, limits: "JournalLimits | None" = None)         -
     return await asyncio.to_thread(SQLiteJournal, path, limits=limits)
 
 
-class SQLiteJournal:
+class SQLiteJournal(ProcessLaunchStorageMixin):
     def __init__(self, path: str | Path, *, limits: JournalLimits | None = None):
         self.path = str(path)
         if limits is not None and not isinstance(limits, JournalLimits):
@@ -322,6 +323,7 @@ class SQLiteJournal:
                 PRIMARY KEY(server_id, executor_id, session_id, stream_epoch)
             );
         """)
+        db.executescript(PROCESS_LAUNCH_SCHEMA)
         if "compacted_sequence" not in {
             row[1] for row in db.execute("PRAGMA table_info(event_streams)")
         }:
@@ -514,6 +516,7 @@ class SQLiteJournal:
                     (key.server_id, key.executor_id, key.operation_id)).fetchone()
                 if operation is None or not operation[0]:
                     raise CoreError("VALIDATION_ERROR", "process_birth")
+                self._validate_launch_birth(db, session, evidence)
                 old = db.execute(
                     "SELECT platform,pid,birth_token,containment FROM process_births WHERE server_id=? AND executor_id=? AND session_id=?",
                     (key.server_id, key.executor_id, session_id)).fetchone()

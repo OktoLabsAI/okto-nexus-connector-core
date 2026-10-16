@@ -54,3 +54,11 @@ The running user installation was not changed by M1 (only an isolated test env).
 User decision on 2026-10-16: breaking changes are allowed. Future shared contracts
 may require coordinated upgrades of all three repositories; old-version
 interoperability is not an acceptance requirement.
+
+## M2 — Durable intent and fenced recovery (in progress)
+
+M2a foundation validated: immutable launch identity, SQLite CAS state and
+nonblocking producer exclusion. Installed Windows campaign: **53 passed**;
+dependency validation passed. Details and limitations:
+[`runtime-lifecycle-m2a.md`](runtime-lifecycle-m2a.md).
+This checkpoint does not yet change runtime startup/recovery or the live install.

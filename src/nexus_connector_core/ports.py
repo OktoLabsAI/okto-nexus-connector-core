@@ -16,6 +16,7 @@ from .models import (
     TurnOperation,
 )
 from .lease_reducer_r4 import R4LeaseAttempt
+from .process_launch import ProcessLaunchStore
 from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption, CapacityReservationPage
 
 
@@ -160,7 +161,7 @@ class CapacitySlotLedger(OwnedSlotLedger, Protocol):
                                       binding: Mapping, *, now: float, boot_id: str) -> None: ...
 
 
-class Journal(OwnedSlotLedger, Protocol):
+class Journal(OwnedSlotLedger, ProcessLaunchStore, Protocol):
     async def admit(self, key: OperationKey, intent_hash: str, session_id: str,
                     *, critical: bool = False,
                     effect_imminent: bool = False,
