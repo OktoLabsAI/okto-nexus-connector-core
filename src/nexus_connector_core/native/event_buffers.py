@@ -9,6 +9,7 @@ from dataclasses import fields
 import json
 import queue
 import threading
+from ..event_artifacts import MAX_PAYLOAD_BYTES
 
 
 class NativeEventOverflow(RuntimeError):
@@ -31,7 +32,7 @@ def event_bytes(event):
 
 
 class NativeEventHistory:
-    def __init__(self, *, max_events=2048, max_bytes=4 * 1024 * 1024,
+    def __init__(self, *, max_events=2048, max_bytes=2 * MAX_PAYLOAD_BYTES,
                  session_max_events=None, session_max_bytes=None):
         if session_max_events is None:
             session_max_events = max_events
@@ -134,7 +135,7 @@ class NativeEventHistory:
 
 
 class NativeEventQueue:
-    def __init__(self, *, max_events=128, max_bytes=2 * 1024 * 1024, coalesce=None):
+    def __init__(self, *, max_events=128, max_bytes=2 * MAX_PAYLOAD_BYTES, coalesce=None):
         self.max_events, self.max_bytes = max_events, max_bytes
         self.coalesce = coalesce
         self._items, self._bytes = deque(), 0

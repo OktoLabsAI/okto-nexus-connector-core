@@ -28,7 +28,8 @@ _GENERIC_PREFIX = re.compile(r"(?:nxs_|nxsept_|\bsk-|\bBearer\s+)", re.I)
 _TOKEN_END = re.compile(r"[\s\"']")
 _MAX_PENDING = 16 * 1024
 _MAX_STREAMS = 64
-_MAX_NATIVE_EVENT_BYTES = 256 * 1024
+from ..event_artifacts import MAX_PAYLOAD_BYTES
+_MAX_NATIVE_EVENT_BYTES = MAX_PAYLOAD_BYTES
 
 
 def _is_sensitive_key(key: str) -> bool:

@@ -33,7 +33,7 @@ class JournalLimits:
     reserved_event_bytes: int = 16 * 1024 * 1024
     server_event_bytes: int = 256 * 1024 * 1024
     server_reserved_bytes: int = 16 * 1024 * 1024
-    session_event_bytes: int = 16 * 1024 * 1024
+    session_event_bytes: int = 32 * 1024 * 1024
     session_reserved_bytes: int = 1024 * 1024
     total_event_rows: int = 1_000_000
     reserved_event_rows: int = 10_000
@@ -41,7 +41,9 @@ class JournalLimits:
     server_reserved_rows: int = 10_000
     session_event_rows: int = 50_000
     session_reserved_rows: int = 1_000
-    max_event_body_bytes: int = 1024 * 1024
+    # Durable source may exceed the inline wire limit. Publishers externalize
+    # its payload to the artifact store before acknowledging this journal.
+    max_event_body_bytes: int = 16 * 1024 * 1024 + 64 * 1024
     max_operation_rows: int = 100_000
     reserved_operation_rows: int = 1_000
     server_operation_rows: int = 50_000

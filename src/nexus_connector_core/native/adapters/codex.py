@@ -178,7 +178,7 @@ _PROC_WAIT_TIMEOUT_S = 5.0
 _STDIN_WRITE_LOCK_TIMEOUT_S = 10.0
 
 _EARLY_EVENT_LIMIT = 128
-_EARLY_EVENT_BYTES = 1024 * 1024
+_EARLY_EVENT_BYTES = 32 * 1024 * 1024
 _THREAD_START_LIMIT = 64
 
 
@@ -652,7 +652,7 @@ class CodexAppServerConnector:
         # transient replay window before it subscribes. Durable replay
         # remains the Core journal's responsibility.
         self._event_history = NativeEventHistory(
-            session_max_events=512, session_max_bytes=1024 * 1024)
+            session_max_events=512, session_max_bytes=32 * 1024 * 1024)
         self._history_lock = threading.Lock()
         self._subscribers: list["queue.Queue[HarnessEvent]"] = []
         self._subscriber_sessions = {}
