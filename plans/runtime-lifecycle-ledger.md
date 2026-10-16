@@ -76,3 +76,10 @@ containment, sibling isolation and monotonic opening settlement. Dependencies
 valid. See [`runtime-lifecycle-m2c.md`](runtime-lifecycle-m2c.md). Consumer
 recovery/publication, later crash boundaries and Linux/macOS qualification remain
 open; this is not an M2 completion or live rollout.
+
+M2e validated: negotiated never-started resource proof, strict schema projection
+and codec composition. **95 installed tests passed**; original receipt outcome
+and possible-effect markers remain unchanged. See
+[`runtime-lifecycle-m2e.md`](runtime-lifecycle-m2e.md). Consumer recovery uses
+the same M2c controller. Live UI results and joint installation belong to the
+Nexus canonical ledger; full M2 qualification remains open.

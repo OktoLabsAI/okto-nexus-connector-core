@@ -23,7 +23,7 @@ package-dir = {"" = "src"}
 where = ["src"]
 
 [tool.setuptools.package-data]
-nexus_connector_core = ["py.typed", "contracts/nxl/v1/*.json", "contracts/nxl/r4/*.json", "contracts/capacity/v1/*.json", "contracts/capacity/v2/*.json", "contracts/lease_denial/v1/*.json", "contracts/session_release/v1/*.json", "contracts/preopen_refusal/v1/*.json", "native/*.schemas.json", "pi_extension/*.js", "pi_extension/*.json"]
+nexus_connector_core = ["py.typed", "contracts/nxl/v1/*.json", "contracts/nxl/r4/*.json", "contracts/capacity/v1/*.json", "contracts/capacity/v2/*.json", "contracts/lease_denial/v1/*.json", "contracts/session_release/v1/*.json", "contracts/preopen_refusal/v1/*.json", "contracts/launch_recovery/v1/*.json", "native/*.schemas.json", "pi_extension/*.js", "pi_extension/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
