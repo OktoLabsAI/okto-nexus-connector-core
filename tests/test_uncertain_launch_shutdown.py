@@ -110,6 +110,7 @@ def test_real_pi_adapter_version_failure_does_not_strand_runtime(tmp_path, monke
             assert (await journal.get_receipt(OperationKey('srv','exe','open'))).stage == 'OUTCOME_UNKNOWN'
             await stopped(runtime,key)
             assert reasons == ['version_probe_timeout']
+            assert runtime._factory_disposed  # no extra shutdown needed to release factory threads
         finally:
             await runtime.shutdown(ShutdownPolicy(.1,.1))
             await journal.aclose()

@@ -1468,7 +1468,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         self._dispose_factory_if_resolved()
         return ShutdownReport(outcomes)
 
-    async def _recover_failed_launches(self, deadline):
+    def _consume_launch_recovery_results(self):
         for session, task in list(self._launch_recovery_tasks.items()):
             if task.done():
                 try:
@@ -1476,6 +1476,11 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 except Exception:
                     pass  # The identity/slot remain retained for the next pass.
                 del self._launch_recovery_tasks[session]
+                if session not in self._uncertain_opens:
+                    self._uncertain_launches.pop(session, None)
+
+    async def _recover_failed_launches(self, deadline):
+        self._consume_launch_recovery_results()
         for session, identity in list(self._uncertain_launches.items()):
             if session not in self._uncertain_opens:
                 self._uncertain_launches.pop(session, None)
@@ -1489,6 +1494,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         if self._launch_recovery_tasks:
             await asyncio.wait(tuple(self._launch_recovery_tasks.values()),
                 timeout=max(0, deadline - asyncio.get_running_loop().time()))
+        self._consume_launch_recovery_results()
 
     async def _contain_failed_launch(self, session, identity):
         from .process_launch_control import ProcessLaunchController
