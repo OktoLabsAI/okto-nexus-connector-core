@@ -16,7 +16,7 @@ from .models import (
     TurnOperation,
 )
 from .lease_reducer_r4 import R4LeaseAttempt
-from .process_launch import ProcessLaunchStore
+from .process_launch import ProcessLaunchIdentity, ProcessLaunchStore
 from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption, CapacityReservationPage
 
 
@@ -170,6 +170,7 @@ class Journal(OwnedSlotLedger, ProcessLaunchStore, Protocol):
                     session_owner_generation: int | None = None,
                     authorization_revision: int | None = None,
                     configuration_revision: int | None = None,
+                    process_launch_identity: ProcessLaunchIdentity | None = None,
                     ) -> tuple[OperationReceipt, bool]: ...
     async def cas_session_lease(self, session: SessionKey, *,
                                 expected_connection_generation: int,

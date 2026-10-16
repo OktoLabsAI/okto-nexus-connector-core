@@ -48,6 +48,16 @@ def _read(db, key):
 
 
 class ProcessLaunchStorageMixin:
+    @staticmethod
+    def _insert_process_launch(db, identity):
+        # The caller owns the admission/write transaction. Never commit here:
+        # a launch intent without its opening claim is not recoverable proof.
+        db.execute('INSERT INTO process_launches VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
+            (*_namespace(identity.key), identity.opening_operation_id,
+             identity.connection_generation, identity.owner_generation,
+             identity.platform, identity.containment, identity.container_id,
+             identity.producer_id, identity.schema_version, 1, 0, 0, None))
+
     async def prepare_process_launch(self, identity):
         validate_launch_identity(identity)
         def write(db):
@@ -77,10 +87,7 @@ class ProcessLaunchStorageMixin:
                     raise CoreError('PROCESS_LAUNCH_TOO_LATE', 'process_launch')
                 self._require_storage_capacity(db, 1024, critical=True, stage='process_launch',
                     possible_effect=True, operation_id=identity.opening_operation_id)
-                db.execute('INSERT INTO process_launches VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',
-                    (*key, identity.opening_operation_id, identity.connection_generation, identity.owner_generation,
-                     identity.platform, identity.containment, identity.container_id, identity.producer_id,
-                     identity.schema_version, 1, 0, 0, None))
+                self._insert_process_launch(db, identity)
                 db.execute('COMMIT')
                 return ProcessLaunchRecord(identity)
             except BaseException as error:
@@ -108,6 +115,13 @@ class ProcessLaunchStorageMixin:
                     raise CoreError('PROCESS_LAUNCH_CONFLICT', 'process_launch')
                 updated = transition_launch(old, expected_revision=expected_revision,
                                             action=action, stop_proof=stop_proof)
+                if action == 'claim':
+                    operation = db.execute('SELECT possible_effect,stage FROM operations_v2 WHERE '
+                        'server_id=? AND executor_id=? AND operation_id=?',
+                        (identity.key.server_id, identity.key.executor_id,
+                         identity.opening_operation_id)).fetchone()
+                    if operation is None or not operation[0] or operation[1] != 'SUBMISSION_STARTED':
+                        raise CoreError('PROCESS_LAUNCH_NOT_ADMITTED', 'process_launch', retry_safe=True)
                 if updated != old:
                     db.execute('UPDATE process_launches SET revision=?,spawn_claimed=?,producer_fenced=?,stop_proof=? '
                         'WHERE server_id=? AND executor_id=? AND session_id=? AND revision=?',

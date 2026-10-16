@@ -935,11 +935,23 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                     session_owner_generation: int | None = None,
                     authorization_revision: int | None = None,
                     configuration_revision: int | None = None,
+                    process_launch_identity=None,
                     ) -> tuple[OperationReceipt, bool]:
         if not all((key.server_id, key.executor_id, key.operation_id, session_id)):
             raise CoreError("OPERATION_INVALID", "admission")
         if type(claim_session) is not bool:
             raise ValueError("claim_session must be boolean")
+        if process_launch_identity is not None:
+            from .process_launch import validate_launch_identity
+            validate_launch_identity(process_launch_identity)
+            launch = process_launch_identity
+            if (not claim_session or launch.key != SessionKey(key.server_id, key.executor_id, session_id)
+                    or launch.opening_operation_id != key.operation_id
+                    or launch.connection_generation != connection_generation
+                    or launch.owner_generation != session_owner_generation):
+                raise CoreError('PROCESS_LAUNCH_CONFLICT', 'admission', retry_safe=True,
+                                operation_id=key.operation_id)
+        admission_bytes = 1536 if process_launch_identity is not None else 512
         if ((connection_generation is None) !=
                 (session_owner_generation is None)):
             raise ValueError("opening generations must be supplied together")
@@ -966,7 +978,7 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
             # fences cross-process races before any new admission.
             if not critical and self._get(db, key) is None:
                 self._recover_normal_storage(db, 
-                    512, stage="admission", operation_id=key.operation_id)
+                    admission_bytes, stage="admission", operation_id=key.operation_id)
             db.execute("BEGIN IMMEDIATE")
             try:
                 old = self._get(db, key)
@@ -991,7 +1003,7 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                     db.execute("COMMIT")
                     return old, False
                 self._require_storage_capacity(db, 
-                    512, critical=critical, stage="admission",
+                    admission_bytes, critical=critical, stage="admission",
                     operation_id=key.operation_id)
                 usage = db.execute(
                     "SELECT event_bytes,event_rows FROM journal_usage WHERE singleton=1"
@@ -1067,6 +1079,10 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                                   key.operation_id, intent_hash, session_id,
                                   "SUBMISSION_STARTED" if effect_imminent else "RECEIVED_DURABLE",
                                   int(effect_imminent), int(not effect_imminent), None, None))
+                if process_launch_identity is not None:
+                    # Persist before the possible-effect frontier, in the
+                    # same transaction as the immutable opening claim.
+                    self._insert_process_launch(db, process_launch_identity)
                 db.execute(
                     "UPDATE operation_usage SET operation_rows=operation_rows+1 WHERE singleton=1")
                 db.execute(

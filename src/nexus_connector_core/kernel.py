@@ -9,6 +9,7 @@ from .journal import SQLiteJournal
 from .models import CoreError, EffectNotSent, EffectRejected, ExecutionContext, Operation, OperationKey, OperationReceipt, OperationNotAdmitted
 from .ports import Journal, Clock
 from .protocol import intent_hash
+from .process_launch import ProcessLaunchIdentity
 
 
 class OperationKernel:
@@ -21,6 +22,7 @@ class OperationKernel:
                       effect: Callable[[], Awaitable[str | None]], *,
                       containment: bool | None = None,
                       opening_deadline: Callable[[], float] | None = None,
+                      process_launch_identity: ProcessLaunchIdentity | None = None,
                       completion_stage: str = "SUBMITTED") -> OperationReceipt:
         # Only a caller that has observed completion may request a terminal
         # receipt. Validate before admission or any native effect.
@@ -28,6 +30,8 @@ class OperationKernel:
             raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)
         if opening_deadline is not None and operation.action != "runtime.open":
             raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)
+        if process_launch_identity is not None and operation.action != 'runtime.open':
+            raise CoreError('VALIDATION_ERROR', 'admission', retry_safe=True)
         # C7/W04: callers with a derived per-operation classification
         # (a strictly negative approval reply) pass it explicitly; the
         # default stays action-based.
@@ -69,6 +73,8 @@ class OperationKernel:
                                                  configuration_revision=(
                                                      context.configuration_revision
                                                      if operation.action == "runtime.open" else None))
+        if process_launch_identity is not None:
+            admission['process_launch_identity'] = process_launch_identity
         try:
             receipt, fresh = await self.journal.admit(
                 key, digest, operation.session_id, **admission)

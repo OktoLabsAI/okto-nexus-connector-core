@@ -62,3 +62,9 @@ nonblocking producer exclusion. Installed Windows campaign: **53 passed**;
 dependency validation passed. Details and limitations:
 [`runtime-lifecycle-m2a.md`](runtime-lifecycle-m2a.md).
 This checkpoint does not yet change runtime startup/recovery or the live install.
+
+M2b validated: atomic opening/intent admission and shared producer controller.
+Installed Windows campaign: **80 passed**, including M2a regressions and lost
+authority/cancelled waiter/independent sibling scenarios. Dependencies valid.
+See [`runtime-lifecycle-m2b.md`](runtime-lifecycle-m2b.md). Native factory and
+consumer recovery integration remain pending; live install still uses M1 Core.

@@ -8,15 +8,7 @@ from contextlib import contextmanager
 import os
 import re
 import stat
-from typing import ContextManager, Protocol
-
-
-class LaunchGateBusy(RuntimeError):
-    """Another producer/recovery worker still owns this exact frontier."""
-
-
-class LaunchExclusion(Protocol):
-    def hold(self, producer_id: str) -> ContextManager[None]: ...
+from ...process_launch import LaunchGateBusy
 
 
 class HostLaunchExclusion:

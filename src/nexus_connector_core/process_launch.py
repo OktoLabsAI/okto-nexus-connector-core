@@ -8,7 +8,7 @@ in this contract.
 """
 from dataclasses import dataclass, replace
 import re
-from typing import Protocol
+from typing import ContextManager, Protocol
 
 from .models import CoreError, SessionKey
 
@@ -115,3 +115,11 @@ class ProcessLaunchStore(Protocol):
     async def get_process_launch(self, session: SessionKey) -> ProcessLaunchRecord | None: ...
     async def transition_process_launch(self, identity: ProcessLaunchIdentity, *,
         expected_revision: int, action: str, stop_proof: str | None = None) -> ProcessLaunchRecord: ...
+
+
+class LaunchGateBusy(RuntimeError):
+    """Another producer/recovery worker still owns this exact frontier."""
+
+
+class LaunchExclusion(Protocol):
+    def hold(self, producer_id: str) -> ContextManager[None]: ...
