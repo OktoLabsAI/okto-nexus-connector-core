@@ -154,7 +154,10 @@ def validate_r4_stopped_refusal(value):
 
 
 def validate_r4_operation_refusal(value):
-    """Validate either supported local refusal association, without fallback."""
+    """Validate a supported local refusal association, without fallback."""
+    if isinstance(value, dict) and value.get('kind') == 'startup_failure':
+        from .startup_refusal_r4 import validate_r4_startup_refusal
+        return validate_r4_startup_refusal(value)
     if isinstance(value, dict) and value.get('kind') == 'stopped_session':
         return validate_r4_stopped_refusal(value)
     return validate_r4_lease_refusal(value)
@@ -162,5 +165,6 @@ def validate_r4_operation_refusal(value):
 
 async def persist_r4_operation_refusal(journal: Journal, refusal):
     value = validate_r4_operation_refusal(refusal)
-    code = value['error_code'] if value.get('kind') == 'stopped_session' else value['denial']['code']
+    code = ('PREPARATION_FAILED' if value.get('kind') == 'startup_failure' else
+            value['error_code'] if value.get('kind') == 'stopped_session' else value['denial']['code'])
     return await _persist_refusal(journal, value['binding'], code)

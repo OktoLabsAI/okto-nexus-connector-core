@@ -143,3 +143,13 @@ the unchanged 64 MiB ledger budget for other metadata, so full mixed-history
 budget qualification remains required. See
 [runtime-lifecycle-m4d4-cost.md](runtime-lifecycle-m4d4-cost.md). The Core wheel
 is unchanged; Nexus/Connector now consume the registry in their M4d4b work.
+
+## M5a — Shared startup refusal foundation
+
+149 installed cases passed; 161 package files verified. Scoped refusal fences
+an opening before native admission without granting physical release authority.
+Also repaired the stale preopen bundle base hash, with branch-equivalence
+regression coverage. See [runtime-lifecycle-m5a.md](runtime-lifecycle-m5a.md).
+Connector consumption is still pending and Nexus consumer qualification has
+four remote publication failures under investigation. No global rollout or
+complete M5 qualification is claimed.
