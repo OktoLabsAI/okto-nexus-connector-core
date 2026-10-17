@@ -133,3 +133,13 @@ adapter record creation intent independently of execution/capacity authority.
 See [runtime-lifecycle-m4d4.md](runtime-lifecycle-m4d4.md). Host adoption and the
 audit frontier remain pending. Consumer vendor pins and global packages still
 use M4d3; do not remove the current startup scan based on this registry alone.
+
+## M4d4 — Registry cost evidence
+
+Three additional installed cases measure 1k/10k/100k registrations through the
+public port. Exact lookup/page SQL work is constant across those sizes; 100k
+representative entries allocate 43,925,504 bytes. This leaves about 22.1 MiB of
+the unchanged 64 MiB ledger budget for other metadata, so full mixed-history
+budget qualification remains required. See
+[runtime-lifecycle-m4d4-cost.md](runtime-lifecycle-m4d4-cost.md). The Core wheel
+is unchanged; Nexus/Connector now consume the registry in their M4d4b work.

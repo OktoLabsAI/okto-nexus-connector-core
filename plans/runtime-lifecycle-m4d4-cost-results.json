@@ -1,0 +1,53 @@
+{
+  "checkpoint": "M4d4_registry_cost",
+  "wheel_sha256": "e93dc1e1cdcc5d0868265c36c0e1200a1ff048aa79371e410727b3dfe74cad3b",
+  "package_files_verified": 160,
+  "isolated_interpreter": true,
+  "test_inputs_unchanged": true,
+  "junit": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "3",
+    "time": "21.864",
+    "timestamp": "2026-10-17T08:16:28.852202-03:00",
+    "hostname": "Alienware_m15"
+  },
+  "results_sha256": "9f831cc17877dd43793d624ebd3ba4bb0215e458ef2fa20c27b68fc5f7cdcaa8",
+  "measurements": [
+    {
+      "exact_lookup_vm_steps": "17",
+      "page_with_snapshot_vm_steps": "1322",
+      "tail_page_vm_steps": "22",
+      "journal_locations": "1000",
+      "allocated_bytes": "536576",
+      "allocated_bytes_per_location": "536.576",
+      "default_storage_limit_bytes": "67108864"
+    },
+    {
+      "exact_lookup_vm_steps": "17",
+      "page_with_snapshot_vm_steps": "1322",
+      "tail_page_vm_steps": "22",
+      "journal_locations": "10000",
+      "allocated_bytes": "4513792",
+      "allocated_bytes_per_location": "451.3792",
+      "default_storage_limit_bytes": "67108864"
+    },
+    {
+      "exact_lookup_vm_steps": "17",
+      "page_with_snapshot_vm_steps": "1322",
+      "tail_page_vm_steps": "22",
+      "journal_locations": "100000",
+      "allocated_bytes": "43925504",
+      "allocated_bytes_per_location": "439.25504",
+      "default_storage_limit_bytes": "67108864"
+    }
+  ],
+  "limits": [
+    "Registry only; excludes populated capacity/slot history and per-session journals",
+    "Representative 36-character scope IDs, 75-character journal filenames",
+    "No timing SLA or total 100k-session host storage qualification",
+    "Default ledger cap unchanged at 64 MiB"
+  ]
+}
