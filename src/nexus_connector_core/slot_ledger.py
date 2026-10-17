@@ -19,7 +19,8 @@ from .models import (CoreError, OperationKey, OwnedSlotPage,
                      OwnedSlotReservation, OwnedSlotState, SessionKey)
 from .capacity_storage import (SCHEMA as CAPACITY_SCHEMA, SQLiteCapacityOperations,
                                transfer_reserved_open, release_session_capacity, _changed)
-from .journal_location_storage import SCHEMA as JOURNAL_LOCATION_SCHEMA, SQLiteJournalLocationRegistry
+from .journal_location_storage import (EMPTY_DIGEST, SCHEMA as JOURNAL_LOCATION_SCHEMA,
+                                       SQLiteJournalLocationRegistry)
 
 
 class SQLiteOwnedSlotLedger(SQLiteCapacityOperations, SQLiteJournalLocationRegistry):
@@ -92,6 +93,11 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations, SQLiteJournalLocationRegis
                       or not identity[0].startswith('store_')
                       or any(char not in '0123456789abcdef' for char in identity[0][6:])):
                     raise CoreError('JOURNAL_UNAVAILABLE', 'slot_ledger_open')
+                head = db.execute('SELECT 1 FROM managed_journal_head WHERE singleton=1').fetchone()
+                if head is None:
+                    has_history = db.execute('SELECT 1 FROM managed_journal_locations LIMIT 1').fetchone()
+                    db.execute('INSERT INTO managed_journal_head(singleton,revision,digest,complete) '
+                               'VALUES(1,0,?,?)', (EMPTY_DIGEST, 0 if has_history else 1))
                 db.execute('COMMIT')
             except BaseException:
                 self._rollback_if_active(db)

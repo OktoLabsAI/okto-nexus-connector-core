@@ -57,6 +57,89 @@ def test_existing_registered_ledger_acquires_id_without_losing_history(tmp_path)
     asyncio.run(run())
 
 
+def test_registry_head_tracks_committed_registrations_and_survives_reopen(tmp_path):
+    async def run():
+        path = tmp_path / 'owned-slots.db'
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            empty = await ledger.journal_registry_head()
+            assert empty.complete and empty.revision == 0 and empty.digest == '0' * 64
+            assert empty.store_id == await ledger.physical_store_id()
+            records = await ledger.register_journal_locations((location(1), location(2)))
+            head = await ledger.journal_registry_head()
+            assert head.complete and head.revision == records[-1].revision
+            assert head.digest != empty.digest
+            assert await ledger.register_journal_locations((location(1), location(2))) == records
+            assert await ledger.journal_registry_head() == head
+            with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+                await ledger.register_journal_locations((location(3),
+                    JournalLocation('session-1.db', location(3).session)))
+            assert await ledger.journal_registry_head() == head
+            ledger.close()
+            ledger = SQLiteOwnedSlotLedger(path)
+            assert await ledger.journal_registry_head() == head
+            assert await ledger.advance_journal_registry_head() == head
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
+def test_legacy_registry_head_conversion_is_bounded_and_resumable(tmp_path):
+    path = tmp_path / 'owned-slots.db'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE managed_journal_locations ('
+            'revision INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, '
+            'server_id TEXT, executor_id TEXT, session_id TEXT)')
+        for index in range(5):
+            db.execute('INSERT INTO managed_journal_locations '
+                '(name,server_id,executor_id,session_id) VALUES(?,?,?,?)',
+                (f'session-{index}.db', 'server', 'executor', f'session-{index}'))
+
+    async def run():
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            assert not (await ledger.journal_registry_head()).complete
+            first = await ledger.advance_journal_registry_head(limit=2)
+            assert first.revision == 2 and not first.complete
+            await ledger.register_journal_locations((location(5),))
+            assert (await ledger.journal_registry_head()).revision == 2
+            ledger.close()
+            ledger = SQLiteOwnedSlotLedger(path)
+            assert await ledger.journal_registry_head() == first
+            second = await ledger.advance_journal_registry_head(limit=2)
+            assert second.revision == 4 and not second.complete
+            final = await ledger.advance_journal_registry_head(limit=2)
+            assert final.revision == 6 and final.complete
+            await ledger.register_journal_locations((location(6),))
+            assert (await ledger.journal_registry_head()).revision == 7
+            with pytest.raises(ValueError):
+                await ledger.advance_journal_registry_head(limit=129)
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
+def test_registry_head_rejects_missing_registration_and_immutable_mutations(tmp_path):
+    async def run():
+        path = tmp_path / 'owned-slots.db'
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            await ledger.register_journal_locations((location(1),))
+            with sqlite3.connect(path) as db:
+                with pytest.raises(sqlite3.IntegrityError, match='immutable'):
+                    db.execute('DELETE FROM managed_journal_locations WHERE revision=1')
+                with pytest.raises(sqlite3.IntegrityError, match='immutable'):
+                    db.execute('UPDATE managed_journal_locations SET name=? WHERE revision=1',
+                               ('different.db',))
+                db.execute('DROP TRIGGER managed_journal_locations_no_delete')
+                db.execute('DELETE FROM managed_journal_locations WHERE revision=1')
+            with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+                await ledger.journal_registry_head()
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
 def test_registration_is_immutable_idempotent_and_independent_of_capacity(tmp_path):
     async def run():
         path = tmp_path / 'owned-slots.db'

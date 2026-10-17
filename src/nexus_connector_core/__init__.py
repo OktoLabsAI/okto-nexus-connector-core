@@ -1,7 +1,8 @@
 """Embeddable native harness core. Importing this package has no runtime side effects."""
 
 from .discovery_control import DiscoveryCancelled
-from .journal_locations import JournalLocation, JournalRegistration, JournalLocationPage, JournalLocationRegistry
+from .journal_locations import (JournalLocation, JournalRegistration, JournalLocationPage,
+                                JournalRegistryHead, JournalLocationRegistry)
 from .automation import DEFAULT_RUNTIME_AUTOMATION, RuntimeAutomationPolicy, RuntimeAutomation
 from .models import (
     ControlTargeting,

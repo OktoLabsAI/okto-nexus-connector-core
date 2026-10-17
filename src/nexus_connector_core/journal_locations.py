@@ -44,9 +44,19 @@ class JournalLocationPage:
     next_after_revision: int | None
 
 
+@dataclass(frozen=True, slots=True)
+class JournalRegistryHead:
+    store_id: str
+    revision: int
+    digest: str
+    complete: bool
+
+
 class JournalLocationRegistry(Protocol):
     """Host storage port. Registration must precede productive file creation."""
     async def physical_store_id(self) -> str: ...
+    async def journal_registry_head(self) -> JournalRegistryHead: ...
+    async def advance_journal_registry_head(self, *, limit: int = 128) -> JournalRegistryHead: ...
     async def register_journal_locations(self, locations: tuple[JournalLocation, ...]) -> tuple[JournalRegistration, ...]: ...
     async def journal_location(self, name: str) -> JournalRegistration | None: ...
     async def journal_location_page(self, *, after_revision: int = 0,

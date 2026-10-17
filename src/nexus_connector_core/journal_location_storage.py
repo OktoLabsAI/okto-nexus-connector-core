@@ -3,8 +3,13 @@
 This registry alone does not establish an audit frontier. Consumers must retain
 their existing startup audit until creation discipline and conversion qualify.
 """
+import hashlib
+import json
+import re
+
 from .journal_locations import (JournalLocation, JournalRegistration,
-                                JournalLocationPage, validate_journal_name)
+                                JournalLocationPage, JournalRegistryHead,
+                                validate_journal_name)
 from .models import CoreError, SessionKey
 from .journal import validate_claim_page
 
@@ -26,7 +31,46 @@ CREATE TABLE IF NOT EXISTS managed_store_identity (
 CREATE UNIQUE INDEX IF NOT EXISTS managed_journal_session_location
     ON managed_journal_locations(server_id,executor_id,session_id)
     WHERE session_id IS NOT NULL;
+CREATE TABLE IF NOT EXISTS managed_journal_head (
+    singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+    revision INTEGER NOT NULL CHECK(revision>=0),
+    digest TEXT NOT NULL,
+    complete INTEGER NOT NULL CHECK(complete IN (0,1))
+);
+CREATE TRIGGER IF NOT EXISTS managed_journal_locations_no_update
+    BEFORE UPDATE ON managed_journal_locations
+    BEGIN SELECT RAISE(ABORT, 'journal registration is immutable'); END;
+CREATE TRIGGER IF NOT EXISTS managed_journal_locations_no_delete
+    BEFORE DELETE ON managed_journal_locations
+    BEGIN SELECT RAISE(ABORT, 'journal registration is immutable'); END;
 '''
+
+EMPTY_DIGEST = '0' * 64
+
+
+def _extend_digest(digest, record):
+    location = record.location
+    scope = location.session
+    payload = json.dumps([record.revision, location.name,
+        scope.server_id if scope else None,
+        scope.executor_id if scope else None,
+        scope.session_id if scope else None], ensure_ascii=True,
+        separators=(',', ':')).encode('utf-8')
+    return hashlib.sha256(bytes.fromhex(digest) + payload).hexdigest()
+
+
+def _head(db):
+    identity = db.execute('SELECT store_id FROM managed_store_identity WHERE singleton=1').fetchone()
+    row = db.execute('SELECT revision,digest,complete FROM managed_journal_head WHERE singleton=1').fetchone()
+    if (identity is None or row is None or type(row[0]) is not int or row[0] < 0
+            or type(row[1]) is not str or re.fullmatch('[0-9a-f]{64}', row[1]) is None
+            or row[2] not in (0, 1)
+            or (row[0] == 0 and row[1] != EMPTY_DIGEST)):
+        raise CoreError('JOURNAL_UNAVAILABLE', 'journal_registry')
+    high = db.execute('SELECT COALESCE(MAX(revision),0) FROM managed_journal_locations').fetchone()[0]
+    if row[0] > high or (row[2] == 1 and row[0] != high):
+        raise CoreError('PROFILE_DRIFT', 'journal_registry')
+    return JournalRegistryHead(identity[0], row[0], row[1], bool(row[2]))
 
 
 def registration(row):
@@ -46,6 +90,44 @@ def registration(row):
 
 
 class SQLiteJournalLocationRegistry:
+    async def journal_registry_head(self):
+        """Read the durable frontier; incomplete heads cannot authorize audit elision."""
+        def read(db):
+            self._check_storage_identity(db)
+            return _head(db)
+        return await self._run(read)
+
+    async def advance_journal_registry_head(self, *, limit=128):
+        """Convert existing registrations in bounded, resumable transactions."""
+        if type(limit) is not int or not 1 <= limit <= 128:
+            raise ValueError('Journal head advance limit must be from 1 to 128.')
+        def advance(db):
+            self._check_storage_identity(db)
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                head = _head(db)
+                if head.complete:
+                    db.execute('COMMIT')
+                    return head
+                rows = db.execute('SELECT * FROM managed_journal_locations WHERE revision>? '
+                    'ORDER BY revision LIMIT ?', (head.revision, limit + 1)).fetchall()
+                digest = head.digest
+                revision = head.revision
+                for row in rows[:limit]:
+                    record = registration(row)
+                    digest = _extend_digest(digest, record)
+                    revision = record.revision
+                complete = len(rows) <= limit
+                db.execute('UPDATE managed_journal_head SET revision=?,digest=?,complete=? '
+                    'WHERE singleton=1', (revision, digest, int(complete)))
+                result = JournalRegistryHead(head.store_id, revision, digest, complete)
+                db.execute('COMMIT')
+                return result
+            except BaseException:
+                self._rollback_if_active(db)
+                raise
+        return await self._run(advance)
+
     async def physical_store_id(self):
         """Durable ledger identity for a host-owned cross-store audit binding.
 
@@ -70,6 +152,9 @@ class SQLiteJournalLocationRegistry:
             self._check_storage_identity(db)
             db.execute('BEGIN IMMEDIATE')
             try:
+                head = _head(db)
+                digest = head.digest
+                revision = head.revision
                 result = []
                 for location in locations:
                     previous = registration(db.execute('SELECT * FROM managed_journal_locations WHERE name=?',
@@ -86,7 +171,14 @@ class SQLiteJournalLocationRegistry:
                         raise CoreError('PROFILE_DRIFT', 'journal_registry')
                     cursor = db.execute('INSERT INTO managed_journal_locations(name,server_id,executor_id,session_id) '
                         'VALUES(?,?,?,?)', (location.name, *identity))
-                    result.append(JournalRegistration(location, cursor.lastrowid))
+                    record = JournalRegistration(location, cursor.lastrowid)
+                    result.append(record)
+                    if head.complete:
+                        digest = _extend_digest(digest, record)
+                        revision = record.revision
+                if head.complete and revision != head.revision:
+                    db.execute('UPDATE managed_journal_head SET revision=?,digest=? WHERE singleton=1',
+                               (revision, digest))
                 db.execute('COMMIT')
                 return tuple(result)
             except BaseException:

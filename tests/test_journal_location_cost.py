@@ -43,6 +43,8 @@ def test_registry_cost_is_bounded_per_lookup_or_page(tmp_path, count, record_pro
                 assert steps[0] < limit, (label, steps[0])
                 return result
             last = location(count - 1)
+            head = await observe(lambda: ledger.journal_registry_head(), 'registry_head', 500)
+            assert head.complete and head.revision == count
             found = await observe(lambda: ledger.journal_location(last.name), 'exact_lookup', 500)
             assert found.location == last and found.revision == count
             page = await observe(lambda: ledger.journal_location_page(after_revision=count - 129),
