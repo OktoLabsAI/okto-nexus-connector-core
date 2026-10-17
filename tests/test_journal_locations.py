@@ -140,6 +140,63 @@ def test_registry_head_rejects_missing_registration_and_immutable_mutations(tmp_
     asyncio.run(run())
 
 
+def test_audit_anchor_is_staged_only_for_complete_exact_head(tmp_path):
+    async def run():
+        path = tmp_path / 'owned-slots.db'
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            assert await ledger.journal_audit_anchor() is None
+            initial = await ledger.journal_registry_head()
+            token = 'audit_' + 'a' * 32
+            anchor = await ledger.stage_journal_audit_anchor(nonce=token, head=initial)
+            assert (anchor.store_id, anchor.nonce, anchor.revision, anchor.digest) == (
+                initial.store_id, token, initial.revision, initial.digest)
+            assert await ledger.stage_journal_audit_anchor(nonce=token, head=initial) == anchor
+            await ledger.register_journal_locations((location(1),))
+            assert await ledger.journal_audit_anchor() == anchor
+            with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+                await ledger.stage_journal_audit_anchor(nonce=token, head=initial)
+            current = await ledger.journal_registry_head()
+            replacement = await ledger.stage_journal_audit_anchor(
+                nonce='audit_' + 'b' * 32, head=current)
+            assert replacement.revision == 1 and replacement != anchor
+            ledger.close()
+            ledger = SQLiteOwnedSlotLedger(path)
+            assert await ledger.journal_audit_anchor() == replacement
+            with pytest.raises(ValueError):
+                await ledger.stage_journal_audit_anchor(nonce='bad', head=current)
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
+def test_incomplete_legacy_registry_cannot_stage_audit_anchor(tmp_path):
+    path = tmp_path / 'owned-slots.db'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE managed_journal_locations ('
+            'revision INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, '
+            'server_id TEXT, executor_id TEXT, session_id TEXT)')
+        db.execute('INSERT INTO managed_journal_locations '
+            '(name,server_id,executor_id,session_id) VALUES(?,?,?,?)',
+            ('session-1.db', 'server', 'executor', 'session-1'))
+
+    async def run():
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            incomplete = await ledger.journal_registry_head()
+            assert not incomplete.complete
+            with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+                await ledger.stage_journal_audit_anchor(
+                    nonce='audit_' + 'a' * 32, head=incomplete)
+            complete = await ledger.advance_journal_registry_head()
+            assert complete.complete
+            assert (await ledger.stage_journal_audit_anchor(
+                nonce='audit_' + 'a' * 32, head=complete)).revision == 1
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
 def test_registration_is_immutable_idempotent_and_independent_of_capacity(tmp_path):
     async def run():
         path = tmp_path / 'owned-slots.db'

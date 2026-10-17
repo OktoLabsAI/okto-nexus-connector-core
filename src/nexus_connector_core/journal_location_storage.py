@@ -9,6 +9,7 @@ import re
 
 from .journal_locations import (JournalLocation, JournalRegistration,
                                 JournalLocationPage, JournalRegistryHead,
+                                JournalAuditAnchor,
                                 validate_journal_name)
 from .models import CoreError, SessionKey
 from .journal import validate_claim_page
@@ -36,6 +37,12 @@ CREATE TABLE IF NOT EXISTS managed_journal_head (
     revision INTEGER NOT NULL CHECK(revision>=0),
     digest TEXT NOT NULL,
     complete INTEGER NOT NULL CHECK(complete IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS managed_journal_audit_anchor (
+    singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+    nonce TEXT NOT NULL,
+    revision INTEGER NOT NULL CHECK(revision>=0),
+    digest TEXT NOT NULL
 );
 CREATE TRIGGER IF NOT EXISTS managed_journal_locations_no_update
     BEFORE UPDATE ON managed_journal_locations
@@ -73,6 +80,20 @@ def _head(db):
     return JournalRegistryHead(identity[0], row[0], row[1], bool(row[2]))
 
 
+def _anchor(db, head):
+    row = db.execute('SELECT nonce,revision,digest FROM managed_journal_audit_anchor '
+        'WHERE singleton=1').fetchone()
+    if row is None:
+        return None
+    if (type(row[0]) is not str or re.fullmatch('audit_[0-9a-f]{32}', row[0]) is None
+            or type(row[1]) is not int or row[1] < 0 or row[1] > head.revision
+            or type(row[2]) is not str or re.fullmatch('[0-9a-f]{64}', row[2]) is None
+            or (row[1] == 0 and row[2] != EMPTY_DIGEST)
+            or (row[1] == head.revision and row[2] != head.digest)):
+        raise CoreError('PROFILE_DRIFT', 'journal_audit_anchor')
+    return JournalAuditAnchor(head.store_id, row[0], row[1], row[2])
+
+
 def registration(row):
     if row is None:
         return None
@@ -90,6 +111,45 @@ def registration(row):
 
 
 class SQLiteJournalLocationRegistry:
+    async def journal_audit_anchor(self):
+        """Read the Core half of a host-owned two-store audit handshake."""
+        def read(db):
+            self._check_storage_identity(db)
+            return _anchor(db, _head(db))
+        return await self._run(read)
+
+    async def stage_journal_audit_anchor(self, *, nonce, head):
+        """Persist an audit token only at the exact complete registry head.
+
+        The trusted host must finish its physical audit before calling this.
+        Staging alone never authorizes bypassing the startup directory scan.
+        """
+        if (type(nonce) is not str or re.fullmatch('audit_[0-9a-f]{32}', nonce) is None
+                or type(head) is not JournalRegistryHead):
+            raise ValueError('Invalid journal audit anchor.')
+        def write(db):
+            self._check_storage_identity(db)
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                current = _head(db)
+                if not current.complete or current != head:
+                    raise CoreError('PROFILE_DRIFT', 'journal_audit_anchor')
+                anchor = _anchor(db, current)
+                result = JournalAuditAnchor(current.store_id, nonce,
+                                            current.revision, current.digest)
+                if anchor != result:
+                    db.execute('INSERT INTO managed_journal_audit_anchor '
+                        '(singleton,nonce,revision,digest) VALUES(1,?,?,?) '
+                        'ON CONFLICT(singleton) DO UPDATE SET nonce=excluded.nonce, '
+                        'revision=excluded.revision,digest=excluded.digest',
+                        (nonce, current.revision, current.digest))
+                db.execute('COMMIT')
+                return result
+            except BaseException:
+                self._rollback_if_active(db)
+                raise
+        return await self._run(write)
+
     async def journal_registry_head(self):
         """Read the durable frontier; incomplete heads cannot authorize audit elision."""
         def read(db):
