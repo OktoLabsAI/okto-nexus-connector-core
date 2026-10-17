@@ -4,6 +4,7 @@ import re
 from typing import Protocol
 
 from .models import SessionKey
+from .models import CoreError
 
 
 def validate_journal_name(name):
@@ -58,6 +59,32 @@ class JournalAuditAnchor:
     nonce: str
     revision: int
     digest: str
+
+
+def require_audit_snapshot_not_rolled_back(host_anchor: JournalAuditAnchor | None,
+                                            core_anchor: JournalAuditAnchor | None,
+                                            head: JournalRegistryHead) -> None:
+    """Fence definite Core rollback before a host admits native work.
+
+    A head ahead of the host is allowed: new registrations may have committed
+    after the last paired audit. That case still requires the host's full
+    physical audit and does not by itself authorize a fast startup.
+    """
+    if host_anchor is None:
+        return
+    if (type(host_anchor) is not JournalAuditAnchor
+            or type(head) is not JournalRegistryHead
+            or type(core_anchor) is not JournalAuditAnchor
+            or not head.complete
+            or host_anchor.store_id != head.store_id
+            or core_anchor.store_id != head.store_id
+            or head.revision < host_anchor.revision
+            or (head.revision == host_anchor.revision
+                and head.digest != host_anchor.digest)
+            or core_anchor.revision < host_anchor.revision
+            or (core_anchor.revision == host_anchor.revision
+                and core_anchor.digest != host_anchor.digest)):
+        raise CoreError('PROFILE_DRIFT', 'journal_audit_snapshot')
 
 
 class JournalLocationRegistry(Protocol):

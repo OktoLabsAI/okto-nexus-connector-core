@@ -3,7 +3,8 @@
 from .discovery_control import DiscoveryCancelled
 from .journal_locations import (JournalLocation, JournalRegistration, JournalLocationPage,
                                 JournalRegistryHead, JournalAuditAnchor,
-                                JournalLocationRegistry)
+                                JournalLocationRegistry,
+                                require_audit_snapshot_not_rolled_back)
 from .automation import DEFAULT_RUNTIME_AUTOMATION, RuntimeAutomationPolicy, RuntimeAutomation
 from .models import (
     ControlTargeting,

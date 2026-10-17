@@ -5,7 +5,9 @@ import threading
 
 import pytest
 
-from nexus_connector_core import CoreError, JournalLocation, SessionKey, SQLiteOwnedSlotLedger
+from nexus_connector_core import (CoreError, JournalAuditAnchor, JournalRegistryHead,
+    JournalLocation, SessionKey, SQLiteOwnedSlotLedger,
+    require_audit_snapshot_not_rolled_back)
 
 
 def location(index):
@@ -195,6 +197,26 @@ def test_incomplete_legacy_registry_cannot_stage_audit_anchor(tmp_path):
         finally:
             ledger.close()
     asyncio.run(run())
+
+
+def test_host_snapshot_fences_definite_core_rollback_but_allows_forward_head():
+    store_id = 'store_' + 'a' * 32
+    host = JournalAuditAnchor(store_id, 'audit_' + 'b' * 32, 3, 'c' * 64)
+    same = JournalAuditAnchor(store_id, 'audit_' + 'd' * 32, 3, 'c' * 64)
+    require_audit_snapshot_not_rolled_back(host, same,
+        JournalRegistryHead(store_id, 3, 'c' * 64, True))
+    require_audit_snapshot_not_rolled_back(host, same,
+        JournalRegistryHead(store_id, 4, 'e' * 64, True))
+    for core, head in (
+        (None, JournalRegistryHead(store_id, 3, 'c' * 64, True)),
+        (same, JournalRegistryHead(store_id, 2, 'c' * 64, True)),
+        (same, JournalRegistryHead(store_id, 3, 'e' * 64, True)),
+        (same, JournalRegistryHead(store_id, 3, 'c' * 64, False)),
+        (JournalAuditAnchor(store_id, same.nonce, 2, 'c' * 64),
+            JournalRegistryHead(store_id, 4, 'e' * 64, True)),
+    ):
+        with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+            require_audit_snapshot_not_rolled_back(host, core, head)
 
 
 def test_registration_is_immutable_idempotent_and_independent_of_capacity(tmp_path):
