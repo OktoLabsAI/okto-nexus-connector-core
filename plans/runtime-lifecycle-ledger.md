@@ -118,9 +118,9 @@ refresh frontiers and cancellation-safe join are qualified. See
 selection-baseline migration and joint UI rollout remain pending. Their vendor
 wheels and the running global generation 72 still use M3h Core. M3 remains open.
 
-## M4d2 — Released pre-open capacity association
+## M4d3 — Released pre-open capacity association
 
 38 installed cases passed with exact package-byte verification. The historical
 lookup now accepts an exact released slot observation without granting release
-or replay authority. See [runtime-lifecycle-m4d2.md](runtime-lifecycle-m4d2.md).
+or replay authority. See [runtime-lifecycle-m4d3.md](runtime-lifecycle-m4d3.md).
 Consumers are being qualified with this artifact; no global rollout is claimed.

@@ -1,4 +1,4 @@
-# M4d2 — Historical association for released pre-open capacity
+# M4d3 — Historical association for released pre-open capacity
 
 The Core ledger can resolve an exact released `OwnedSlotState` to the canonical
 opening that consumed its provisional capacity slot. Placeholder identities stay
@@ -21,3 +21,7 @@ Evidence: `build/runtime-lifecycle-m4d2-installed/{manifest.json,results.xml}`.
 The installed runner verifies every package file against that wheel. Nexus and
 Connector consume the same development artifact; no PyPI release or global
 installation is part of this checkpoint. Full M4/M5 remain open in the Nexus plan.
+
+The original build/test working label was `m4d2`; those evidence paths are kept
+unchanged. The canonical plan already uses M4d2 for independent historical
+maintenance, so this extension is registered as M4d3.
