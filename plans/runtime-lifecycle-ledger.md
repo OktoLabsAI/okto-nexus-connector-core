@@ -186,3 +186,13 @@ eight installed cases plus one installed bridge case passed. The same Core
 wheel is vendored by Nexus and Connector; exact-wheel real UI and M7 latency
 qualification are still pending. See
 [runtime-lifecycle-m3o-pi-lease.md](runtime-lifecycle-m3o-pi-lease.md).
+
+## M7a — Avoid duplicate Pi content hash during cold prepare
+
+Runtime `prepare` now defers its full build hash; the admitted `open` still
+checks the complete identity before capacity reservation and native spawn.
+Direct `prepare_launch` callers retain the old validation. 88 source and 11
+selected installed tests passed; a real Pi candidate measured 0.651s versus
+8.300s for preparation without/with the full hash in one warm-cache run.
+Consumer vendors use the same wheel. See
+[runtime-lifecycle-m7a-cold-preparation.md](runtime-lifecycle-m7a-cold-preparation.md).

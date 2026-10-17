@@ -450,7 +450,12 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("BINARY_NOT_FOUND", "prepare")
         if root is None:
             raise CoreError("WORKSPACE_UNAVAILABLE", "prepare")
-        prepared = await asyncio.to_thread(prepare_launch, intent, candidate, root)
+        # No native effect occurs in prepare. The admitted open repeats
+        # prepare_launch with the full content identity check immediately
+        # before reserving a slot or creating a process. Avoid hashing Pi's
+        # entire dependency closure twice for one cold opening.
+        prepared = await asyncio.to_thread(prepare_launch, intent, candidate, root,
+                                           validate_build_identity=False)
         self._authorize(self._current_open_context(context), "runtime.open")
         return prepared
 

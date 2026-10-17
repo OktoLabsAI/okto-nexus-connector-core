@@ -17,7 +17,8 @@ def _root_fingerprint(root: Path) -> str:
 
 
 def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
-                   workspace_root: str | Path) -> PreparedLaunch:
+                   workspace_root: str | Path, *,
+                   validate_build_identity: bool = True) -> PreparedLaunch:
     if intent.adapter_id != candidate.adapter_id or candidate.trust != "selected":
         raise CoreError("BINDING_NOT_AUTHORIZED", "prepare")
     from .native.registry import registered_managed_contract
@@ -51,7 +52,7 @@ def prepare_launch(intent: LaunchIntent, candidate: InstallationCandidate,
     executable = Path(candidate.executable)
     if selected_fingerprint(candidate) != candidate.fingerprint:
         raise CoreError("PROFILE_DRIFT", "prepare")
-    if candidate.build_identity is not None:
+    if validate_build_identity and candidate.build_identity is not None:
         from .build_identity import (executable_build_identity,
                                      pi_build_identity)
         if candidate.launch_script is not None and candidate.adapter_id == "pi_rpc":
