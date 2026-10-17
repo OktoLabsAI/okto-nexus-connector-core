@@ -18,9 +18,10 @@ from .models import (CoreError, OperationKey, OwnedSlotPage,
                      OwnedSlotReservation, OwnedSlotState, SessionKey)
 from .capacity_storage import (SCHEMA as CAPACITY_SCHEMA, SQLiteCapacityOperations,
                                transfer_reserved_open, release_session_capacity, _changed)
+from .journal_location_storage import SCHEMA as JOURNAL_LOCATION_SCHEMA, SQLiteJournalLocationRegistry
 
 
-class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
+class SQLiteOwnedSlotLedger(SQLiteCapacityOperations, SQLiteJournalLocationRegistry):
     """A cross-process slot cap independent of per-executor journal files."""
 
     def __init__(self, path: str | Path, *, max_slots: int = 8,
@@ -79,6 +80,7 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
                     ON owned_slot_reservations(released);
             """)
             db.executescript(CAPACITY_SCHEMA)
+            db.executescript(JOURNAL_LOCATION_SCHEMA)
             info = self.path.stat()
             self._storage_identity = (info.st_dev, info.st_ino)
         except BaseException:

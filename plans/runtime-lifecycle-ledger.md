@@ -124,3 +124,12 @@ wheels and the running global generation 72 still use M3h Core. M3 remains open.
 lookup now accepts an exact released slot observation without granting release
 or replay authority. See [runtime-lifecycle-m4d3.md](runtime-lifecycle-m4d3.md).
 Consumers are being qualified with this artifact; no global rollout is claimed.
+
+## M4d4a — Physical journal registry foundation
+
+44 installed cases passed, including conflict rollback, concurrent registration,
+cancelled observers and storage-full retention. The registry port and SQLite
+adapter record creation intent independently of execution/capacity authority.
+See [runtime-lifecycle-m4d4.md](runtime-lifecycle-m4d4.md). Host adoption and the
+audit frontier remain pending. Consumer vendor pins and global packages still
+use M4d3; do not remove the current startup scan based on this registry alone.

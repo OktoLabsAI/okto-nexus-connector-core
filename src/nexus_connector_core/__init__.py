@@ -1,6 +1,7 @@
 """Embeddable native harness core. Importing this package has no runtime side effects."""
 
 from .discovery_control import DiscoveryCancelled
+from .journal_locations import JournalLocation, JournalRegistration, JournalLocationPage, JournalLocationRegistry
 from .automation import DEFAULT_RUNTIME_AUTOMATION, RuntimeAutomationPolicy, RuntimeAutomation
 from .models import (
     ControlTargeting,
@@ -134,6 +135,7 @@ from .close_operation import r4_close_operation
 __version__ = "0.0.12"
 
 __all__ = [
+    'JournalLocation', 'JournalRegistration', 'JournalLocationPage', 'JournalLocationRegistry',
     "IndependentInventoryObserver", "HarnessObservationResult", "HarnessObservation",
     "InventoryObservationBatch", "InventoryRefreshFrontier",
     "CAPACITY_FRAME_TYPES", "CAPACITY_REQUEST_TYPES", "encode_capacity_frame", "decode_capacity_frame",
