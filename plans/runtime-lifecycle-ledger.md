@@ -99,3 +99,11 @@ live rollout and remaining M3 criteria are recorded in the canonical ledger.
 43 installed cases passed. See [runtime-lifecycle-m3e.md](runtime-lifecycle-m3e.md) for scope,
 artifact identities, initial test failures and remaining boundaries.
 No global rollout; M3/M5 remain in progress.
+
+## M3h — Parallel passive observation (validated checkpoint)
+
+59 installed cases passed; 18 POSIX-only cases skipped on Windows. Exact
+candidate evidence preserved across four passive measurements of real installed
+harnesses. Bounded workers retain cancellation and join ownership. See
+[runtime-lifecycle-m3h.md](runtime-lifecycle-m3h.md). Full per-harness publication,
+global rollout and M3 qualification remain pending.
