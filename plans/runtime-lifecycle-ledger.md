@@ -163,3 +163,14 @@ verified byte for byte. See
 [runtime-lifecycle-m5c-contract.md](runtime-lifecycle-m5c-contract.md).
 Connector production, Server authenticated acceptance/replay and real UI
 qualification remain pending; the global installation is unchanged.
+
+## M3 Pi version-probe deadline (installed real UI checkpoint)
+
+Pi's three-second read-only version probe failed intermittently during the
+real Nexus connection wizard. The Pi-specific owned probe now permits ten
+seconds. Three source and three isolated installed tests passed, and a
+disposable installed Nexus completed the real Pi connection test, two
+Meta-harness replies and an automatic post-restart reply with 1/1 ACK. The
+first cold session still took about 162 seconds to
+become ready; M3/M7 latency work and the full UI gates remain open. See
+[runtime-lifecycle-m3-pi-version-probe.md](runtime-lifecycle-m3-pi-version-probe.md).
