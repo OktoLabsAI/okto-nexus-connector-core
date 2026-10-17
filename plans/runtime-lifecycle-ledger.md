@@ -174,3 +174,15 @@ Meta-harness replies and an automatic post-restart reply with 1/1 ACK. The
 first cold session still took about 162 seconds to
 become ready; M3/M7 latency work and the full UI gates remain open. See
 [runtime-lifecycle-m3-pi-version-probe.md](runtime-lifecycle-m3-pi-version-probe.md).
+
+## M3o — Pi lease rotation at native-action launch
+
+A disposable real UI trace showed a 73-second Pi pre-spawn refusal across a
+lease renewal. Focused red/green coverage found that the Pi-specific
+native-action owner rejected the new lease ID while the shared opening
+authority accepted that rotation. The owner now permits the new ID only with
+an advancing serial and stable subject/grant/boot scope. Eight source and
+eight installed cases plus one installed bridge case passed. The same Core
+wheel is vendored by Nexus and Connector; exact-wheel real UI and M7 latency
+qualification are still pending. See
+[runtime-lifecycle-m3o-pi-lease.md](runtime-lifecycle-m3o-pi-lease.md).

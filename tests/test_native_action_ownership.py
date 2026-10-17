@@ -240,7 +240,8 @@ def test_pi_owner_starts_once_and_checks_prepared_secret_and_current_context():
     asyncio.run(run())
 
 
-@pytest.mark.parametrize('change', ['renew', 'authorization', 'scope', 'boot', 'serial_rollback', 'deadline_rollback'])
+@pytest.mark.parametrize('change', ['renew', 'authorization', 'scope', 'grant', 'boot',
+                                     'serial_rollback', 'lease_id_without_serial', 'deadline_rollback'])
 def test_pi_launch_revalidates_renewal_during_listener_start(change):
     from nexus_connector_core.models import R4Authority
     async def run():
@@ -256,15 +257,19 @@ def test_pi_launch_revalidates_renewal_during_listener_start(change):
         async def renewing_start():
             port = await start()
             renewed = replace(context, lease_deadline_monotonic=context.lease_deadline_monotonic + 30,
-                r4_authority=replace(context.r4_authority, lease_serial=4))
+                r4_authority=replace(context.r4_authority, lease_id='lease-renewed', lease_serial=4))
             if change == 'authorization':
                 renewed = replace(renewed, authorization_revision=context.authorization_revision + 1)
             elif change == 'scope':
                 renewed = replace(renewed, agent_id='other')
+            elif change == 'grant':
+                renewed = replace(renewed, r4_authority=replace(renewed.r4_authority, grant_id='other'))
             elif change == 'boot':
                 renewed = replace(renewed, r4_authority=replace(renewed.r4_authority, boot_id='other'))
             elif change == 'serial_rollback':
                 renewed = replace(renewed, r4_authority=replace(renewed.r4_authority, lease_serial=2))
+            elif change == 'lease_id_without_serial':
+                renewed = replace(renewed, r4_authority=replace(renewed.r4_authority, lease_serial=3))
             elif change == 'deadline_rollback':
                 renewed = replace(renewed, lease_deadline_monotonic=context.lease_deadline_monotonic - 1)
             current[0] = renewed
