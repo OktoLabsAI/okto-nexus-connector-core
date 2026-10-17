@@ -22,8 +22,9 @@ _SCOPE = ('server_id', 'executor_id', 'agent_id', 'binding_id', 'workspace_id',
 
 
 def _request(value):
-    if (set(value) != {'contract_revision', 'type', 'request_id', 'refusal',
-                       'receipt', 'capacity', 'native_absent'}
+    if (set(value) != {'contract_revision', 'type', 'request_id', 'server_id',
+                       'executor_id', 'connection_id', 'connection_generation',
+                       'refusal', 'receipt', 'capacity', 'native_absent'}
             or value['type'] != 'startup.refuse' or value['native_absent'] is not True):
         raise ValueError('Invalid startup refusal request.')
     request_id = value['request_id']
@@ -31,6 +32,9 @@ def _request(value):
         raise ValueError('Invalid startup refusal request ID.')
     refusal = validate_r4_startup_refusal(value['refusal'])
     source = refusal['binding']['source']
+    if any(value[name] != source[name] for name in (
+            'server_id', 'executor_id', 'connection_id', 'connection_generation')):
+        raise CoreError('SCOPE_MISMATCH', 'startup_refusal_source')
     receipt = decode_r4_frame(canonical_json(value['receipt']))
     expected = project_r4_bound_receipt(refusal['binding'], OperationReceipt(
         source['operation_id'], refusal['binding']['core_intent_hash'], 'FAILED',

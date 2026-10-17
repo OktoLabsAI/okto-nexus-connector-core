@@ -34,7 +34,10 @@ def report(with_capacity=False):
             CapacityConsumption('turn-1', 'sha256:' + 'b' * 64,
                                 frame['operation_id'], frame['intent_hash'])).to_dict()
     return dict(contract_revision=STARTUP_REFUSAL_REVISION, type='startup.refuse',
-                request_id='refuse-1', refusal=refusal, receipt=receipt,
+                request_id='refuse-1', server_id=frame['server_id'],
+                executor_id=frame['executor_id'], connection_id=frame['connection_id'],
+                connection_generation=frame['connection_generation'],
+                refusal=refusal, receipt=receipt,
                 capacity=capacity, native_absent=True)
 
 
@@ -56,6 +59,7 @@ def test_prelease_report_is_strict_and_negotiated(with_capacity):
     lambda value: value.update(native_absent=False),
     lambda value: value['receipt'].update(possible_effect=True, retry_safe=False),
     lambda value: value['receipt'].update(connection_generation=999),
+    lambda value: value.update(connection_generation=999),
     lambda value: value['capacity']['request']['scope'].update(session_id='other'),
     lambda value: value['capacity']['consumption'].update(opening_operation_id='other'),
     lambda value: value.update(unexpected=True),
