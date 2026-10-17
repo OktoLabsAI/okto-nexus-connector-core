@@ -9,6 +9,7 @@ prelaunch refusal or observes stop through its native containment handle.
 from __future__ import annotations
 
 from pathlib import Path
+import secrets
 import sqlite3
 import time
 
@@ -81,6 +82,20 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations, SQLiteJournalLocationRegis
             """)
             db.executescript(CAPACITY_SCHEMA)
             db.executescript(JOURNAL_LOCATION_SCHEMA)
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                identity = db.execute('SELECT store_id FROM managed_store_identity WHERE singleton=1').fetchone()
+                if identity is None:
+                    db.execute('INSERT INTO managed_store_identity(singleton,store_id) VALUES(1,?)',
+                               ('store_' + secrets.token_hex(16),))
+                elif (type(identity[0]) is not str or len(identity[0]) != 38
+                      or not identity[0].startswith('store_')
+                      or any(char not in '0123456789abcdef' for char in identity[0][6:])):
+                    raise CoreError('JOURNAL_UNAVAILABLE', 'slot_ledger_open')
+                db.execute('COMMIT')
+            except BaseException:
+                self._rollback_if_active(db)
+                raise
             info = self.path.stat()
             self._storage_identity = (info.st_dev, info.st_ino)
         except BaseException:

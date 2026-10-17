@@ -1,0 +1,7 @@
+# M4d4c1 — Durable physical ledger identity
+
+The Core owned-slot ledger now creates one random `store_` identity under its SQLite transaction and exposes it through the `JournalLocationRegistry` port. The identity survives reopening the same ledger, is shared by concurrent handles, and differs for a newly created ledger. An invalid stored identity blocks opening or reading instead of being silently treated as a new empty store. The existing in-process file identity check still fences replacement of an open ledger path.
+
+This is a prerequisite for a host-owned audit frontier, not the frontier itself. Nexus and Connector do not yet bind this ID to their own durable state or physical journals. Restoring an old ledger together with its ID, or replacing a historical journal, is not detected by this field alone. Both hosts must retain their present startup audits and admission fences until cross-store binding, initial conversion, restore/reset invalidation and crash tests qualify.
+
+The focused source registry suite passed 14 tests. A locally built Core 0.0.12 wheel (`1d5bdb7a510ad0ad1b8767a156ed3d8c7a042425809227217c0dd46d1eb294ae`) was installed in a disposable environment; the three changed package files matched the wheel byte for byte and 26 installed registry/capacity tests passed. No global package or Nexus process was changed. This version remains on `feature/v0.0.12`; Nexus and Connector already pin Core 0.0.12 for their coordinated development branches.

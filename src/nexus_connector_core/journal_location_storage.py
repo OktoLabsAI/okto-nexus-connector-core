@@ -19,6 +19,10 @@ CREATE TABLE IF NOT EXISTS managed_journal_locations (
     CHECK ((server_id IS NULL AND executor_id IS NULL AND session_id IS NULL)
         OR (server_id IS NOT NULL AND executor_id IS NOT NULL AND session_id IS NOT NULL))
 );
+CREATE TABLE IF NOT EXISTS managed_store_identity (
+    singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+    store_id TEXT NOT NULL UNIQUE
+);
 CREATE UNIQUE INDEX IF NOT EXISTS managed_journal_session_location
     ON managed_journal_locations(server_id,executor_id,session_id)
     WHERE session_id IS NOT NULL;
@@ -42,6 +46,22 @@ def registration(row):
 
 
 class SQLiteJournalLocationRegistry:
+    async def physical_store_id(self):
+        """Durable ledger identity for a host-owned cross-store audit binding.
+
+        This identifies the ledger, not the other physical journals or an
+        audit frontier. A host must bind and verify it against its own state.
+        """
+        def read(db):
+            self._check_storage_identity(db)
+            row = db.execute('SELECT store_id FROM managed_store_identity WHERE singleton=1').fetchone()
+            if (row is None or type(row[0]) is not str or not row[0].startswith('store_')
+                    or len(row[0]) != 38
+                    or any(char not in '0123456789abcdef' for char in row[0][6:])):
+                raise CoreError('JOURNAL_UNAVAILABLE', 'journal_registry')
+            return row[0]
+        return await self._run(read)
+
     async def register_journal_locations(self, locations):
         if type(locations) is not tuple or not 1 <= len(locations) <= 128 or any(
                 type(location) is not JournalLocation for location in locations):

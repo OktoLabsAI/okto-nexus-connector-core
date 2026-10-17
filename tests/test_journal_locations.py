@@ -12,6 +12,31 @@ def location(index):
     return JournalLocation(f'session-{index}.db', SessionKey('server', 'executor', f'session-{index}'))
 
 
+def test_physical_store_id_is_durable_and_unique_to_the_ledger(tmp_path):
+    async def run():
+        path = tmp_path / 'owned-slots.db'
+        first = SQLiteOwnedSlotLedger(path)
+        second = None
+        try:
+            store_id = await first.physical_store_id()
+            assert store_id.startswith('store_') and len(store_id) == 38
+            second = SQLiteOwnedSlotLedger(path)
+            assert await second.physical_store_id() == store_id
+            first.close()
+            first = SQLiteOwnedSlotLedger(path)
+            assert await first.physical_store_id() == store_id
+            fresh = SQLiteOwnedSlotLedger(tmp_path / 'another-ledger.db')
+            try:
+                assert await fresh.physical_store_id() != store_id
+            finally:
+                fresh.close()
+        finally:
+            first.close()
+            if second is not None:
+                second.close()
+    asyncio.run(run())
+
+
 def test_registration_is_immutable_idempotent_and_independent_of_capacity(tmp_path):
     async def run():
         path = tmp_path / 'owned-slots.db'
