@@ -9,6 +9,7 @@ from .models import CoreError
 from .protocol import strict_json
 from .lease_denial import LEASE_DENIAL_REVISION, decode_lease_denial
 from .session_release import SESSION_RELEASE_REVISION, decode_session_release
+from .startup_refusal_link import STARTUP_REFUSAL_REVISION, decode_startup_refusal
 from .event_artifacts import EVENT_ARTIFACT_REVISION, decode_event_artifact
 
 
@@ -36,6 +37,10 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
         if isinstance(capabilities, (str, bytes)) or SESSION_RELEASE_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
         return decode_session_release(raw)
+    if header.get('contract_revision') == STARTUP_REFUSAL_REVISION:
+        if isinstance(capabilities, (str, bytes)) or STARTUP_REFUSAL_REVISION not in capabilities:
+            raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+        return decode_startup_refusal(raw)
     if header.get('contract_revision') == LEASE_DENIAL_REVISION:
         if isinstance(capabilities, (str, bytes)) or LEASE_DENIAL_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')

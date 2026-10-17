@@ -153,3 +153,13 @@ regression coverage. See [runtime-lifecycle-m5a.md](runtime-lifecycle-m5a.md).
 Connector consumption is still pending and Nexus consumer qualification has
 four remote publication failures under investigation. No global rollout or
 complete M5 qualification is claimed.
+
+## M5c — Prelease control report contract (foundation)
+
+Core now validates a negotiated current-connection startup-refusal report with
+the original no-effect receipt and exact released capacity evidence. The final
+installed wheel passed 73 selected control/receipt cases with 162 package files
+verified byte for byte. See
+[runtime-lifecycle-m5c-contract.md](runtime-lifecycle-m5c-contract.md).
+Connector production, Server authenticated acceptance/replay and real UI
+qualification remain pending; the global installation is unchanged.

@@ -1,0 +1,9 @@
+# M5c — Authenticated prelease refusal contract foundation
+
+Candidate discovery can fail before a runtime or initial lease exists. A generic terminal receipt at that cut has no applied dispatch lease and cannot independently prove that the current host stopped the producer. The server-side acceptance path therefore remains unchanged until a typed report is authenticated on the live control channel.
+
+Core now defines the negotiated `nexus-startup-refusal-v1` frame codec for `startup.refuse`, `startup.refuse.accepted` and `startup.refuse.deferred`. A request binds the original Core startup refusal, its exact terminal no-effect receipt, an optional released `new_session` capacity reservation, a bounded request ID and the host's `native_absent` attestation. The codec rejects a changed operation, connection generation, scope, receipt effect flags, capacity consumption or unnegotiated frame. This is internal evidence validation; the flag and report are not authority until the Server verifies the authenticated current channel and canonical operation in one transaction.
+
+Source: 28 focused startup-refusal and extension tests passed. Installed wheel `okto_nexus_connector_core-0.0.12-py3-none-any.whl` SHA-256 `d59166ba3956c886711604da7e4dfea35f637cb9bfe4965e43b15a9cadc412d2`: 73 selected control/receipt tests passed under `-I`, 162 installed package files matched the wheel byte for byte, and application source was absent from the import path. Machine-readable output: `build/m5c-control-regression/manifest.json` and `results.xml` (build artifacts, not committed).
+
+Next: implement durable Connector report production, the Server's authenticated channel transaction and replay after lost ACK, then separate-process differential and security tests. This checkpoint alone does not isolate prelease discovery failures in the running product. The global Nexus installation was not changed.
