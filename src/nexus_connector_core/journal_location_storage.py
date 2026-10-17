@@ -44,6 +44,16 @@ CREATE TABLE IF NOT EXISTS managed_journal_audit_anchor (
     revision INTEGER NOT NULL CHECK(revision>=0),
     digest TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS managed_journal_extension_progress (
+    singleton INTEGER PRIMARY KEY CHECK(singleton=1),
+    revision INTEGER NOT NULL CHECK(revision>=0),
+    digest TEXT NOT NULL,
+    complete INTEGER NOT NULL CHECK(complete IN (0,1))
+);
+CREATE TABLE IF NOT EXISTS managed_journal_digest_checkpoints (
+    revision INTEGER PRIMARY KEY CHECK(revision>=1),
+    digest TEXT NOT NULL
+);
 CREATE TRIGGER IF NOT EXISTS managed_journal_locations_no_update
     BEFORE UPDATE ON managed_journal_locations
     BEGIN SELECT RAISE(ABORT, 'journal registration is immutable'); END;
@@ -94,6 +104,19 @@ def _anchor(db, head):
     return JournalAuditAnchor(head.store_id, row[0], row[1], row[2])
 
 
+def _extension_progress(db, head):
+    row = db.execute('SELECT revision,digest,complete FROM managed_journal_extension_progress '
+        'WHERE singleton=1').fetchone()
+    if (row is None or type(row[0]) is not int or row[0] < 0 or row[0] > head.revision
+            or type(row[1]) is not str or re.fullmatch('[0-9a-f]{64}', row[1]) is None
+            or row[2] not in (0, 1)
+            or (row[0] == 0 and row[1] != EMPTY_DIGEST)
+            or (row[2] == 1 and (not head.complete or row[0] != head.revision
+                or row[1] != head.digest))):
+        raise CoreError('PROFILE_DRIFT', 'journal_extension_index')
+    return row
+
+
 def registration(row):
     if row is None:
         return None
@@ -111,6 +134,70 @@ def registration(row):
 
 
 class SQLiteJournalLocationRegistry:
+    async def advance_journal_extension_index(self, *, limit=128):
+        """Build sparse digest checkpoints in bounded resumable transactions."""
+        if type(limit) is not int or not 1 <= limit <= 128:
+            raise ValueError('Journal extension index limit must be from 1 to 128.')
+        def advance(db):
+            self._check_storage_identity(db)
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                head = _head(db)
+                if not head.complete:
+                    raise CoreError('JOURNAL_UNAVAILABLE', 'journal_extension_index')
+                revision, digest, complete = _extension_progress(db, head)
+                if complete:
+                    db.execute('COMMIT')
+                    return True
+                rows = db.execute('SELECT * FROM managed_journal_locations WHERE revision>? '
+                    'ORDER BY revision LIMIT ?', (revision, limit + 1)).fetchall()
+                for row in rows[:limit]:
+                    record = registration(row)
+                    digest = _extend_digest(digest, record)
+                    revision = record.revision
+                complete = len(rows) <= limit
+                if complete and (revision != head.revision or digest != head.digest):
+                    raise CoreError('PROFILE_DRIFT', 'journal_extension_index')
+                if rows:
+                    db.execute('INSERT INTO managed_journal_digest_checkpoints(revision,digest) '
+                        'VALUES(?,?)', (revision, digest))
+                db.execute('UPDATE managed_journal_extension_progress SET '
+                    'revision=?,digest=?,complete=? WHERE singleton=1',
+                    (revision, digest, int(complete)))
+                db.execute('COMMIT')
+                return complete
+            except BaseException:
+                self._rollback_if_active(db)
+                raise
+        return await self._run(advance)
+
+    async def journal_digest_at_revision(self, revision):
+        """Resolve an exact historical digest with at most 128 row hashes."""
+        if type(revision) is not int or revision < 0:
+            raise ValueError('Invalid journal revision.')
+        def read(db):
+            self._check_storage_identity(db)
+            head = _head(db)
+            if revision > head.revision:
+                raise CoreError('PROFILE_DRIFT', 'journal_extension_index')
+            if not _extension_progress(db, head)[2]:
+                raise CoreError('JOURNAL_UNAVAILABLE', 'journal_extension_index')
+            if revision == head.revision:
+                return head.digest
+            prior = db.execute('SELECT revision,digest FROM managed_journal_digest_checkpoints '
+                'WHERE revision<=? ORDER BY revision DESC LIMIT 1', (revision,)).fetchone()
+            after, digest = prior if prior is not None else (0, EMPTY_DIGEST)
+            rows = db.execute('SELECT * FROM managed_journal_locations '
+                'WHERE revision>? AND revision<=? ORDER BY revision LIMIT 129',
+                (after, revision)).fetchall()
+            if len(rows) > 128 or (revision != after and
+                    (not rows or rows[-1][0] != revision)):
+                raise CoreError('PROFILE_DRIFT', 'journal_extension_index')
+            for row in rows:
+                digest = _extend_digest(digest, registration(row))
+            return digest
+        return await self._run(read)
+
     async def journal_audit_anchor(self):
         """Read the Core half of a host-owned two-store audit handshake."""
         def read(db):
@@ -239,6 +326,12 @@ class SQLiteJournalLocationRegistry:
                 if head.complete and revision != head.revision:
                     db.execute('UPDATE managed_journal_head SET revision=?,digest=? WHERE singleton=1',
                                (revision, digest))
+                    progress = _extension_progress(db, head)
+                    if progress[2]:
+                        db.execute('INSERT INTO managed_journal_digest_checkpoints(revision,digest) '
+                                   'VALUES(?,?)', (revision, digest))
+                        db.execute('UPDATE managed_journal_extension_progress SET '
+                                   'revision=?,digest=? WHERE singleton=1', (revision, digest))
                 db.execute('COMMIT')
                 return tuple(result)
             except BaseException:

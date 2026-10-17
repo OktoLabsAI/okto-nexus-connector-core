@@ -219,6 +219,58 @@ def test_host_snapshot_fences_definite_core_rollback_but_allows_forward_head():
             require_audit_snapshot_not_rolled_back(host, core, head)
 
 
+def test_sparse_digest_index_proves_exact_older_prefix(tmp_path):
+    async def run():
+        ledger = SQLiteOwnedSlotLedger(tmp_path / 'owned-slots.db')
+        try:
+            early = await ledger.journal_registry_head()
+            assert await ledger.journal_digest_at_revision(0) == early.digest
+            digests = []
+            for index in range(5):
+                await ledger.register_journal_locations((location(index),))
+                digests.append((await ledger.journal_registry_head()).digest)
+            for revision, digest in enumerate(digests, 1):
+                assert await ledger.journal_digest_at_revision(revision) == digest
+            with pytest.raises(CoreError, match='PROFILE_DRIFT'):
+                await ledger.journal_digest_at_revision(6)
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
+def test_sparse_digest_index_converts_existing_head_in_bounded_pages(tmp_path):
+    path = tmp_path / 'owned-slots.db'
+    async def run():
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            digests = []
+            for index in range(5):
+                await ledger.register_journal_locations((location(index),))
+                digests.append((await ledger.journal_registry_head()).digest)
+        finally:
+            ledger.close()
+        # Equivalent to upgrading a ledger from the preceding schema.
+        with sqlite3.connect(path) as db:
+            db.execute('DROP TABLE managed_journal_extension_progress')
+            db.execute('DROP TABLE managed_journal_digest_checkpoints')
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            with pytest.raises(CoreError, match='JOURNAL_UNAVAILABLE'):
+                await ledger.journal_digest_at_revision(3)
+            assert not await ledger.advance_journal_extension_index(limit=2)
+            ledger.close()
+            ledger = SQLiteOwnedSlotLedger(path)
+            assert not await ledger.advance_journal_extension_index(limit=2)
+            assert await ledger.advance_journal_extension_index(limit=2)
+            for revision, digest in enumerate(digests, 1):
+                assert await ledger.journal_digest_at_revision(revision) == digest
+            await ledger.register_journal_locations((location(5),))
+            assert await ledger.journal_digest_at_revision(5) == digests[-1]
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
 def test_registration_is_immutable_idempotent_and_independent_of_capacity(tmp_path):
     async def run():
         path = tmp_path / 'owned-slots.db'

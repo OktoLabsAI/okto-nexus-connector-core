@@ -98,6 +98,14 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations, SQLiteJournalLocationRegis
                     has_history = db.execute('SELECT 1 FROM managed_journal_locations LIMIT 1').fetchone()
                     db.execute('INSERT INTO managed_journal_head(singleton,revision,digest,complete) '
                                'VALUES(1,0,?,?)', (EMPTY_DIGEST, 0 if has_history else 1))
+                progress = db.execute('SELECT 1 FROM managed_journal_extension_progress '
+                    'WHERE singleton=1').fetchone()
+                if progress is None:
+                    current = db.execute('SELECT revision,complete FROM managed_journal_head '
+                        'WHERE singleton=1').fetchone()
+                    db.execute('INSERT INTO managed_journal_extension_progress '
+                               '(singleton,revision,digest,complete) VALUES(1,0,?,?)',
+                               (EMPTY_DIGEST, 1 if current == (0, 1) else 0))
                 db.execute('COMMIT')
             except BaseException:
                 self._rollback_if_active(db)
