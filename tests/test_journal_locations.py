@@ -37,6 +37,26 @@ def test_physical_store_id_is_durable_and_unique_to_the_ledger(tmp_path):
     asyncio.run(run())
 
 
+def test_existing_registered_ledger_acquires_id_without_losing_history(tmp_path):
+    path = tmp_path / 'owned-slots.db'
+    with sqlite3.connect(path) as db:
+        db.execute('CREATE TABLE managed_journal_locations ('
+            'revision INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL UNIQUE, '
+            'server_id TEXT, executor_id TEXT, session_id TEXT)')
+        db.execute('INSERT INTO managed_journal_locations '
+            '(name,server_id,executor_id,session_id) VALUES(?,?,?,?)',
+            ('session-1.db', 'server', 'executor', 'session-1'))
+
+    async def run():
+        ledger = SQLiteOwnedSlotLedger(path)
+        try:
+            assert (await ledger.physical_store_id()).startswith('store_')
+            assert (await ledger.journal_location('session-1.db')).location == location(1)
+        finally:
+            ledger.close()
+    asyncio.run(run())
+
+
 def test_registration_is_immutable_idempotent_and_independent_of_capacity(tmp_path):
     async def run():
         path = tmp_path / 'owned-slots.db'
