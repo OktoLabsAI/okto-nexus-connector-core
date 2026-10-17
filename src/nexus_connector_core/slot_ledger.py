@@ -27,7 +27,7 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations, SQLiteJournalLocationRegis
     """A cross-process slot cap independent of per-executor journal files."""
 
     def __init__(self, path: str | Path, *, max_slots: int = 8,
-                 max_storage_bytes: int = 64 * 1024 * 1024):
+                 max_storage_bytes: int = 512 * 1024 * 1024):
         path = Path(path)
         if not path.is_absolute():
             raise ValueError("owned-slot ledger needs an absolute local path")

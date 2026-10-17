@@ -196,3 +196,19 @@ selected installed tests passed; a real Pi candidate measured 0.651s versus
 8.300s for preparation without/with the full hash in one warm-cache run.
 Consumer vendors use the same wheel. See
 [runtime-lifecycle-m7a-cold-preparation.md](runtime-lifecycle-m7a-cold-preparation.md).
+
+## M7b — Passive Pi reader budget
+
+Core limits passive Pi identity scans to two file readers while admitted opens
+retain four; the complete identity is still hashed. 100 source and 100
+installed-wheel tests passed. See
+[runtime-lifecycle-m7b-passive-budget.md](runtime-lifecycle-m7b-passive-budget.md).
+
+## M4d4g — Mixed ledger budget
+
+At 100,000 paired physical registrations and terminal capacity records, the
+ledger allocated 256,573,440 bytes, exceeding the former 64 MiB cap. The
+default growth ceiling is now 512 MiB; 15 focused source and 15 installed
+tests passed. Terminal-history retirement and the major real UI gate remain
+open. See
+[runtime-lifecycle-m4d4g-mixed-capacity.md](runtime-lifecycle-m4d4g-mixed-capacity.md).
