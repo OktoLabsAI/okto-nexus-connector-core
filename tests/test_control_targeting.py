@@ -72,10 +72,10 @@ def test_unknown_adapter_and_unsupported_control_do_not_fall_back():
             validate_control_target(adapter, action, None)
 
 
-def test_snapshot_v2_binds_targeting_and_preserves_v1_history_bytes():
+def test_snapshot_v3_binds_targeting_and_preserves_v1_history_bytes():
     snapshot = build_executor_inventory_snapshot([], server_id="s", executor_id="e",
                                                  producer_instance_id="p", publication_sequence=1)
-    assert snapshot["snapshot_format_version"] == 2
+    assert snapshot["snapshot_format_version"] == 3
     verify_executor_inventory_snapshot(snapshot)
     bad = deepcopy(snapshot)
     pi = next(row for row in bad["catalog"]["runtimes"] if row["adapter_id"] == "pi_rpc")

@@ -120,6 +120,9 @@ from .executor_inventory import (
     verify_executor_inventory_snapshot,
 )
 from .discovery import discover_installations
+from .inventory_observations import inventory_observation_fresh
+from .inventory_observer import (IndependentInventoryObserver, HarnessObservationResult,
+    HarnessObservation, InventoryObservationBatch, InventoryRefreshFrontier)
 from .provider_discovery import discover_provider_home
 from .harness_configuration import discover_harness_configuration, query_harness_configuration, CONFIGURATION_SCHEMA_VERSION, validate_harness_settings, harness_settings_dict, validate_harness_configuration
 from .configuration_file import parse_harness_configuration_file, export_harness_configuration_file
@@ -131,6 +134,8 @@ from .close_operation import r4_close_operation
 __version__ = "0.0.12"
 
 __all__ = [
+    "IndependentInventoryObserver", "HarnessObservationResult", "HarnessObservation",
+    "InventoryObservationBatch", "InventoryRefreshFrontier",
     "CAPACITY_FRAME_TYPES", "CAPACITY_REQUEST_TYPES", "encode_capacity_frame", "decode_capacity_frame",
     "RuntimeCapacity", "CAPACITY_CONTRACT_REVISION", "CAPACITY_REASONS", "RESERVATION_STATES",
     "CapacitySlotLedger",
@@ -183,7 +188,7 @@ __all__ = [
     "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
     "discover_installations", "DiscoveryCancelled",
     "SQLiteOwnedSlotLedger",
-    "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot",
+    "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot", "inventory_observation_fresh",
     "get_executor_inventory_schema",
     "calculate_inventory_revision",
     "verify_executor_inventory_snapshot",

@@ -107,3 +107,13 @@ candidate evidence preserved across four passive measurements of real installed
 harnesses. Bounded workers retain cancellation and join ownership. See
 [runtime-lifecycle-m3h.md](runtime-lifecycle-m3h.md). Full per-harness publication,
 global rollout and M3 qualification remain pending.
+
+## M3i — Independent observation contract and workers (foundation)
+
+117 installed cases passed with the exact Core wheel and isolated interpreter;
+158 package files and unchanged campaign inputs verified, dependencies valid.
+Per-adapter format-3 coverage, retained independent workers, bounded retries,
+refresh frontiers and cancellation-safe join are qualified. See
+[runtime-lifecycle-m3i.md](runtime-lifecycle-m3i.md). Nexus/Connector consumption,
+selection-baseline migration and joint UI rollout remain pending. Their vendor
+wheels and the running global generation 72 still use M3h Core. M3 remains open.
