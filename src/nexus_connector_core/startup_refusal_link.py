@@ -32,8 +32,12 @@ def _request(value):
         raise ValueError('Invalid startup refusal request ID.')
     refusal = validate_r4_startup_refusal(value['refusal'])
     source = refusal['binding']['source']
-    if any(value[name] != source[name] for name in (
-            'server_id', 'executor_id', 'connection_id', 'connection_generation')):
+    if (any(value[name] != source[name] for name in ('server_id', 'executor_id'))
+            or type(value['connection_generation']) is not int
+            or value['connection_generation'] < source['connection_generation']
+            or value['connection_generation'] == source['connection_generation']
+            and value['connection_id'] != source['connection_id']
+            or type(value['connection_id']) is not str or not value['connection_id']):
         raise CoreError('SCOPE_MISMATCH', 'startup_refusal_source')
     receipt = decode_r4_frame(canonical_json(value['receipt']))
     expected = project_r4_bound_receipt(refusal['binding'], OperationReceipt(

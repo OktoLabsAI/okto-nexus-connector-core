@@ -59,7 +59,8 @@ def test_prelease_report_is_strict_and_negotiated(with_capacity):
     lambda value: value.update(native_absent=False),
     lambda value: value['receipt'].update(possible_effect=True, retry_safe=False),
     lambda value: value['receipt'].update(connection_generation=999),
-    lambda value: value.update(connection_generation=999),
+    lambda value: value.update(connection_generation=0),
+    lambda value: value.update(connection_id='other'),
     lambda value: value['capacity']['request']['scope'].update(session_id='other'),
     lambda value: value['capacity']['consumption'].update(opening_operation_id='other'),
     lambda value: value.update(unexpected=True),
@@ -69,3 +70,11 @@ def test_prelease_report_rejects_changed_provenance(mutation):
     mutation(request)
     with pytest.raises(CoreError):
         encode_startup_refusal(request)
+
+
+def test_replacement_control_generation_keeps_original_refusal_source():
+    request = report(with_capacity=True)
+    request.update(connection_id='replacement',
+                   connection_generation=request['connection_generation'] + 1)
+    assert decode_startup_refusal(encode_startup_refusal(request)) == request
+    assert request['receipt']['connection_generation'] != request['connection_generation']
