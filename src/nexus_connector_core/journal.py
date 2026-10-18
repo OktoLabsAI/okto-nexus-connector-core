@@ -380,13 +380,26 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                     executor_id TEXT NOT NULL,
                     session_id TEXT NOT NULL,
                     operation_id TEXT NOT NULL,
+                    reconciliation_pending INTEGER NOT NULL DEFAULT 1,
+                    release_id TEXT,
+                    release_digest TEXT,
                     PRIMARY KEY(server_id, executor_id, session_id)
                 )""")
                 db.execute("""
-                    INSERT INTO session_claims
+                    INSERT INTO session_claims(server_id,executor_id,session_id,operation_id)
                     SELECT server_id, executor_id, session_id, MIN(operation_id)
                     FROM operations_v2 GROUP BY server_id, executor_id, session_id
                 """)
+            claim_columns = {row[1] for row in db.execute("PRAGMA table_info(session_claims)")}
+            for column, declaration in (
+                ("reconciliation_pending", "INTEGER NOT NULL DEFAULT 1"),
+                ("release_id", "TEXT"),
+                ("release_digest", "TEXT"),
+            ):
+                if column not in claim_columns:
+                    db.execute(f"ALTER TABLE session_claims ADD COLUMN {column} {declaration}")
+            db.execute("CREATE INDEX IF NOT EXISTS pending_session_claims "
+                       "ON session_claims(server_id,executor_id) WHERE reconciliation_pending=1")
             db.execute("COMMIT")
         except BaseException:
             self._rollback_if_active(db)
@@ -442,14 +455,17 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
     async def claimed_sessions(
             self, server_id: str, executor_id: str, *, after_rowid: int = 0,
             high_water_rowid: int | None = None,
-            limit: int = 128) -> SessionClaimPage:
+            limit: int = 128, pending_only: bool = False) -> SessionClaimPage:
         """Page durable identity history, never a live-process inventory."""
         validate_claim_page(after_rowid, high_water_rowid, limit)
         validate_claim_namespace(server_id, executor_id)
+        if type(pending_only) is not bool:
+            raise ValueError("invalid session-claim selection")
         def _worker_impl(db, high_water_rowid=high_water_rowid):
+            pending = " AND reconciliation_pending=1" if pending_only else ""
             if high_water_rowid is None:
                 high_water_rowid = db.execute(
-                    "SELECT COALESCE(MAX(rowid),0) FROM session_claims WHERE server_id=? AND executor_id=?",
+                    "SELECT COALESCE(MAX(rowid),0) FROM session_claims WHERE server_id=? AND executor_id=?" + pending,
                     (server_id, executor_id)).fetchone()[0]
             rows = db.execute(
                 """SELECT c.rowid,c.session_id,c.operation_id,
@@ -458,8 +474,9 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                      ON g.server_id=c.server_id AND g.executor_id=c.executor_id
                     AND g.session_id=c.session_id AND g.operation_id=c.operation_id
                    WHERE c.server_id=? AND c.executor_id=?
-                     AND c.rowid>? AND c.rowid<=?
-                   ORDER BY c.rowid LIMIT ?""",
+                     AND c.rowid>? AND c.rowid<=?""" +
+                (" AND c.reconciliation_pending=1" if pending_only else "") +
+                " ORDER BY c.rowid LIMIT ?",
                 (server_id, executor_id, after_rowid,
                  high_water_rowid, limit + 1)).fetchall()
             page_rows = rows[:limit]
@@ -472,6 +489,40 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                 high_water_rowid,
                 page_rows[-1][0] if len(rows) > limit else None)
         return await self._run(_worker_impl, urgent=False)
+
+    async def retire_reconciliation_claim(self, session: SessionKey, *,
+                                          operation_id: str, release_id: str,
+                                          release_digest: str) -> None:
+        """Retire only the reconciliation projection; immutable claim history remains."""
+        if (not isinstance(session, SessionKey) or type(session.session_id) is not str
+                or not 1 <= len(session.session_id) <= 160
+                or type(operation_id) is not str or not 1 <= len(operation_id) <= 160
+                or type(release_id) is not str
+                or not 1 <= len(release_id) <= 160 or type(release_digest) is not str
+                or len(release_digest) != 64
+                or any(char not in "0123456789abcdef" for char in release_digest)):
+            raise ValueError("invalid session retirement proof")
+        validate_claim_namespace(session.server_id, session.executor_id)
+        def retire(db):
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                row = db.execute("SELECT operation_id,reconciliation_pending,release_id,release_digest "
+                    "FROM session_claims WHERE server_id=? AND executor_id=? AND session_id=?",
+                    (session.server_id,session.executor_id,session.session_id)).fetchone()
+                if row is None or row[0] != operation_id:
+                    raise CoreError("SESSION_CONFLICT", "claim_retirement")
+                if not row[1]:
+                    if row[2:] != (release_id,release_digest):
+                        raise CoreError("SESSION_CONFLICT", "claim_retirement")
+                else:
+                    db.execute("UPDATE session_claims SET reconciliation_pending=0,release_id=?,release_digest=? "
+                        "WHERE server_id=? AND executor_id=? AND session_id=? AND reconciliation_pending=1",
+                        (release_id,release_digest,session.server_id,session.executor_id,session.session_id))
+                db.execute("COMMIT")
+            except BaseException:
+                self._rollback_if_active(db)
+                raise
+        await self._run(retire, urgent=False)
 
     async def get_session_claim(self, session: SessionKey) -> ClaimedSession | None:
         """Read one original claim without scanning unrelated session history."""
@@ -1058,7 +1109,7 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                         raise CoreError("SESSION_CONFLICT", "admission",
                                         operation_id=key.operation_id)
                     db.execute(
-                        "INSERT INTO session_claims VALUES (?,?,?,?)",
+                        "INSERT INTO session_claims(server_id,executor_id,session_id,operation_id) VALUES (?,?,?,?)",
                         (key.server_id, key.executor_id, session_id,
                          key.operation_id))
                     if connection_generation is not None:

@@ -1231,12 +1231,15 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
     async def claimed_sessions(
             self, server_id: str, executor_id: str, *, after_rowid: int = 0,
             high_water_rowid: int | None = None,
-            limit: int = 128) -> SessionClaimPage:
+            limit: int = 128, pending_only: bool = False) -> SessionClaimPage:
         validate_claim_page(after_rowid, high_water_rowid, limit)
         validate_claim_namespace(server_id, executor_id)
+        if type(pending_only) is not bool:
+            raise ValueError("invalid session-claim selection")
         return await self._journal.claimed_sessions(
             server_id, executor_id, after_rowid=after_rowid,
-            high_water_rowid=high_water_rowid, limit=limit)
+            high_water_rowid=high_water_rowid, limit=limit,
+            pending_only=pending_only)
 
     async def process_birth(self, session: SessionKey) -> ProcessBirthRecord | None:
         """Return historical birth evidence, never live ownership authority."""

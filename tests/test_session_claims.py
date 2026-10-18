@@ -261,6 +261,85 @@ def test_claim_inventory_pages_stable_restart_snapshot_and_namespace(tmp_path):
     asyncio.run(run())
 
 
+def test_accepted_release_retires_only_pending_projection_and_keeps_history(tmp_path):
+    async def run():
+        path = tmp_path / "journal.db"
+        journal = SQLiteJournal(path)
+        for index in range(3):
+            await journal.admit(OperationKey("srv", "exe", f"open-{index}"),
+                                f"intent-{index}", f"session-{index}",
+                                claim_session=True)
+        session = SessionKey("srv", "exe", "session-1")
+        proof = dict(operation_id="open-1", release_id="release-1",
+                     release_digest="a" * 64)
+        await journal.retire_reconciliation_claim(session, **proof)
+        await journal.retire_reconciliation_claim(session, **proof)
+        assert [claim.key.session_id for claim in
+                (await journal.claimed_sessions("srv", "exe", pending_only=True)).claims] == [
+                    "session-0", "session-2"]
+        assert len((await journal.claimed_sessions("srv", "exe")).claims) == 3
+        assert (await journal.get_session_claim(session)).opening_operation_id == "open-1"
+        for changed in (dict(proof, release_digest="b" * 64),
+                        dict(proof, operation_id="other")):
+            with pytest.raises(CoreError, match="SESSION_CONFLICT"):
+                await journal.retire_reconciliation_claim(session, **changed)
+        journal.close()
+        reopened = SQLiteJournal(path)
+        try:
+            assert [claim.key.session_id for claim in
+                    (await reopened.claimed_sessions("srv", "exe", pending_only=True)).claims] == [
+                        "session-0", "session-2"]
+            assert len((await reopened.claimed_sessions("srv", "exe")).claims) == 3
+        finally:
+            reopened.close()
+    asyncio.run(run())
+
+
+def test_pending_claim_scan_cost_stays_bounded_across_1k_10k_100k_history(tmp_path):
+    async def run():
+        journal = SQLiteJournal(tmp_path / "history.db")
+        samples = {}
+        try:
+            def seed(start, stop):
+                def insert(db):
+                    db.execute("BEGIN IMMEDIATE")
+                    try:
+                        db.executemany(
+                            "INSERT INTO session_claims(server_id,executor_id,session_id,operation_id,"
+                            "reconciliation_pending,release_id,release_digest) VALUES (?,?,?,?,?,?,?)",
+                            (("srv", "exe", f"session-{i:06d}", f"open-{i:06d}",
+                              int(i < 3), None if i < 3 else f"release-{i}",
+                              None if i < 3 else "a" * 64) for i in range(start,stop)))
+                        db.execute("COMMIT")
+                    except BaseException:
+                        db.execute("ROLLBACK")
+                        raise
+                journal._run_sync(insert,timeout=60)
+
+            previous = 0
+            for total in (1_000,10_000,100_000):
+                for start in range(previous,total,10_000):
+                    seed(start,min(start+10_000,total))
+                previous = total
+                steps = [0]
+                def count():
+                    steps[0] += 1
+                    return 0
+                journal._run_sync(lambda db: db.set_progress_handler(count,1))
+                try:
+                    page = await journal.claimed_sessions("srv","exe",pending_only=True)
+                finally:
+                    journal._run_sync(lambda db: db.set_progress_handler(None,0))
+                assert [claim.key.session_id for claim in page.claims] == [
+                    "session-000000","session-000001","session-000002"]
+                samples[total] = steps[0]
+            print(f"pending-claim SQLite VM steps: {samples}")
+            assert max(samples.values()) - min(samples.values()) < 100, samples
+        finally:
+            journal.close()
+    asyncio.run(run())
+
+
 @pytest.mark.parametrize("kwargs", [
     {"limit": True}, {"limit": 0}, {"limit": 4097},
     {"after_rowid": -1}, {"after_rowid": 1.5},
