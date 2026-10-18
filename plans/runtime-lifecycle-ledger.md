@@ -212,3 +212,13 @@ default growth ceiling is now 512 MiB; 15 focused source and 15 installed
 tests passed. Terminal-history retirement and the major real UI gate remain
 open. See
 [runtime-lifecycle-m4d4g-mixed-capacity.md](runtime-lifecycle-m4d4g-mixed-capacity.md).
+
+## M3t — R4 inventory generator consistency
+
+The feature-branch CI stopped before tests because `generate_r4.py --check`
+would remove the required `observations` inventory field and its
+`HarnessObservation` schema. The generator now emits the existing package
+contract byte-for-byte, preserving per-harness pending/present/absent/failed
+observations. Both contract generation checks, 41 inventory/bundle/conformance
+tests, Ruff and diff checks pass locally. Multi-platform CI qualification is
+pending the pushed run; no runtime package contract was changed.
