@@ -20,14 +20,12 @@ from nexus_connector_core.process_launch_control import ProcessLaunchController
 from nexus_connector_core.slot_ledger import SQLiteOwnedSlotLedger
 
 
-pytestmark = pytest.mark.skipif(sys.platform != 'win32', reason='Windows native crash campaign')
-
-
 def context():
     return ExecutionContext('server','executor','binding','agent','workspace',1,1,2,
         time.monotonic()+60, frozenset({'runtime.open'}), session_owner_generation=3)
 
 
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows native crash campaign')
 @pytest.mark.parametrize('boundary', ['intent','claim','container','spawn','birth'])
 def test_restart_fences_producer_and_recovers_exact_container_without_birth(tmp_path, boundary):
     fixture = Path(__file__).parent/'fixtures/launch_crash_peer.py'
@@ -61,6 +59,54 @@ def test_restart_fences_producer_and_recovers_exact_container_without_birth(tmp_
     asyncio.run(scenario())
 
 
+@pytest.mark.skipif(sys.platform != 'linux', reason='Linux guardian crash campaign')
+@pytest.mark.parametrize('boundary,proved_stop', [
+    ('intent', True),
+    ('claim', False),
+    ('spawn', True),
+    ('birth', True),
+])
+def test_linux_restart_retains_uncertain_launch_until_guardian_proof(
+        tmp_path, boundary, proved_stop):
+    fixture = Path(__file__).parent / 'fixtures' / 'launch_crash_peer.py'
+    paths = json.dumps([str(Path(p).resolve()) for p in sys.path if p])
+    code = ('import sys,json,runpy; sys.path[:]=json.loads(sys.argv.pop(1)); '
+            'runpy.run_path(sys.argv.pop(1),run_name="__main__")')
+    result = subprocess.run(
+        [sys.executable, '-I', '-c', code, paths, str(fixture), str(tmp_path), boundary],
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 17, result.stderr
+
+    async def scenario():
+        journal = SQLiteJournal(tmp_path / 'journal.db')
+        ledger = SQLiteOwnedSlotLedger(tmp_path / 'owned-slots.db')
+        try:
+            key = SessionKey('server', 'executor', 'session')
+            launch = await journal.get_process_launch(key)
+            assert launch is not None
+            assert launch.spawn_claimed == (boundary != 'intent')
+            assert (await journal.get_process_birth(key) is not None) == (boundary == 'birth')
+            controller = ProcessLaunchController(journal, HostLaunchExclusion())
+            recovered = await controller.recover(
+                launch.identity, validate_authority=lambda: None,
+                stop_container=recover_launch_container)
+            assert recovered.state == ('STOPPED' if proved_stop else 'CONTAINER_UNCERTAIN')
+            assert recovered.record.stop_proof == (
+                ('NEVER_CLAIMED' if boundary == 'intent' else 'CONTAINER_STOPPED')
+                if proved_stop else None)
+            assert (await ledger.owned_slot_page()).reservations
+            with pytest.raises(CoreError, match='PROCESS_LAUNCH_FENCED'):
+                await controller.produce(
+                    launch.identity, validate_authority=lambda: None,
+                    start=lambda: pytest.fail('Late producer launched after recovery'))
+        finally:
+            await journal.aclose()
+            await ledger.aclose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows native crash campaign')
 def test_unrecorded_live_birth_stops_only_planned_job(tmp_path):
     async def scenario():
         journal = SQLiteJournal(tmp_path/'journal.db')
@@ -99,6 +145,7 @@ def test_unrecorded_live_birth_stops_only_planned_job(tmp_path):
     asyncio.run(scenario())
 
 
+@pytest.mark.skipif(sys.platform != 'win32', reason='Windows native crash campaign')
 @pytest.mark.parametrize('container', ['', False, 'Global\\foreign-job', 'Global\\nexus-core-not-a-uuid'])
 def test_invalid_planned_job_refused_before_process_creation(tmp_path, container):
     with pytest.raises(ValueError, match='planned Windows'):

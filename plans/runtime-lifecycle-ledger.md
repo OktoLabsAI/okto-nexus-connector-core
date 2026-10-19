@@ -84,6 +84,14 @@ and possible-effect markers remain unchanged. See
 the same M2c controller. Live UI results and joint installation belong to the
 Nexus canonical ledger; full M2 qualification remains open.
 
+M2f Linux crash qualification: four planned-launch cuts passed with source and
+isolated installed Core 0.0.12 on Ubuntu/WSL2 Python 3.11.15. Intent-only
+recovery proves `NEVER_CLAIMED`; a claim before guardian creation stays
+`CONTAINER_UNCERTAIN`; spawn and birth cuts require the guardian's durable
+`CONTAINER_STOPPED` receipt. Five selected Windows cases also passed. See
+[`runtime-lifecycle-m2f-linux-crash.md`](runtime-lifecycle-m2f-linux-crash.md).
+No product code changed; handshake/receipt/ACK cuts and macOS remain open.
+
 ## M3c — Original-owner failed-start recovery (validated checkpoint)
 
 Core now contains an uncertain planned launch even when startup returned no
