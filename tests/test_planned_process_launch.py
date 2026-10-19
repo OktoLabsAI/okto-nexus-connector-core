@@ -16,6 +16,7 @@ from nexus_connector_core.native.process import spawn_owned_process, snapshot_ow
 from nexus_connector_core.native.process.launch_exclusion import HostLaunchExclusion
 from nexus_connector_core.native.process.launch_identity import plan_process_launch
 from nexus_connector_core.native.process.recovery import recover_launch_container
+from nexus_connector_core.native.process.preflight import containment_preflight
 from nexus_connector_core.process_launch_control import ProcessLaunchController
 from nexus_connector_core.slot_ledger import SQLiteOwnedSlotLedger
 
@@ -90,6 +91,60 @@ def test_linux_restart_retains_uncertain_launch_until_guardian_proof(
             recovered = await controller.recover(
                 launch.identity, validate_authority=lambda: None,
                 stop_container=recover_launch_container)
+            assert recovered.state == ('STOPPED' if proved_stop else 'CONTAINER_UNCERTAIN')
+            assert recovered.record.stop_proof == (
+                ('NEVER_CLAIMED' if boundary == 'intent' else 'CONTAINER_STOPPED')
+                if proved_stop else None)
+            assert (await ledger.owned_slot_page()).reservations
+            with pytest.raises(CoreError, match='PROCESS_LAUNCH_FENCED'):
+                await controller.produce(
+                    launch.identity, validate_authority=lambda: None,
+                    start=lambda: pytest.fail('Late producer launched after recovery'))
+        finally:
+            await journal.aclose()
+            await ledger.aclose()
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.skipif(
+    sys.platform != 'darwin' or containment_preflight().get('session_domain') != 'ok',
+    reason='native macOS GUI launchd session required')
+@pytest.mark.parametrize('boundary,proved_stop', [
+    ('intent', True),
+    ('claim', False),
+    ('spawn', True),
+    ('birth', True),
+])
+def test_darwin_owner_crash_recovers_only_with_guardian_receipt(
+        tmp_path, boundary, proved_stop):
+    fixture = Path(__file__).parent / 'fixtures' / 'launch_crash_peer.py'
+    paths = json.dumps([str(Path(p).resolve()) for p in sys.path if p])
+    code = ('import sys,json,runpy; sys.path[:]=json.loads(sys.argv.pop(1)); '
+            'runpy.run_path(sys.argv.pop(1),run_name="__main__")')
+    result = subprocess.run(
+        [sys.executable, '-I', '-c', code, paths, str(fixture), str(tmp_path), boundary],
+        capture_output=True, text=True, timeout=30)
+    assert result.returncode == 17, result.stderr
+
+    async def scenario():
+        journal = SQLiteJournal(tmp_path / 'journal.db')
+        ledger = SQLiteOwnedSlotLedger(tmp_path / 'owned-slots.db')
+        try:
+            key = SessionKey('server', 'executor', 'session')
+            launch = await journal.get_process_launch(key)
+            assert launch is not None
+            assert launch.spawn_claimed == (boundary != 'intent')
+            assert (await journal.get_process_birth(key) is not None) == (boundary == 'birth')
+            controller = ProcessLaunchController(journal, HostLaunchExclusion())
+            deadline = time.monotonic() + 30
+            while True:
+                recovered = await controller.recover(
+                    launch.identity, validate_authority=lambda: None,
+                    stop_container=recover_launch_container)
+                if recovered.state == 'STOPPED' or time.monotonic() >= deadline:
+                    break
+                await asyncio.sleep(.1)
             assert recovered.state == ('STOPPED' if proved_stop else 'CONTAINER_UNCERTAIN')
             assert recovered.record.stop_proof == (
                 ('NEVER_CLAIMED' if boundary == 'intent' else 'CONTAINER_STOPPED')

@@ -415,6 +415,9 @@ def run(config_path: str) -> int:
                 os.kill(native.pid, signal.SIGKILL)
         exitcode = native.wait()
         proof = 'D' if proven and not stats.get('suspect') else 'E'
+        if proof == 'D':
+            from nexus_connector_core.native.process.macos_recovery import mark_stopped
+            mark_stopped(config['receipt_identity'])
         send_frame(connection, dict(
             kind='final', token=token, proof=proof, mode=mode,
             exitcode=exitcode, stats=stats))

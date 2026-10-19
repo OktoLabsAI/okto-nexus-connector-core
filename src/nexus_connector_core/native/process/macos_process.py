@@ -216,11 +216,15 @@ class OwnedDarwinPopen:
         self._listener.settimeout(ACCEPT_TIMEOUT_SECONDS)
         self._token = secrets.token_hex(32)
         self._label = self._planned_label or new_job_label()
+        from .macos_recovery import create_receipt
+        receipt_identity = 'darwin-launchd:' + self._label
+        create_receipt(receipt_identity)
         caller_pair = coalition_pair(os.getpid())
         config = dict(socket=str(self._root / 'control.sock'),
                       token=self._token, owner_pid=os.getpid(),
                       owner_birth=list(identity(os.getpid())['birth']),
                       caller_coalition=list(caller_pair),
+                      receipt_identity=receipt_identity,
                       argv=list(argv), cwd=cwd, env=dict(env))
         config_path = self._root / 'config.json'
         config_path.write_text(json.dumps(config), encoding='utf-8')

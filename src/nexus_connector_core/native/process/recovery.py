@@ -25,6 +25,9 @@ def recover_owned_container(evidence, *, stop=False, timeout_seconds=5):
         # The original owner's pidfd makes its guardian drain automatically.
         # Observe that exact proof; never signal a historical/reused PID.
         return recover_receipt(evidence.container_id, timeout_seconds=timeout_seconds if stop else 0)
+    if sys.platform == 'darwin' and evidence.platform == 'darwin' and evidence.container_id:
+        from .macos_recovery import recover_receipt
+        return recover_receipt(evidence.container_id, timeout_seconds=timeout_seconds if stop else 0)
     if sys.platform != 'win32' or evidence.platform != 'win32' or not evidence.container_id:
         return 'UNKNOWN'
     return _recover_windows_container(evidence.container_id, stop=stop, timeout_seconds=timeout_seconds)
@@ -46,6 +49,9 @@ def recover_launch_container(identity, *, timeout_seconds=5):
         return _recover_windows_container(identity.container_id, stop=True, timeout_seconds=timeout_seconds)
     if sys.platform == 'linux':
         from .linux_recovery import recover_receipt
+        return recover_receipt(identity.container_id, timeout_seconds=timeout_seconds)
+    if sys.platform == 'darwin':
+        from .macos_recovery import recover_receipt
         return recover_receipt(identity.container_id, timeout_seconds=timeout_seconds)
     return 'UNKNOWN'
 
