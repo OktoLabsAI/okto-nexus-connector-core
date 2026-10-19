@@ -1,6 +1,6 @@
 # M2g — durable Darwin guardian stop proof
 
-2026-10-19. Implementation checkpoint; full Core matrix still running.
+2026-10-19. Core M2g implementation and installed platform matrix qualified.
 
 The launchd guardian previously sent its `D` stop proof only through the
 observer's AF_UNIX channel. After an owner crash the new owner had no durable
@@ -34,6 +34,12 @@ suite and offline wheel/sdist installation, but the hosted job's 30-minute
 limit interrupted clean-wheel resource verification. The workflow now allows
 45 minutes for this same matrix and unchanged checks. The original run does
 not qualify the wheel because its SBOM job was skipped.
+
+Replacement run `39336889894` passed Ubuntu and Windows 3.11–3.13, Intel
+macOS 3.13 with native owner-crash acceptance, and the runtime dependency
+SBOM. Its retained Core 0.0.12 wheel has SHA-256
+`fe0659ec366029a72475cdf300b0be1705e796d32044bf9c0ab0bc81d3b574b5`.
+Nexus and Connector must consume these exact bytes for joint acceptance.
 
 Nexus and Connector must vendor the resulting qualified Core wheel before any
 joint installed acceptance. This checkpoint does not close M2's later
