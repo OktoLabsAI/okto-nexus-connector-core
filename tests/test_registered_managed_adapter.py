@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from nexus_connector_core import ControlTargeting, build_executor_inventory_snapshot, verify_executor_inventory_snapshot
+from nexus_connector_core import ControlTargeting
 from nexus_connector_core.discovery import fingerprint
 from nexus_connector_core.journal import SQLiteJournal
 from nexus_connector_core.models import InstallationCandidate, LaunchIntent, OpenOperation, ShutdownPolicy, TurnOperation
@@ -89,9 +89,8 @@ def test_registered_processless_factory_checks_its_own_contract(tmp_path, monkey
     async def run():
         candidate = InstallationCandidate(ADAPTER, sys.executable, fingerprint(Path(sys.executable)),
             'explicit', 'selected')
-        snapshot = build_executor_inventory_snapshot((candidate,), server_id='srv', executor_id='exe',
-            producer_instance_id='fixture', publication_sequence=1)
-        verify_executor_inventory_snapshot(snapshot)
+        # Explicit processless adapters are not part of passive discovery.
+        # Their opening contract is checked independently of inventory publication.
         async def environment(prepared):
             return {}
         factory = CopiedAdapterFactory(environment)

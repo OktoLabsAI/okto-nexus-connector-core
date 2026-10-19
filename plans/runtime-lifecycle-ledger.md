@@ -222,3 +222,18 @@ contract byte-for-byte, preserving per-harness pending/present/absent/failed
 observations. Both contract generation checks, 41 inventory/bundle/conformance
 tests, Ruff and diff checks pass locally. Multi-platform CI qualification is
 pending the pushed run; no runtime package contract was changed.
+
+## M3u — Core matrix regression corrections
+
+The Core CI run `39178772289` reached tests on Linux, Windows and macOS Intel
+and exposed 18 failures on Linux/Windows (17 on macOS). Nine were one stale
+test wrapper that dropped the new named `validate_build_identity` argument;
+the other groups were a synthetic process without its planned container ID,
+a storage-pressure fixture whose limit fell below the grown SQLite schema,
+a replay-pressure fixture still assuming the old event budget, an invalid
+inventory publication for a nondiscoverable test adapter, a missing public
+runtime delegation, and stale API/version documentation. The specific 29
+source cases now pass on Windows. Both generators and `git diff --check` pass.
+The rebuilt Core 0.0.12 wheel is synchronized into both consumers with SHA-256
+`faea17f68891a6112a6392c5b6078ce06583a5e34e718fb152380c92f30bfa64`.
+Full multi-platform rerun and consumer qualification remain pending.

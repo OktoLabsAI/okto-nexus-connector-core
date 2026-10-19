@@ -21,13 +21,13 @@ def test_renewal_crosses_initial_deadline_without_reopening(tmp_path, monkeypatc
         original_open = factory.open
         count = 0
 
-        def prepare(*args):
+        def prepare(*args, **kwargs):
             nonlocal count
             count += 1
             if count == (1 if stage == "prepare" else 2) and stage != "native":
                 entered.set()
                 assert release.wait(5)
-            return original_prepare(*args)
+            return original_prepare(*args, **kwargs)
 
         async def native(*args, opening_guard, **kwargs):
             if stage == "native":
@@ -48,7 +48,10 @@ def test_renewal_crosses_initial_deadline_without_reopening(tmp_path, monkeypatc
                 current = runtime._r4_leases[SessionKey("srv", "exe", "session")].context
                 return await runtime.open(OpenOperation("open", "session", "epoch", prepared), current)
             task = asyncio.create_task(opening())
-            assert await asyncio.to_thread(entered.wait, 5)
+            if not await asyncio.to_thread(entered.wait, 5):
+                if task.done():
+                    await task  # Surface the startup failure, not a misleading wait timeout.
+                pytest.fail("opening did not reach the selected stage")
             clock.advance(30)
             renewal = await attempt(runtime, clock, purpose="renew")
             renewed = await runtime.install_r4_lease(renewal, grant(renewal))

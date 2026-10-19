@@ -1,4 +1,4 @@
-# Core API (`0.0.10`)
+# Core API (`0.0.12`)
 
 ## Runtime automation
 
@@ -383,6 +383,26 @@ Cancellation does not release another attempt's session or an active turn.
 Consumed reservations enter `RELEASE_PENDING` until the existing journal and
 correlated termination evidence allow release. TTL and cancellation acknowledgements
 must never be used to infer that native effects have stopped.
+
+## Journal, inventory, and startup refusal extensions
+
+`JournalLocation`, `JournalRegistration`, `JournalLocationPage`, and
+`JournalLocationRegistry` identify and page registered durable journals.
+`IndependentInventoryObserver` separates passive discovery from productive
+startup. `HarnessObservationResult`, `HarnessObservation`,
+`InventoryObservationBatch`, and `InventoryRefreshFrontier` carry partial
+per-harness observations. `inventory_observation_fresh` requires a completed
+observation within its TTL; pending or failed observation is never absence.
+
+`STARTUP_REFUSAL_REVISION` identifies the bounded startup-refusal extension.
+`prepare_r4_startup_refusal`, `validate_r4_startup_refusal`,
+`persist_r4_startup_refusal`, `encode_startup_refusal`, and
+`decode_startup_refusal` preserve a correlated pre-effect refusal.
+`startup_refusal_accepted` and `startup_refusal_deferred` distinguish its
+admission outcome. `prepare_r4_stopped_refusal`,
+`validate_r4_stopped_refusal`, `validate_r4_operation_refusal`, and
+`persist_r4_operation_refusal` require exact operation and containment evidence
+before a stopped opening is reported as safe to release.
 
 # Portable connection configuration
 

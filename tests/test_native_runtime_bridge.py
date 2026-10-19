@@ -61,7 +61,8 @@ def test_copied_factory_open_persists_real_owned_child_birth(tmp_path, monkeypat
         def start(self, *, owning_agent_id):
             self._proc = spawn_owned_process(
                 [sys.executable, "-c", "import time; time.sleep(30)"],
-                cwd=self.cwd, env=dict(os.environ), text=True)
+                cwd=self.cwd, env=dict(os.environ), text=True,
+                container_id=self._process_container_id)
             return HarnessSession("native-session", "codex", owning_agent_id,
                                   "STARTING", HarnessCapabilities(
                                       False, None, False, False, True),

@@ -742,6 +742,11 @@ def test_quiet_codex_replay_and_interrupt_survive_global_history_pressure(
 
 def test_quiet_codex_replay_survives_multi_session_byte_pressure(
         connector: CodexAppServerConnector, log_path: Path) -> None:
+    # Keep this pressure test at its original small replay budget; the
+    # production default grew with the larger event artifact allowance.
+    connector._event_history = NativeEventHistory(
+        max_bytes=4 * 1024 * 1024, session_max_bytes=4 * 1024 * 1024,
+        session_max_events=512)
     quiet = connector.start(owning_agent_id="nxs_quiet")
     connector.send(quiet, HarnessCommand(
         session_id=quiet.session_id, verb="send_turn",

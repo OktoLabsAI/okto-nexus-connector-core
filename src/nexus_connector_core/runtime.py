@@ -1241,6 +1241,14 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             high_water_rowid=high_water_rowid, limit=limit,
             pending_only=pending_only)
 
+    async def retire_reconciliation_claim(
+            self, session: SessionKey, *, operation_id: str, release_id: str,
+            release_digest: str) -> None:
+        """Retire the exact proved reconciliation projection."""
+        await self._journal.retire_reconciliation_claim(
+            session, operation_id=operation_id, release_id=release_id,
+            release_digest=release_digest)
+
     async def process_birth(self, session: SessionKey) -> ProcessBirthRecord | None:
         """Return historical birth evidence, never live ownership authority."""
         if not isinstance(session, SessionKey):
