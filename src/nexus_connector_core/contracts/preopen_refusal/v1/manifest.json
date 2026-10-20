@@ -1,6 +1,6 @@
 {
   "base_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
-  "base_schema_sha256": "9b7cf2a324fdafce96a4a5b31d7c6500f1a796a8b5217ea7262453bb55b4a570",
+  "base_schema_sha256": "b3b063d75f13d9b9c54ee64fe1b0e0bd6d191a98702c12393da687e3631fd0f9",
   "negotiation_capability": "nexus-preopen-refusal-v1",
   "revision": "nexus-preopen-refusal-v1",
   "sha256": {

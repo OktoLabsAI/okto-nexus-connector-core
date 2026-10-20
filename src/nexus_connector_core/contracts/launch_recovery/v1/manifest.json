@@ -1,0 +1,8 @@
+{
+  "revision": "nexus-launch-recovery-v1",
+  "base_revision": "nxl-1-agent-centric-http-only-2026-09-29-r4",
+  "status": "executable",
+  "sha256": {
+    "proof.schema.json": "ea77a49fffb0db56bdda9ac2cbdbe5b527fa2e8e7b106a48b2b688d0a0fd6e7d"
+  }
+}

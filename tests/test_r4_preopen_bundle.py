@@ -12,6 +12,18 @@ from test_r4_development_bundle import open_frame
 from test_r4_preopen_refusal import report, reconciliation
 
 
+def test_preopen_overlay_extends_exact_current_reconciliation_branches():
+    base = json.loads(files('nexus_connector_core.contracts.nxl.r4').joinpath('frame.schema.json').read_text())
+    overlay = json.loads(files('nexus_connector_core').joinpath('contracts', 'preopen_refusal', 'v1', 'schema.json').read_text())
+    branches = {item['properties']['type']['const']: item for item in base['oneOf']}
+    for item in overlay['oneOf']:
+        kind = item['properties']['type']['const']
+        extension = {'reconcile.request': 'preopen_refusal_supported', 'reconcile.report': 'preopen_refusals'}[kind]
+        item['properties'].pop(extension)
+        item['required'].remove(extension)
+        assert item == branches[kind]
+
+
 def test_preopen_overlay_leaves_base_reconciliation_closed():
     raw = files('nexus_connector_core.contracts.nxl.r4').joinpath('frame.schema.json').read_text()
     base = Draft202012Validator(json.loads(raw))

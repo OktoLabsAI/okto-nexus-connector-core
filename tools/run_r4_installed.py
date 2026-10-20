@@ -28,7 +28,8 @@ import zipfile
 import nexus_connector_core as core
 import pytest
 
-tests, wheel, report_dir, runner = map(Path, sys.argv[1:])
+tests, wheel, report_dir, runner = map(Path, sys.argv[1:5])
+selected = json.loads(sys.argv[5])
 installed = Path(core.__file__).resolve().parent
 if 'site-packages' not in installed.parts:
     raise RuntimeError('Core must be imported from the installed environment.')
@@ -50,7 +51,7 @@ if not checked:
 helpers = types.ModuleType('tests')
 helpers.__path__ = [str(tests)]
 sys.modules['tests'] = helpers
-paths = sorted(tests.glob('test_r4*.py')) + [
+paths = [tests / name for name in selected] if selected else sorted(tests.glob('test_r4*.py')) + [
     tests/'test_close_policy.py', tests/'test_control_targeting.py',
     tests/'test_consumer_conformance.py',
 ]
@@ -58,7 +59,7 @@ args = ['-c', 'pytest.ini', '--rootdir='+str(tests), '--confcutdir='+str(tests),
         *map(str, paths), '-q', '--tb=short',
         '--junitxml='+str(report_dir/'results.xml')]
 report = {
-    'scope': 'Installed R4 contracts and R3 historical bundle; synthetic peers',
+    'scope': 'Installed selected contracts' if selected else 'Installed R4 contracts and R3 historical bundle; synthetic peers',
     'core_version': core.__version__, 'installed_core': str(installed),
     'wheel': str(wheel), 'wheel_sha256': hashlib.sha256(wheel.read_bytes()).hexdigest(),
     'isolated_interpreter': sys.flags.isolated == 1,
@@ -97,6 +98,7 @@ def main() -> int:
     parser.add_argument('--python', type=Path, required=True)
     parser.add_argument('--wheel', type=Path, required=True)
     parser.add_argument('--report-dir', type=Path, required=True)
+    parser.add_argument('--tests', nargs='+', help='Selected test files relative to tests/; default is the R4 campaign')
     args = parser.parse_args()
     # Unix venv interpreters are symlinks. Resolving the executable follows
     # the link out of the venv and silently tests the base interpreter instead.
@@ -105,11 +107,15 @@ def main() -> int:
         parser.error('The Python executable and Core wheel must exist.')
     reports.mkdir(parents=True, exist_ok=True)
     tests = Path(__file__).resolve().parents[1]/'tests'
+    for name in args.tests or []:
+        path = (tests/name).resolve()
+        if not path.is_relative_to(tests) or not path.is_file() or path.suffix != '.py':
+            parser.error('Selected tests must be Python files inside tests/.')
     with tempfile.TemporaryDirectory(prefix='okto-r4-installed-') as directory:
         Path(directory, 'pytest.ini').write_text('[pytest]\n', encoding='utf-8')
         result = subprocess.run(
             [str(python), '-I', '-X', 'utf8', '-c', CHILD,
-             str(tests), str(wheel), str(reports), str(Path(__file__).resolve())],
+             str(tests), str(wheel), str(reports), str(Path(__file__).resolve()), json.dumps(args.tests or [])],
             cwd=directory, check=False)
     return result.returncode
 

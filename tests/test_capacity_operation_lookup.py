@@ -3,7 +3,7 @@ import sqlite3
 from dataclasses import replace
 
 import pytest
-from nexus_connector_core import CoreError, CapacityConsumption, OperationKey, SQLiteOwnedSlotLedger
+from nexus_connector_core import CoreError, CapacityConsumption, OperationKey, OwnedSlotState, SQLiteOwnedSlotLedger
 from test_capacity_contract import request, consumed
 from test_capacity_runtime import facade, Authority
 from test_capacity_slot_ledger import receipt_binding, different
@@ -31,6 +31,7 @@ def test_consumed_slot_attribution_is_exact_read_only_and_survives_reopen(tmp_pa
             ledger = SQLiteOwnedSlotLedger(path)
             revision = await ledger.capacity_revision()
             assert await ledger.capacity_opening_for_slot(slot) == c.opening_operation_id
+            assert await ledger.capacity_opening_for_slot(OwnedSlotState(slot.key, slot.opening_operation_id, True)) is None
             for field in ('server_id', 'executor_id', 'session_id'):
                 wrong = replace(slot, key=replace(slot.key, **{field: 'other'}))
                 assert await ledger.capacity_opening_for_slot(wrong) is None
@@ -42,6 +43,14 @@ def test_consumed_slot_attribution_is_exact_read_only_and_survives_reopen(tmp_pa
             released = await ledger.release_capacity_slot(req, held.reservation_id, now=5, boot_id='boot-2')
             assert released.state == 'RELEASED'
             assert await ledger.capacity_opening_for_slot(slot) is None
+            released_slot = await ledger.owned_slot_state(slot.key)
+            assert released_slot.released
+            released_revision = await ledger.capacity_revision()
+            assert await ledger.capacity_opening_for_slot(released_slot) == c.opening_operation_id
+            assert await ledger.capacity_revision() == released_revision
+            ledger.close()
+            ledger = SQLiteOwnedSlotLedger(path)
+            assert await ledger.capacity_opening_for_slot(released_slot) == c.opening_operation_id
             assert not (await ledger.owned_slot_page()).reservations
         finally:
             ledger.close()

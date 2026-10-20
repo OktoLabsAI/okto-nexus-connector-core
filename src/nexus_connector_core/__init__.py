@@ -1,6 +1,10 @@
 """Embeddable native harness core. Importing this package has no runtime side effects."""
 
 from .discovery_control import DiscoveryCancelled
+from .journal_locations import (JournalLocation, JournalRegistration, JournalLocationPage,
+                                JournalRegistryHead, JournalAuditAnchor,
+                                JournalLocationRegistry,
+                                require_audit_snapshot_not_rolled_back)
 from .automation import DEFAULT_RUNTIME_AUTOMATION, RuntimeAutomationPolicy, RuntimeAutomation
 from .models import (
     ControlTargeting,
@@ -56,6 +60,15 @@ from .receipt_binding_r4 import (
 )
 from .resource_release_r4 import r4_resource_release_digest, project_r4_resource_release
 from .operation_refusal_r4 import prepare_r4_lease_refusal, validate_r4_lease_refusal, persist_r4_lease_refusal
+from .startup_refusal_r4 import prepare_r4_startup_refusal, validate_r4_startup_refusal, persist_r4_startup_refusal
+from .startup_refusal_link import (
+    STARTUP_REFUSAL_REVISION, encode_startup_refusal, decode_startup_refusal,
+    startup_refusal_accepted, startup_refusal_deferred,
+)
+from .operation_refusal_r4 import (
+    prepare_r4_stopped_refusal, validate_r4_stopped_refusal,
+    validate_r4_operation_refusal, persist_r4_operation_refusal,
+)
 from .preopen_refusal_r4 import (
     PREOPEN_REFUSAL_REVISION, prepare_r4_preopen_refusal, validate_r4_preopen_refusal,
     persist_r4_preopen_refusal, validate_r4_preopen_report,
@@ -116,6 +129,9 @@ from .executor_inventory import (
     verify_executor_inventory_snapshot,
 )
 from .discovery import discover_installations
+from .inventory_observations import inventory_observation_fresh
+from .inventory_observer import (IndependentInventoryObserver, HarnessObservationResult,
+    HarnessObservation, InventoryObservationBatch, InventoryRefreshFrontier)
 from .provider_discovery import discover_provider_home
 from .harness_configuration import discover_harness_configuration, query_harness_configuration, CONFIGURATION_SCHEMA_VERSION, validate_harness_settings, harness_settings_dict, validate_harness_configuration
 from .configuration_file import parse_harness_configuration_file, export_harness_configuration_file
@@ -124,9 +140,12 @@ from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.0.11"
+__version__ = "0.0.12"
 
 __all__ = [
+    'JournalLocation', 'JournalRegistration', 'JournalLocationPage', 'JournalLocationRegistry',
+    "IndependentInventoryObserver", "HarnessObservationResult", "HarnessObservation",
+    "InventoryObservationBatch", "InventoryRefreshFrontier",
     "CAPACITY_FRAME_TYPES", "CAPACITY_REQUEST_TYPES", "encode_capacity_frame", "decode_capacity_frame",
     "RuntimeCapacity", "CAPACITY_CONTRACT_REVISION", "CAPACITY_REASONS", "RESERVATION_STATES",
     "CapacitySlotLedger",
@@ -144,6 +163,11 @@ __all__ = [
     "discover_harness_configuration", "query_harness_configuration", "CONFIGURATION_SCHEMA_VERSION",
     "prepare_r4_receipt_binding", "validate_r4_receipt_binding", "project_r4_bound_receipt",
     "prepare_r4_lease_refusal", "validate_r4_lease_refusal", "persist_r4_lease_refusal",
+    "prepare_r4_startup_refusal", "validate_r4_startup_refusal", "persist_r4_startup_refusal",
+    "STARTUP_REFUSAL_REVISION", "encode_startup_refusal", "decode_startup_refusal",
+    "startup_refusal_accepted", "startup_refusal_deferred",
+    "prepare_r4_stopped_refusal", "validate_r4_stopped_refusal",
+    "validate_r4_operation_refusal", "persist_r4_operation_refusal",
     "prepare_r4_preopen_refusal", "validate_r4_preopen_refusal", "persist_r4_preopen_refusal",
     "PREOPEN_REFUSAL_REVISION", "validate_r4_preopen_report",
     "OperationNotAdmitted", "OperationCapacityDeferred", "CapacityRetryWaiter",
@@ -177,7 +201,7 @@ __all__ = [
     "INSTALLATION_REF_SCHEME", "REF_NOT_FOUND", "REF_AMBIGUOUS", "installation_ref", "resolve_installation",
     "discover_installations", "DiscoveryCancelled",
     "SQLiteOwnedSlotLedger",
-    "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot",
+    "SNAPSHOT_FORMAT_VERSION", "build_executor_inventory_snapshot", "inventory_observation_fresh",
     "get_executor_inventory_schema",
     "calculate_inventory_revision",
     "verify_executor_inventory_snapshot",

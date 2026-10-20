@@ -96,6 +96,10 @@ def _validate(frame: dict[str, Any]) -> None:
         if 'preopen_refusal_supported' in frame or 'preopen_refusals' in frame:
             from .preopen_bundle_r4 import preopen_schema_validator
             validator = preopen_schema_validator()
+        if 'launch_recovery_supported' in frame:
+            from .launch_release_r4 import launch_recovery_schema_validator
+            validator = launch_recovery_schema_validator(
+                'preopen_refusal_supported' in frame or 'preopen_refusals' in frame)
         validator.validate(frame)
     except ValidationError as exc:
         raise CoreError("VALIDATION_ERROR", "r4_schema", retry_safe=True) from exc
@@ -121,6 +125,16 @@ def _validate(frame: dict[str, Any]) -> None:
                     and recovery['connection_id'] != frame['connection_id']):
                 raise CoreError('SCOPE_MISMATCH', 'r4_preopen_report')
             seen.add(source['operation_id'])
+    if frame['type'] == 'reconcile.report' and frame.get('launch_recovery_supported'):
+        from .launch_release_r4 import decode_unstarted_proof
+        for fact in frame['ownership_facts']:
+            if fact['process_state'] != 'NOT_STARTED':
+                continue
+            identity = decode_unstarted_proof(fact['launch_proof']).identity
+            if (identity.key.server_id != frame['server_id'] or identity.key.executor_id != frame['executor_id']
+                    or identity.key.session_id != fact['session_id'] or identity.owner_generation != fact['owner_generation']
+                    or identity.connection_generation >= frame['connection_generation']):
+                raise CoreError('SCOPE_MISMATCH', 'launch_recovery_proof')
 
 
 def decode_r4_frame(raw: bytes, *, max_frame_bytes: int = MAX_FRAME_BYTES) -> dict[str, Any]:

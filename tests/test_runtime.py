@@ -433,6 +433,65 @@ def test_async_runtime_admission_events_reconcile_and_close(tmp_path):
     asyncio.run(run())
 
 
+def test_runtime_prepare_defers_full_build_hash_until_open(tmp_path, monkeypatch):
+    from nexus_connector_core import build_identity
+
+    async def run():
+        runtime, journal, factory = make_runtime(tmp_path)
+        selected = runtime._candidates["codex_app_server"]
+        selected = replace(selected, build_identity=build_identity.executable_build_identity(
+            selected.executable))
+        runtime._candidates["codex_app_server"] = selected
+        original = build_identity.executable_build_identity
+        calls = []
+
+        def observed(path):
+            calls.append(path)
+            return original(path)
+
+        monkeypatch.setattr(build_identity, "executable_build_identity", observed)
+        try:
+            prepared = await runtime.prepare(
+                LaunchIntent("agent", "ws", "codex_app_server"), context())
+            assert calls == []
+            receipt = await runtime.open(
+                OpenOperation("open-hash", "session", "epoch", prepared), context())
+            assert receipt.stage == "SUBMITTED"
+            assert len(calls) == 1 and factory.open_count == 1
+            await runtime.close(CloseOperation("close-hash", "session"), context())
+        finally:
+            journal.close()
+
+    asyncio.run(run())
+
+
+def test_runtime_open_rejects_drift_deferred_from_prepare(tmp_path, monkeypatch):
+    from nexus_connector_core import build_identity
+
+    async def run():
+        runtime, journal, factory = make_runtime(tmp_path)
+        selected = runtime._candidates["codex_app_server"]
+        selected = replace(selected, build_identity=build_identity.executable_build_identity(
+            selected.executable))
+        runtime._candidates["codex_app_server"] = selected
+        try:
+            prepared = await runtime.prepare(
+                LaunchIntent("agent", "ws", "codex_app_server"), context())
+            (tmp_path / "codex").write_bytes(b"changed binary")
+            # Simulate a stale path-bound observation: the full content proof
+            # must still reject the opening before the native factory runs.
+            monkeypatch.setattr("nexus_connector_core.profiles.selected_fingerprint",
+                                lambda _selected: selected.fingerprint)
+            with pytest.raises(CoreError, match="PROFILE_DRIFT"):
+                await runtime.open(OpenOperation("open-drift", "session", "epoch", prepared),
+                                   context())
+            assert factory.open_count == 0
+        finally:
+            journal.close()
+
+    asyncio.run(run())
+
+
 def test_native_event_reader_starts_before_open_returns(tmp_path):
     class ReaderNative(FakeNative):
         def __init__(self):

@@ -419,6 +419,39 @@ def build_inventory_schema() -> dict:
         "type": "array", "items": {"enum": ["turn.steer", "turn.interrupt"]},
         "uniqueItems": True, "maxItems": 2}
     evidence["required"].append("qualified_control_actions")
+    definitions["HarnessObservation"] = obj({
+        "adapter_id": ID,
+        "state": {"enum": ["PENDING", "PRESENT", "ABSENT", "FAILED"]},
+        "observation_age_ms": {"anyOf": [
+            {"type": "integer", "minimum": 0, "maximum": 300000},
+            {"type": "null"},
+        ]},
+        "error_code": {"anyOf": [
+            {"type": "string", "maxLength": 80, "pattern": "^[A-Z][A-Z0-9_]*$"},
+            {"type": "null"},
+        ]},
+    }, ("adapter_id", "state", "observation_age_ms", "error_code"))
+    definitions["HarnessObservation"]["oneOf"] = [
+        {"properties": {
+            "state": {"enum": ["PRESENT", "ABSENT"]},
+            "observation_age_ms": {"type": "integer", "minimum": 0, "maximum": 300000},
+            "error_code": {"type": "null"},
+        }},
+        {"properties": {
+            "state": {"const": "PENDING"},
+            "observation_age_ms": {"type": "null"},
+            "error_code": {"type": "null"},
+        }},
+        {"properties": {
+            "state": {"const": "FAILED"},
+            "observation_age_ms": {"type": "null"},
+            "error_code": {"type": "string"},
+        }},
+    ]
+    inventory = definitions["ExecutorInventorySnapshot"]
+    inventory["properties"]["observations"] = {
+        "type": "array", "items": {"$ref": "#/$defs/HarnessObservation"}, "maxItems": 128}
+    inventory["required"].append("observations")
     return {"$schema": "https://json-schema.org/draft/2020-12/schema",
             "$id": "https://nexus.oktolabs.ai/contracts/nxl/r4/inventory.schema.json",
             "$defs": definitions, "$ref": "#/$defs/ExecutorInventorySnapshot"}

@@ -27,8 +27,11 @@ def _directory():
     return descriptor
 
 
-def create_receipt():
-    identity = 'linux-guardian:' + secrets.token_hex(16)
+def create_receipt(identity=None):
+    if identity is None:
+        identity = 'linux-guardian:' + secrets.token_hex(16)
+    if type(identity) is not str or re.fullmatch(r'linux-guardian:[0-9a-f]{32}', identity) is None:
+        raise ValueError('Invalid planned Linux container')
     directory = _directory()
     descriptor = None
     try:

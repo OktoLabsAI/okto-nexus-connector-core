@@ -22,7 +22,8 @@ _CATEGORY = {
     "tool_activity": "tool_activity",
     "error": "error",
 }
-_MAX_EVENT_BYTES = 256 * 1024
+from ..event_artifacts import MAX_PAYLOAD_BYTES
+_MAX_EVENT_BYTES = MAX_PAYLOAD_BYTES
 
 
 def translate_native_event(native: HarnessEvent, *, server_id: str,

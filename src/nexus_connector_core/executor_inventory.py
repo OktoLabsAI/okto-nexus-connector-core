@@ -24,10 +24,11 @@ from .models import CoreError, InstallationCandidate
 from .protocol import canonical_json
 from .native.registry import adapter_specs
 from .native.adapters.compatibility import qualified_build
+from .inventory_observations import (MAX_OBSERVATION_AGE_MS, build_observations,
+                                    verify_observations)
 
-SNAPSHOT_FORMAT_VERSION = 2
+SNAPSHOT_FORMAT_VERSION = 3
 MAX_SNAPSHOT_CANDIDATES = 128
-MAX_OBSERVATION_AGE_MS = 300_000
 
 
 def get_executor_inventory_schema() -> dict[str, Any]:
@@ -86,7 +87,7 @@ def _semantic(snapshot: Mapping[str, Any]) -> dict[str, Any]:
     """Selection evidence only. Publication metadata and labels are excluded."""
     catalog = snapshot["catalog"]
     availability = snapshot["availability"]
-    return {
+    semantic = {
         "snapshot_format_version": snapshot["snapshot_format_version"],
         "core_version": snapshot["core_version"],
         "catalog_format_version": catalog["format_version"],
@@ -98,7 +99,7 @@ def _semantic(snapshot: Mapping[str, Any]) -> dict[str, Any]:
                 "connection_mode", "implementation_platforms",
                 "support_status", "discoverable")},
               **({"control_targeting": sorted(row["control_targeting"], key=lambda c: c["action"])}
-                 if snapshot["snapshot_format_version"] == 2 else {})}
+                 if snapshot["snapshot_format_version"] >= 2 else {})}
              for row in catalog["runtimes"]),
             key=lambda row: row["adapter_id"],
         ),
@@ -113,6 +114,11 @@ def _semantic(snapshot: Mapping[str, Any]) -> dict[str, Any]:
             key=lambda row: (row["adapter_id"], row["candidate_ref"]),
         ),
     }
+    if snapshot['snapshot_format_version'] >= 3:
+        semantic['observations'] = [
+            {key: row[key] for key in ('adapter_id', 'state', 'error_code')}
+            for row in snapshot['observations']]
+    return semantic
 
 
 def _revision(snapshot: Mapping[str, Any]) -> str:
@@ -124,6 +130,7 @@ def build_executor_inventory_snapshot(
     executor_id: str, producer_instance_id: str, publication_sequence: int,
     observation_age_ms: int = 0,
     availability: AvailabilityReport | None = None,
+    observations: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Build an R4 snapshot without losing the original candidate inventory.
 
@@ -151,7 +158,14 @@ def build_executor_inventory_snapshot(
     catalog = _catalog_projection()
     if catalog["format_version"] != CATALOG_FORMAT_VERSION:
         raise _invalid("catalog format is incompatible")
+    try:
+        coverage = build_observations(catalog, items, observations)
+    except (ValueError, TypeError) as error:
+        raise _invalid(str(error)) from error
     report_data = report.to_dict()
+    completed = {row['adapter_id'] for row in coverage if row['state'] in ('PRESENT', 'ABSENT')}
+    report_data['availability'] = [row for row in report_data['availability']
+                                   if row['adapter_id'] in completed]
     rows = {(row["adapter_id"], row["candidate_ref"]): row
             for row in report_data["availability"] if row["candidate_ref"]}
     if len(rows) != len(items):
@@ -199,6 +213,7 @@ def build_executor_inventory_snapshot(
         "availability": report_data,
         "evidence": evidence,
         "observation_age_ms": observation_age_ms,
+        "observations": coverage,
     }
     snapshot["inventory_revision"] = _revision(snapshot)
     verify_executor_inventory_snapshot(snapshot)
@@ -208,6 +223,7 @@ def build_executor_inventory_snapshot(
 def calculate_inventory_revision(
     candidates: Iterable[InstallationCandidate], *,
     availability: AvailabilityReport | None = None,
+    observations: Mapping[str, Mapping[str, Any]] | None = None,
 ) -> str:
     """Compute the same complete revision for a local selection preview.
 
@@ -218,6 +234,7 @@ def calculate_inventory_revision(
         candidates, server_id="preview", executor_id="preview",
         producer_instance_id="preview", publication_sequence=1,
         availability=availability,
+        observations=observations,
     )["inventory_revision"]
 
 
@@ -228,18 +245,22 @@ def verify_executor_inventory_snapshot(snapshot: Mapping[str, Any], *,
     Authentication, publication sequence CAS, and freshness are host duties.
     """
     try:
-        if set(snapshot) != {
+        version = snapshot["snapshot_format_version"]
+        expected_fields = {
             "snapshot_format_version", "server_id", "executor_id",
             "producer_instance_id", "publication_sequence", "core_version",
             "catalog", "availability", "evidence", "observation_age_ms",
             "inventory_revision",
-        }:
+        }
+        if version == 3:
+            expected_fields.add('observations')
+        if set(snapshot) != expected_fields:
             raise ValueError("unexpected snapshot fields")
         version = snapshot["snapshot_format_version"]
         if type(version) is not int or (version != SNAPSHOT_FORMAT_VERSION and
-                                       not (allow_historical and version == 1)):
+                                       not (allow_historical and version in (1, 2))):
             raise ValueError("unsupported snapshot format")
-        if version == 2 and not _inventory_validator().is_valid(snapshot):
+        if version == 3 and not _inventory_validator().is_valid(snapshot):
             raise ValueError("inventory does not match the current Core schema")
         for name in ("server_id", "executor_id", "producer_instance_id"):
             value = snapshot[name]
@@ -265,11 +286,11 @@ def verify_executor_inventory_snapshot(snapshot: Mapping[str, Any], *,
                           "native_kind", "connection_mode",
                           "implementation_platforms", "support_status",
                           "discoverable"}
-        if version == 2:
+        if version >= 2:
             catalog_fields.add("control_targeting")
         if any(set(row) != catalog_fields for row in catalog["runtimes"]):
             raise ValueError("unexpected catalog fields")
-        if version == 2:
+        if version >= 2:
             expected = {r.adapter_id: [c.to_dict() for c in r.control_targeting]
                         for r in get_runtime_catalog().runtimes}
             if any(canonical_json(row["control_targeting"]) != canonical_json(expected.get(row["adapter_id"]))
@@ -286,7 +307,7 @@ def verify_executor_inventory_snapshot(snapshot: Mapping[str, Any], *,
                            "build_identity", "version", "architecture", "trust",
                            "source", "technical_state", "technical_reasons",
                            "qualification", "containment"}
-        if version == 2:
+        if version >= 2:
             evidence_fields -= {"technical_state", "technical_reasons"}
             evidence_fields |= {"qualified_control_actions", "state", "reasons",
                                 "support_status", "platform", "capability_report"}
@@ -302,12 +323,12 @@ def verify_executor_inventory_snapshot(snapshot: Mapping[str, Any], *,
         if set(rows) != set(refs):
             raise ValueError("availability and evidence refs differ")
         for row in evidence:
-            if version == 2 and row["qualified_control_actions"] != _qualified_controls(row, availability["platform"]):
+            if version >= 2 and row["qualified_control_actions"] != _qualified_controls(row, availability["platform"]):
                 raise ValueError("control qualification differs from the exact build evidence")
             available = rows[row["adapter_id"], row["candidate_ref"]]
-            state_key = "state" if version == 2 else "technical_state"
-            reasons_key = "reasons" if version == 2 else "technical_reasons"
-            if version == 2:
+            state_key = "state" if version >= 2 else "technical_state"
+            reasons_key = "reasons" if version >= 2 else "technical_reasons"
+            if version >= 2:
                 descriptor = next(r for r in catalog["runtimes"] if r["adapter_id"] == row["adapter_id"])
                 if (row["platform"] != availability["platform"] or
                         row["support_status"] != descriptor["support_status"] or
@@ -328,6 +349,8 @@ def verify_executor_inventory_snapshot(snapshot: Mapping[str, Any], *,
         if snapshot["core_version"] != snapshot["catalog"]["core_version"] or \
                 snapshot["core_version"] != snapshot["availability"]["core_version"]:
             raise ValueError("core versions differ")
+        if version == 3:
+            verify_observations(snapshot)
         if snapshot["inventory_revision"] != _revision(snapshot):
             raise ValueError("inventory revision differs from evidence")
     except (KeyError, TypeError, ValueError, AttributeError, StopIteration) as exc:

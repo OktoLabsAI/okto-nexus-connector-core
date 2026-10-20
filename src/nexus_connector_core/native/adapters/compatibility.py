@@ -219,7 +219,10 @@ def claude_version_observation(command, *, cwd, env, timeout=3.0):
 
 
 def pi_version_observation(command, *, cwd, env):
-    output = _version_output(command, cwd=cwd, env=env)
+    # The Node bundle may take almost the generic three-second probe budget
+    # even when healthy. A loaded host must not turn that scheduling variance
+    # into a failed installation check or a recovering runtime.
+    output = _version_output(command, cwd=cwd, env=env, timeout=10.0)
     match = re.fullmatch(rb"(\d{1,4}\.\d{1,4}\.\d{1,4})\r?\n?", output) if len(output) <= 1024 else None
     version = match.group(1).decode("ascii") if match else None
     # Real UI round trips and native tool results in

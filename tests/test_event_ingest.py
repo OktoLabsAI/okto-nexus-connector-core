@@ -45,11 +45,26 @@ def test_native_event_rejects_wrong_session_and_oversize(tmp_path):
         with pytest.raises(CoreError, match="EVENT_SESSION_MISMATCH"):
             await ingest.ingest(wrong)
         huge = HarnessEvent("session", "pi", "output_delta", "message_update",
-                            "2026-09-25T00:00:00Z", {"text": "x" * (256 * 1024)})
+                            "2026-09-25T00:00:00Z", {"text": "x" * (16 * 1024 * 1024)})
         with pytest.raises(CoreError, match="EVENT_TOO_LARGE"):
             await ingest.ingest(huge)
         journal.close()
 
+    asyncio.run(run())
+
+
+def test_multi_megabyte_tool_result_survives_redaction_and_durable_replay(tmp_path):
+    async def run():
+        journal = SQLiteJournal(tmp_path / 'large.db')
+        try:
+            ingest = NativeEventIngestor(journal, server_id='srv',executor_id='exe',session_id='session',stream_epoch='epoch')
+            text='arquivo🙂\n'*200000
+            native=HarnessEvent('session','pi','tool_activity','tool_result','2026-10-16T00:00:00Z',{'text':text})
+            await ingest.ingest(native)
+            events=[e async for e in journal.events(EventCursor('srv','exe','session','epoch'))]
+            assert events[0].payload['text']==text
+        finally:
+            journal.close()
     asyncio.run(run())
 
 

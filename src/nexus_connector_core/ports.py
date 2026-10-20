@@ -16,6 +16,7 @@ from .models import (
     TurnOperation,
 )
 from .lease_reducer_r4 import R4LeaseAttempt
+from .process_launch import ProcessLaunchIdentity, ProcessLaunchStore
 from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption, CapacityReservationPage
 
 
@@ -94,7 +95,11 @@ class RuntimeCore(Protocol):
     async def claimed_sessions(self, server_id: str, executor_id: str, *,
                                after_rowid: int = 0,
                                high_water_rowid: int | None = None,
-                               limit: int = 128) -> SessionClaimPage: ...
+                               limit: int = 128,
+                               pending_only: bool = False) -> SessionClaimPage: ...
+    async def retire_reconciliation_claim(self, session: SessionKey, *,
+                                          operation_id: str, release_id: str,
+                                          release_digest: str) -> None: ...
     async def process_birth(self, session: SessionKey) -> ProcessBirthRecord | None: ...
     async def observe_process_birth(self, session: SessionKey) -> ProcessBirthObservation: ...
     async def reconcile(self, request: ReconcileRequest) -> ReconcileReport: ...
@@ -134,7 +139,7 @@ class CapacitySlotLedger(OwnedSlotLedger, Protocol):
     async def reserve_owned_slot(self, key: OperationKey, session_id: str, *,
                                  intent_hash: str | None = None) -> None: ...
     async def capacity_revision(self) -> int: ...
-    async def capacity_opening_for_slot(self, slot: OwnedSlotReservation) -> str | None: ...
+    async def capacity_opening_for_slot(self, slot: OwnedSlotReservation | OwnedSlotState) -> str | None: ...
     async def capacity_for_operation(self, key: OperationKey, *, action: str,
                                      now: float, boot_id: str) -> CapacityReservation | None: ...
     async def capacity_reservation_page(self, server_id: str, executor_id: str, *,
@@ -160,7 +165,7 @@ class CapacitySlotLedger(OwnedSlotLedger, Protocol):
                                       binding: Mapping, *, now: float, boot_id: str) -> None: ...
 
 
-class Journal(OwnedSlotLedger, Protocol):
+class Journal(OwnedSlotLedger, ProcessLaunchStore, Protocol):
     async def admit(self, key: OperationKey, intent_hash: str, session_id: str,
                     *, critical: bool = False,
                     effect_imminent: bool = False,
@@ -169,6 +174,7 @@ class Journal(OwnedSlotLedger, Protocol):
                     session_owner_generation: int | None = None,
                     authorization_revision: int | None = None,
                     configuration_revision: int | None = None,
+                    process_launch_identity: ProcessLaunchIdentity | None = None,
                     ) -> tuple[OperationReceipt, bool]: ...
     async def cas_session_lease(self, session: SessionKey, *,
                                 expected_connection_generation: int,

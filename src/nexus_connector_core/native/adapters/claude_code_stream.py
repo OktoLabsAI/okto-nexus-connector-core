@@ -127,7 +127,8 @@ woken the instant an event is published, not on some fixed interval.
 
 from __future__ import annotations
 
-from ..process import spawn_owned_process, observe_owned_process
+from ..process import (spawn_owned_process, observe_owned_process,
+                       record_owned_process_birth)
 from ..framing import FrameLimitExceeded, MAX_FRAME_CHARS, protocol_lines, stderr_chunks
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
@@ -391,6 +392,7 @@ class ClaudeCodeStreamConnector:
                 [self._binary, *self._version_argv], cwd=self._cwd, env=spawn_env)
             proc = spawn_owned_process(  # noqa: S603 - argv is fixed/injected by the caller, not user input
                 argv,
+                container_id=getattr(self, '_process_container_id', None),
                 stdin=subprocess.PIPE,
                 stdout=subprocess.PIPE,
                 stderr=subprocess.PIPE,
@@ -402,6 +404,8 @@ class ClaudeCodeStreamConnector:
                 errors="replace",
             )
             self._proc = proc
+            record_owned_process_birth(
+                proc, getattr(self, "_process_birth_observer", None))
             session = HarnessSession(
                 session_id=new_harness_session_id(),
                 harness_kind="claude_code",

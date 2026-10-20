@@ -19,6 +19,7 @@ class OwnedLinuxPopen(subprocess.Popen):
     _slots = threading.BoundedSemaphore(32)
 
     def __init__(self, argv, **kwargs):
+        planned_container = kwargs.pop('container_id', None)
         if sys.platform != "linux":
             raise RuntimeError("Linux process ownership requires pidfd support")
         # Recorded for the census surface; the Linux backend has no
@@ -68,7 +69,7 @@ class OwnedLinuxPopen(subprocess.Popen):
             inherited.append(proof_write)
             os.set_blocking(self._proof_fd, False)
             from .linux_recovery import create_receipt
-            self._recovery_container_id, recovery_fd = create_receipt()
+            self._recovery_container_id, recovery_fd = create_receipt(planned_container)
             inherited.append(recovery_fd)
             helper = str(Path(__file__).with_name("linux_process_guardian.py"))
             command = [sys.executable, "-I", helper, str(owner_fd), str(cancel_read), str(proof_write),

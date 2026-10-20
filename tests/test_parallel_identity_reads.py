@@ -40,7 +40,15 @@ def test_out_of_order_reads_preserve_core_48_golden_identity(tmp_path, monkeypat
     assert completion.index("01-second.txt") < completion.index("00-first.txt")
 
 
-def test_cancellation_reaches_all_readers_and_joins_them(tmp_path, monkeypatch):
+def test_passive_observation_and_admitted_open_hash_the_same_content(tmp_path):
+    node, package = fixture(tmp_path)
+    expected = identity.pi_build_identity(node, package)
+    with discovery_scope(lambda: False):
+        assert identity.pi_build_identity(node, package) == expected
+
+
+@pytest.mark.parametrize("passive,expected", [(True, 2), (False, 4)])
+def test_identity_reader_budget_and_join(tmp_path, monkeypatch, passive, expected):
     node, package = fixture(tmp_path)
     for index in range(40):
         (package / f"extra-{index}.txt").write_bytes(b"content")
@@ -56,7 +64,7 @@ def test_cancellation_reaches_all_readers_and_joins_them(tmp_path, monkeypatch):
             active += 1
             started += 1
             maximum = max(maximum, active)
-            if active == 4:
+            if active == expected:
                 full.set()
         try:
             assert release.wait(3)
@@ -66,18 +74,25 @@ def test_cancellation_reaches_all_readers_and_joins_them(tmp_path, monkeypatch):
                 active -= 1
     monkeypatch.setattr(identity, "_file_digest_counted", digest)
     def discover():
-        with discovery_scope(stopped.is_set):
-            return identity.pi_build_identity(node, package)
+        if passive:
+            with discovery_scope(stopped.is_set):
+                return identity.pi_build_identity(node, package)
+        return identity.pi_build_identity(node, package)
     with ThreadPoolExecutor(max_workers=1) as caller:
         result = caller.submit(discover)
         try:
             assert full.wait(3)
-            stopped.set()
+            if passive:
+                stopped.set()
         finally:
             release.set()
-        with pytest.raises(DiscoveryCancelled):
-            result.result(timeout=3)
-    assert maximum == 4 and started == 4 and active == 0
+        if passive:
+            with pytest.raises(DiscoveryCancelled):
+                result.result(timeout=3)
+        else:
+            assert result.result(timeout=3).startswith("sha256:")
+    assert maximum == expected and active == 0
+    assert started >= expected
 
 
 def test_byte_budget_is_reserved_before_worker_reads(tmp_path, monkeypatch):
