@@ -6,7 +6,8 @@ from typing import Any
 
 from ..protocol import strict_json
 
-MAX_NATIVE_FRAME_BYTES = 1024 * 1024
+from ..event_artifacts import MAX_PAYLOAD_BYTES
+MAX_NATIVE_FRAME_BYTES = MAX_PAYLOAD_BYTES + 64 * 1024
 MAX_RECORDS_PER_FEED = 1024
 
 

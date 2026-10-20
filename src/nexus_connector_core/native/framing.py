@@ -1,12 +1,13 @@
 """Bound allocations before decoding native JSONL, including missing newlines."""
 from typing import BinaryIO, Iterator, TextIO
+from ..event_artifacts import MAX_PAYLOAD_BYTES
 
 
 # A Python Unicode character occupies at most four bytes. TextIOWrapper's
 # decoder buffer is bounded independently; no complete unbounded line is read.
-MAX_FRAME_CHARS = 262_144
+MAX_FRAME_CHARS = MAX_PAYLOAD_BYTES + 64 * 1024
 STDERR_CHUNK_CHARS = 4096
-MAX_FRAME_BYTES = 1024 * 1024
+MAX_FRAME_BYTES = MAX_PAYLOAD_BYTES + 64 * 1024
 
 
 class FrameLimitExceeded(ValueError):

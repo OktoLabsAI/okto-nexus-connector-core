@@ -7,7 +7,7 @@ import pytest
 from nexus_connector_core import RuntimeEvent
 from nexus_connector_core.native.event_buffers import NativeEventQueue
 from nexus_connector_core.native.framing import (
-    MAX_FRAME_BYTES, ByteFrameLimitExceeded, FrameLimitExceeded,
+    MAX_FRAME_BYTES, MAX_FRAME_CHARS, ByteFrameLimitExceeded, FrameLimitExceeded,
     IncompleteByteFrame, byte_protocol_lines, protocol_lines,
 )
 
@@ -33,7 +33,7 @@ def test_native_lf_framing_keeps_unicode_separators_inside_record():
 
 def test_native_framing_rejects_oversized_record():
     with pytest.raises(FrameLimitExceeded):
-        list(protocol_lines(io.StringIO("x" * 262145)))
+        list(protocol_lines(io.StringIO("x" * (MAX_FRAME_CHARS + 1))))
 
 
 def test_native_byte_framing_preserves_utf8_and_unicode_separators():

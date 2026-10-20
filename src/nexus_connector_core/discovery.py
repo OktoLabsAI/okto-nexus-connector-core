@@ -7,6 +7,9 @@ import hashlib
 import os
 import re
 import struct
+from collections import deque
+from concurrent.futures import ThreadPoolExecutor
+from contextvars import copy_context
 from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
@@ -28,6 +31,7 @@ _ELF_MACHINES = {3: "x86", 62: "x86_64", 183: "aarch64", 40: "arm"}
 _MACH_MACHINES = {0x01000007: "x86_64", 0x0100000C: "aarch64"}
 _PROBE_ENV = frozenset({"SYSTEMROOT", "WINDIR", "COMSPEC", "PATHEXT",
                         "PATH", "TEMP", "TMP", "LANG", "LC_ALL", "TERM"})
+_DISCOVERY_WORKERS = 3
 
 
 def binary_architecture(path: str | Path) -> str | None:
@@ -339,6 +343,45 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
                          and item.executable in replaced_launchers))
 
 
+def _discover_adapter(adapter_id, *, path_env, trusted_roots, pi_install_root, pi_node):
+    check_discovery_cancelled()
+    items = list(discover_path(adapter_id, path_env=path_env, trusted_roots=trusted_roots))
+    if adapter_id == "pi_rpc" and pi_install_root is not None:
+        items.extend(discover_pi_releases(pi_install_root, pi_node,
+                                          trusted_roots=trusted_roots))
+    return items
+
+
+def _discover_in_parallel(selected, **arguments):
+    """Bounded passive readers, joined before returning even on failure.
+
+    Each worker receives its own context with the caller's stop callback.
+    The full snapshot remains atomic: no partial result can imply absence of
+    an installation whose observation is still pending or has failed.
+    """
+    if len(selected) <= 1:
+        return [item for adapter in selected
+                for item in _discover_adapter(adapter, **arguments)]
+    candidates = []
+    adapters = iter(selected)
+    with ThreadPoolExecutor(max_workers=_DISCOVERY_WORKERS,
+                            thread_name_prefix="core-discovery") as workers:
+        pending = deque()
+        def submit(adapter):
+            return workers.submit(copy_context().run, _discover_adapter, adapter, **arguments)
+        for _ in range(min(len(selected), _DISCOVERY_WORKERS)):
+            pending.append(submit(next(adapters)))
+        while pending:
+            # Preserve catalog order regardless of completion order; retain
+            # at most three submitted readers, including queued work.
+            candidates.extend(pending.popleft().result())
+            check_discovery_cancelled()
+            adapter = next(adapters, None)
+            if adapter is not None:
+                pending.append(submit(adapter))
+    return candidates
+
+
 def _discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
                            trusted_roots: tuple[Path, ...] = (),
                            path_env: str | None = None,
@@ -362,14 +405,8 @@ def _discover_installations(*, adapter_ids: tuple[str, ...] | None = None,
         raise TypeError("trusted_roots must be a tuple")
     if (pi_install_root is None) != (pi_node is None):
         raise ValueError("pi_install_root and pi_node must be supplied together")
-    candidates: list[InstallationCandidate] = []
-    for adapter_id in selected:
-        check_discovery_cancelled()
-        candidates.extend(discover_path(adapter_id, path_env=path_env,
-                                        trusted_roots=trusted_roots))
-        if adapter_id == "pi_rpc" and pi_install_root is not None:
-            candidates.extend(discover_pi_releases(
-                pi_install_root, pi_node, trusted_roots=trusted_roots))
+    candidates = _discover_in_parallel(selected, path_env=path_env,
+        trusted_roots=trusted_roots, pi_install_root=pi_install_root, pi_node=pi_node)
     unique: dict[str, InstallationCandidate] = {}
     for item in candidates:
         check_discovery_cancelled()

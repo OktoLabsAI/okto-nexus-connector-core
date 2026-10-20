@@ -76,8 +76,14 @@ class OwnedWindowsPopen(subprocess.Popen):
     """Standard Popen pipes/waiting, with atomic kernel process-tree ownership."""
     def __init__(self, *args, **kwargs):
         self._job_lock = threading.Lock()
+        self._job = None
         self._kernel = _kernel()
-        self._job_name = "Global\\nexus-core-" + uuid.uuid4().hex
+        planned_container = kwargs.pop('container_id', None)
+        self._job_name = ("Global\\nexus-core-" + uuid.uuid4().hex
+                          if planned_container is None else planned_container)
+        import re
+        if type(self._job_name) is not str or not re.fullmatch(r'Global\\nexus-core-[0-9a-f]{32}', self._job_name):
+            raise ValueError('Invalid planned Windows container')
         ctypes.set_last_error(0)
         self._job = self._kernel.CreateJobObjectW(None, self._job_name)
         _check(self._job)

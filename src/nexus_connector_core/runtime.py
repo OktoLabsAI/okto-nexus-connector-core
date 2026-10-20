@@ -27,7 +27,7 @@ from .models import (
     PreparedLaunch, OperationCapacityDeferred,
     ReconcileReport, ReconcileRequest, RuntimeEvent, RuntimeSnapshot,
     SessionKey, ShutdownPolicy, ShutdownReport, TurnOperation,
-    StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord,
+    StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord, ProcessBirthEvidence,
     ProcessBirthObservation,
 )
 from .profiles import prepare_launch, verify_prepared
@@ -106,6 +106,13 @@ class NativeSession(Protocol):
 
 
 class NativeFactory(Protocol):
+    """Legacy minimum port; optional declared seams are detected at construction.
+
+    Managed factories may declare ``opening_guard`` and the async
+    ``process_birth_recorder`` callback. The latter must finish after spawn
+    and before handshake, with the factory retaining containment on failure.
+    """
+
     async def open(self, prepared: PreparedLaunch, session_id: str,
                    context: ExecutionContext, *,
                    stream_epoch: str) -> NativeSession: ...
@@ -389,11 +396,18 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         # C4/T04: additive opening_guard seam - passed only when declared.
         import inspect as _inspect
         try:
-            self._factory_accepts_opening_guard = "opening_guard" in                 _inspect.signature(self._native_factory.open).parameters
+            factory_parameters = _inspect.signature(self._native_factory.open).parameters
+            self._factory_accepts_opening_guard = "opening_guard" in factory_parameters
+            self._factory_accepts_birth_recorder = "process_birth_recorder" in factory_parameters
+            self._factory_accepts_process_launch = "process_launch" in factory_parameters
         except (TypeError, ValueError, AttributeError):
             # Legacy seams (bare async functions) do not declare it.
             self._factory_accepts_opening_guard = False
+            self._factory_accepts_birth_recorder = False
+            self._factory_accepts_process_launch = False
         self._uncertain_opens: set[SessionKey] = set()
+        self._uncertain_launches = {}
+        self._launch_recovery_tasks = {}
         self._lock = asyncio.Lock()
         self._event_changed = asyncio.Condition()
         self._shutting_down = False
@@ -436,7 +450,12 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("BINARY_NOT_FOUND", "prepare")
         if root is None:
             raise CoreError("WORKSPACE_UNAVAILABLE", "prepare")
-        prepared = await asyncio.to_thread(prepare_launch, intent, candidate, root)
+        # No native effect occurs in prepare. The admitted open repeats
+        # prepare_launch with the full content identity check immediately
+        # before reserving a slot or creating a process. Avoid hashing Pi's
+        # entire dependency closure twice for one cold opening.
+        prepared = await asyncio.to_thread(prepare_launch, intent, candidate, root,
+                                           validate_build_identity=False)
         self._authorize(self._current_open_context(context), "runtime.open")
         return prepared
 
@@ -501,13 +520,29 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         binding_registered = False
         preowned_slot = False
         pre_reserve_uncertain = False
+        launch_identity = None
         opening_key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
+        if self._factory_accepts_birth_recorder:
+            async def record_birth(evidence: ProcessBirthEvidence) -> None:
+                # The original opening claim scopes this callback, including
+                # producers that return after their caller stopped waiting.
+                await self._journal.record_process_birth(
+                    opening_key, operation.session_id, evidence)
+
+            open_kwargs["process_birth_recorder"] = record_birth
         try:
             refreshed = await asyncio.to_thread(prepare_launch,
                                                 prepared.intent, selected, root)
             if prepared != refreshed:
                 raise CoreError("PROFILE_DRIFT", "open")
             await asyncio.to_thread(verify_prepared, prepared)
+            if self._factory_accepts_process_launch and prepared.intent.mode == 'managed':
+                from .native.process.launch_identity import plan_process_launch
+                from .native.process.launch_exclusion import HostLaunchExclusion
+                from .process_launch_control import ControlledProcessLaunch, ProcessLaunchController
+                launch_identity = plan_process_launch(session_key, operation.operation_id, context)
+                open_kwargs['process_launch'] = ControlledProcessLaunch(launch_identity,
+                    ProcessLaunchController(self._journal, HostLaunchExclusion()))
             if self._capacity_enabled and prepared.intent.mode == 'managed':
                 # Exclude competing opens BEFORE journal.admit claims the
                 # session identity. A refused ordinary open must not poison
@@ -642,6 +677,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 return native.native_id
 
             return await self._kernel.execute(semantic, context, effect,
+                process_launch_identity=launch_identity,
                 opening_deadline=lambda: self._current_open_context(
                     context, operation.session_id).lease_deadline_monotonic)
         finally:
@@ -664,6 +700,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                     attempt.waiter_done = True
                 if (effect_started and not binding_registered) or pre_reserve_uncertain:
                     self._uncertain_opens.add(session_key)
+                    if launch_identity is not None:
+                        self._uncertain_launches[session_key] = launch_identity
                 if self._shutting_down and (binding := self._sessions.get(session_key)):
                     if binding.shutdown_task is None or binding.shutdown_task.done():
                         binding.shutdown_task = asyncio.create_task(
@@ -1193,12 +1231,23 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
     async def claimed_sessions(
             self, server_id: str, executor_id: str, *, after_rowid: int = 0,
             high_water_rowid: int | None = None,
-            limit: int = 128) -> SessionClaimPage:
+            limit: int = 128, pending_only: bool = False) -> SessionClaimPage:
         validate_claim_page(after_rowid, high_water_rowid, limit)
         validate_claim_namespace(server_id, executor_id)
+        if type(pending_only) is not bool:
+            raise ValueError("invalid session-claim selection")
         return await self._journal.claimed_sessions(
             server_id, executor_id, after_rowid=after_rowid,
-            high_water_rowid=high_water_rowid, limit=limit)
+            high_water_rowid=high_water_rowid, limit=limit,
+            pending_only=pending_only)
+
+    async def retire_reconciliation_claim(
+            self, session: SessionKey, *, operation_id: str, release_id: str,
+            release_digest: str) -> None:
+        """Retire the exact proved reconciliation projection."""
+        await self._journal.retire_reconciliation_claim(
+            session, operation_id=operation_id, release_id=release_id,
+            release_digest=release_digest)
 
     async def process_birth(self, session: SessionKey) -> ProcessBirthRecord | None:
         """Return historical birth evidence, never live ownership authority."""
@@ -1424,8 +1473,71 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         for session, attempt in self._policy_closes.items():
             if not attempt.task.done():
                 outcomes[session] = "unknown"
+        # Failed factories can leave no adapter handle at all. Recover their
+        # exact durable launch under producer exclusion, without restarting the
+        # host or treating a missing PID as proof. Each worker survives the
+        # caller's observation budget and is shared by subsequent shutdowns.
+        await self._recover_failed_launches(deadline)
+        for session in uncertain:
+            if self._session_tombstones.get(session) == "released":
+                outcomes[session] = "already_closed"
         self._dispose_factory_if_resolved()
         return ShutdownReport(outcomes)
+
+    def _consume_launch_recovery_results(self):
+        for session, task in list(self._launch_recovery_tasks.items()):
+            if task.done():
+                try:
+                    task.result()
+                except Exception:
+                    pass  # The identity/slot remain retained for the next pass.
+                del self._launch_recovery_tasks[session]
+                if session not in self._uncertain_opens:
+                    self._uncertain_launches.pop(session, None)
+
+    async def _recover_failed_launches(self, deadline):
+        self._consume_launch_recovery_results()
+        for session, identity in list(self._uncertain_launches.items()):
+            if session not in self._uncertain_opens:
+                self._uncertain_launches.pop(session, None)
+                continue
+            if (session in self._opening or session in self._sessions or
+                    session in self._late_handles or session in self._release_obligations or
+                    session in self._launch_recovery_tasks):
+                continue
+            self._launch_recovery_tasks[session] = asyncio.create_task(
+                self._contain_failed_launch(session, identity))
+        if self._launch_recovery_tasks:
+            await asyncio.wait(tuple(self._launch_recovery_tasks.values()),
+                timeout=max(0, deadline - asyncio.get_running_loop().time()))
+        self._consume_launch_recovery_results()
+
+    async def _contain_failed_launch(self, session, identity):
+        from .process_launch_control import ProcessLaunchController
+        from .native.process.launch_exclusion import HostLaunchExclusion
+        from .native.process.recovery import recover_launch_container
+
+        def authority():
+            # This is containment of THIS runtime's admitted opening, not a
+            # replacement host taking over arbitrary historical resources.
+            # Shutdown has closed admission; the OS gate also fences a thread
+            # whose async producer returned/cancelled before that thread did.
+            if (not self._shutting_down or self._uncertain_launches.get(session) != identity
+                    or session in self._opening or session in self._sessions or session in self._late_handles):
+                raise CoreError('RECONCILIATION_REQUIRED', 'failed_launch_containment')
+
+        controller = ProcessLaunchController(self._journal, HostLaunchExclusion())
+        recovered = await controller.recover(identity, validate_authority=authority,
+            stop_container=recover_launch_container)
+        if recovered.state != 'STOPPED':
+            return
+        if recovered.record.stop_proof == 'NEVER_CLAIMED':
+            await self._journal.settle_unclaimed_process_launch(identity)
+        # The opening's unknown receipt remains unknown for a claimed launch.
+        # Stopped resources and durable release are separate observations.
+        self._session_tombstones.record(session, 'unknown')
+        await self._durable_release(session,
+            OperationKey(session.server_id, session.executor_id, identity.opening_operation_id), None)
 
     def _dispose_factory_if_resolved(self) -> None:
         if self._factory_disposed:
@@ -1434,7 +1546,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         # queued spawn units) - its capacity is NOT disposable.
         if (self._opening or self._uncertain_opens or self._cleanup_tasks
                 or self._late_handles or self._release_obligations or self._r4_lease_tasks
-                or self._policy_closes):
+                or self._policy_closes or self._launch_recovery_tasks):
             return
         for binding in self._sessions.values():
             if not binding.closed:

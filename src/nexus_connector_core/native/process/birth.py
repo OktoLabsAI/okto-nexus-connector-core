@@ -11,8 +11,27 @@ from ctypes import wintypes
 from pathlib import Path
 import subprocess
 import sys
+from collections.abc import Callable
 
-from ...models import ProcessBirthEvidence
+from ...models import CoreError, ProcessBirthEvidence
+
+
+def record_owned_process_birth(
+        process: subprocess.Popen,
+        observer: Callable[[ProcessBirthEvidence], None] | None) -> None:
+    """Record the owned handle before protocol I/O, retaining it on failure.
+
+    The caller already owns ``process`` and must contain it if this raises.
+    A recorder failure is post-spawn even if its underlying database error
+    happens to be retryable. Never turn it into a pre-effect refusal.
+    """
+    if observer is None:
+        return  # Legacy/direct adapter callers have no durable recorder.
+    try:
+        observer(snapshot_owned_process_birth(process))
+    except Exception as error:
+        raise CoreError("PROCESS_BIRTH_RECORD_FAILED", "process_birth",
+                        possible_effect=True) from error
 
 
 class _FileTime(ctypes.Structure):
@@ -90,7 +109,7 @@ def snapshot_owned_process_birth(process: subprocess.Popen) -> ProcessBirthEvide
             raise RuntimeError("owned process is already stopped")
         return ProcessBirthEvidence(
             "darwin", process.pid, token,
-            "darwin_launchd_coalition")
+            "darwin_launchd_coalition", 'darwin-launchd:'+process._label)
 
     raise RuntimeError("owned process birth identity unqualified on this platform")
 

@@ -49,6 +49,15 @@ def test_candidate_carries_architecture_without_executing(tmp_path):
     assert selected.version is None
 
 
+def test_pi_version_probe_tolerates_slow_healthy_startup(tmp_path):
+    report = compatibility.pi_version_observation(
+        (sys.executable, "-c", "import time; time.sleep(3.4); print('0.87.1')"),
+        cwd=str(tmp_path), env=os.environ.copy(),
+    )
+    assert report["native_version"] == "0.87.1"
+    assert report["observation"] == "executable_version"
+
+
 def test_selected_version_probe_is_observation_only(tmp_path, monkeypatch):
     binary = tmp_path / ("claude.exe" if os.name == "nt" else "claude")
     binary.write_bytes(pe(0x8664))

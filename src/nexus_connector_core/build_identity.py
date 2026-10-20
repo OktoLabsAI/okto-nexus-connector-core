@@ -21,7 +21,8 @@ from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from pathlib import Path
 
-from .discovery_control import check_discovery_cancelled
+from .discovery_control import (check_discovery_cancelled,
+                                has_discovery_cancellation_scope)
 from .protocol import canonical_json
 from .validation_flights import overlapping_validation
 
@@ -48,6 +49,7 @@ _MAX_DIRECTORIES = 65536
 _MAX_DEPTH = 48
 _READ_CHUNK = 1024 * 1024
 _IDENTITY_READ_WORKERS = 4
+_PASSIVE_IDENTITY_READ_WORKERS = 2
 
 
 def _file_digest(path: Path) -> str:
@@ -221,9 +223,13 @@ def pi_build_identity(node: str | os.PathLike,
     entries = []
     total = 0
 
-    # Keep only four reads in flight. Append results in manifest order,
-    # regardless of completion order, and propagate the discovery stop scope.
-    with ThreadPoolExecutor(max_workers=_IDENTITY_READ_WORKERS,
+    # A passive inventory observation has its own retained worker and repeats
+    # periodically. Bound its file readers separately from an admitted open so
+    # a large Pi installation does not monopolize the host's I/O budget.
+    # Both paths still hash every byte and produce the same content identity.
+    workers = (_PASSIVE_IDENTITY_READ_WORKERS if has_discovery_cancellation_scope()
+               else _IDENTITY_READ_WORKERS)
+    with ThreadPoolExecutor(max_workers=workers,
                             thread_name_prefix="core-identity") as readers:
         def _add_tree(directory: Path, prefix: str) -> None:
             nonlocal total
@@ -245,7 +251,7 @@ def pi_build_identity(node: str | os.PathLike,
 
             def submit(batch):
                 pending.append((len(batch), readers.submit(copy_context().run, read_batch, batch)))
-                if len(pending) >= _IDENTITY_READ_WORKERS:
+                if len(pending) >= workers:
                     append_first()
 
             try:

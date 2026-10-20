@@ -44,7 +44,8 @@ frozen port cleanly - reported instead of smoothed over, per instructions.
 
 from __future__ import annotations
 
-from ..process import spawn_owned_process, observe_owned_process
+from ..process import (spawn_owned_process, observe_owned_process,
+                       record_owned_process_birth)
 from ..framing import FrameLimitExceeded, protocol_lines, stderr_chunks
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe
@@ -178,7 +179,7 @@ _PROC_WAIT_TIMEOUT_S = 5.0
 _STDIN_WRITE_LOCK_TIMEOUT_S = 10.0
 
 _EARLY_EVENT_LIMIT = 128
-_EARLY_EVENT_BYTES = 1024 * 1024
+_EARLY_EVENT_BYTES = 32 * 1024 * 1024
 _THREAD_START_LIMIT = 64
 
 
@@ -268,8 +269,10 @@ class _CodexTransport:
         on_dispatch_error: Callable[[str, str], None],
         on_server_request: Callable | None = None,
         dispatch_guards: "object | None" = None,
+        container_id: str | None = None,
     ) -> None:
         self._dispatch_guards = dispatch_guards
+        self._container_id = container_id
         self._command = list(command)
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
@@ -296,6 +299,7 @@ class _CodexTransport:
         try:
             self._proc = spawn_owned_process(
                 self._command,
+                container_id=self._container_id,
                 cwd=self._cwd,
                 env=full_env,
                 stdin=subprocess.PIPE,
@@ -652,7 +656,7 @@ class CodexAppServerConnector:
         # transient replay window before it subscribes. Durable replay
         # remains the Core journal's responsibility.
         self._event_history = NativeEventHistory(
-            session_max_events=512, session_max_bytes=1024 * 1024)
+            session_max_events=512, session_max_bytes=32 * 1024 * 1024)
         self._history_lock = threading.Lock()
         self._subscribers: list["queue.Queue[HarnessEvent]"] = []
         self._subscriber_sessions = {}
@@ -1043,6 +1047,7 @@ class CodexAppServerConnector:
             on_malformed_line=self._on_malformed_line,
             on_dispatch_error=self._on_dispatch_error,
             on_server_request=self._on_server_request,
+            container_id=getattr(self, '_process_container_id', None),
         )
         # Initialization owns a transport before it can publish a ready one.
         # Preserve its observed containment result for the factory's failure
@@ -1050,6 +1055,9 @@ class CodexAppServerConnector:
         self._startup_close_outcome = "unknown"
         try:
             transport.start()
+            record_owned_process_birth(
+                getattr(transport, "_proc", None),
+                getattr(self, "_process_birth_observer", None))
             initialize_result = transport.request(
                 _METHOD_INITIALIZE, {"clientInfo": self._client_info}, timeout_s=self._handshake_timeout_s
             )

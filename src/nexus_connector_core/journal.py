@@ -21,6 +21,7 @@ from .models import (ClaimedSession, CoreError, EventCursor, OperationKey,
                      SessionLeaseState, SessionKey, StorageStatus)
 from .offloop import (ExecutorClosed, ExecutorFull, OffLoopExecutor)
 from .protocol import canonical_json
+from .process_launch_storage import PROCESS_LAUNCH_SCHEMA, ProcessLaunchStorageMixin
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,7 +34,7 @@ class JournalLimits:
     reserved_event_bytes: int = 16 * 1024 * 1024
     server_event_bytes: int = 256 * 1024 * 1024
     server_reserved_bytes: int = 16 * 1024 * 1024
-    session_event_bytes: int = 16 * 1024 * 1024
+    session_event_bytes: int = 32 * 1024 * 1024
     session_reserved_bytes: int = 1024 * 1024
     total_event_rows: int = 1_000_000
     reserved_event_rows: int = 10_000
@@ -41,7 +42,9 @@ class JournalLimits:
     server_reserved_rows: int = 10_000
     session_event_rows: int = 50_000
     session_reserved_rows: int = 1_000
-    max_event_body_bytes: int = 1024 * 1024
+    # Durable source may exceed the inline wire limit. Publishers externalize
+    # its payload to the artifact store before acknowledging this journal.
+    max_event_body_bytes: int = 16 * 1024 * 1024 + 64 * 1024
     max_operation_rows: int = 100_000
     reserved_operation_rows: int = 1_000
     server_operation_rows: int = 50_000
@@ -144,7 +147,8 @@ def validate_process_birth(evidence: ProcessBirthEvidence) -> None:
     if evidence.container_id is not None:
         import re
         pattern = {'win32': r'Global\\nexus-core-[0-9a-f]{32}',
-                   'linux': r'linux-guardian:[0-9a-f]{32}'}.get(evidence.platform)
+                   'linux': r'linux-guardian:[0-9a-f]{32}',
+                   'darwin': r'darwin-launchd:ai\.oktolabs\.nexus-owned\.[0-9]+\.[0-9a-f]{16}'}.get(evidence.platform)
         if (pattern is None or type(evidence.container_id) is not str or
                 re.fullmatch(pattern, evidence.container_id) is None):
             raise ValueError("invalid owned process container")
@@ -167,7 +171,7 @@ async def open_journal(path, *, limits: "JournalLimits | None" = None)         -
     return await asyncio.to_thread(SQLiteJournal, path, limits=limits)
 
 
-class SQLiteJournal:
+class SQLiteJournal(ProcessLaunchStorageMixin):
     def __init__(self, path: str | Path, *, limits: JournalLimits | None = None):
         self.path = str(path)
         if limits is not None and not isinstance(limits, JournalLimits):
@@ -320,6 +324,7 @@ class SQLiteJournal:
                 PRIMARY KEY(server_id, executor_id, session_id, stream_epoch)
             );
         """)
+        db.executescript(PROCESS_LAUNCH_SCHEMA)
         if "compacted_sequence" not in {
             row[1] for row in db.execute("PRAGMA table_info(event_streams)")
         }:
@@ -375,13 +380,26 @@ class SQLiteJournal:
                     executor_id TEXT NOT NULL,
                     session_id TEXT NOT NULL,
                     operation_id TEXT NOT NULL,
+                    reconciliation_pending INTEGER NOT NULL DEFAULT 1,
+                    release_id TEXT,
+                    release_digest TEXT,
                     PRIMARY KEY(server_id, executor_id, session_id)
                 )""")
                 db.execute("""
-                    INSERT INTO session_claims
+                    INSERT INTO session_claims(server_id,executor_id,session_id,operation_id)
                     SELECT server_id, executor_id, session_id, MIN(operation_id)
                     FROM operations_v2 GROUP BY server_id, executor_id, session_id
                 """)
+            claim_columns = {row[1] for row in db.execute("PRAGMA table_info(session_claims)")}
+            for column, declaration in (
+                ("reconciliation_pending", "INTEGER NOT NULL DEFAULT 1"),
+                ("release_id", "TEXT"),
+                ("release_digest", "TEXT"),
+            ):
+                if column not in claim_columns:
+                    db.execute(f"ALTER TABLE session_claims ADD COLUMN {column} {declaration}")
+            db.execute("CREATE INDEX IF NOT EXISTS pending_session_claims "
+                       "ON session_claims(server_id,executor_id) WHERE reconciliation_pending=1")
             db.execute("COMMIT")
         except BaseException:
             self._rollback_if_active(db)
@@ -437,14 +455,17 @@ class SQLiteJournal:
     async def claimed_sessions(
             self, server_id: str, executor_id: str, *, after_rowid: int = 0,
             high_water_rowid: int | None = None,
-            limit: int = 128) -> SessionClaimPage:
+            limit: int = 128, pending_only: bool = False) -> SessionClaimPage:
         """Page durable identity history, never a live-process inventory."""
         validate_claim_page(after_rowid, high_water_rowid, limit)
         validate_claim_namespace(server_id, executor_id)
+        if type(pending_only) is not bool:
+            raise ValueError("invalid session-claim selection")
         def _worker_impl(db, high_water_rowid=high_water_rowid):
+            pending = " AND reconciliation_pending=1" if pending_only else ""
             if high_water_rowid is None:
                 high_water_rowid = db.execute(
-                    "SELECT COALESCE(MAX(rowid),0) FROM session_claims WHERE server_id=? AND executor_id=?",
+                    "SELECT COALESCE(MAX(rowid),0) FROM session_claims WHERE server_id=? AND executor_id=?" + pending,
                     (server_id, executor_id)).fetchone()[0]
             rows = db.execute(
                 """SELECT c.rowid,c.session_id,c.operation_id,
@@ -453,8 +474,9 @@ class SQLiteJournal:
                      ON g.server_id=c.server_id AND g.executor_id=c.executor_id
                     AND g.session_id=c.session_id AND g.operation_id=c.operation_id
                    WHERE c.server_id=? AND c.executor_id=?
-                     AND c.rowid>? AND c.rowid<=?
-                   ORDER BY c.rowid LIMIT ?""",
+                     AND c.rowid>? AND c.rowid<=?""" +
+                (" AND c.reconciliation_pending=1" if pending_only else "") +
+                " ORDER BY c.rowid LIMIT ?",
                 (server_id, executor_id, after_rowid,
                  high_water_rowid, limit + 1)).fetchall()
             page_rows = rows[:limit]
@@ -467,6 +489,40 @@ class SQLiteJournal:
                 high_water_rowid,
                 page_rows[-1][0] if len(rows) > limit else None)
         return await self._run(_worker_impl, urgent=False)
+
+    async def retire_reconciliation_claim(self, session: SessionKey, *,
+                                          operation_id: str, release_id: str,
+                                          release_digest: str) -> None:
+        """Retire only the reconciliation projection; immutable claim history remains."""
+        if (not isinstance(session, SessionKey) or type(session.session_id) is not str
+                or not 1 <= len(session.session_id) <= 160
+                or type(operation_id) is not str or not 1 <= len(operation_id) <= 160
+                or type(release_id) is not str
+                or not 1 <= len(release_id) <= 160 or type(release_digest) is not str
+                or len(release_digest) != 64
+                or any(char not in "0123456789abcdef" for char in release_digest)):
+            raise ValueError("invalid session retirement proof")
+        validate_claim_namespace(session.server_id, session.executor_id)
+        def retire(db):
+            db.execute("BEGIN IMMEDIATE")
+            try:
+                row = db.execute("SELECT operation_id,reconciliation_pending,release_id,release_digest "
+                    "FROM session_claims WHERE server_id=? AND executor_id=? AND session_id=?",
+                    (session.server_id,session.executor_id,session.session_id)).fetchone()
+                if row is None or row[0] != operation_id:
+                    raise CoreError("SESSION_CONFLICT", "claim_retirement")
+                if not row[1]:
+                    if row[2:] != (release_id,release_digest):
+                        raise CoreError("SESSION_CONFLICT", "claim_retirement")
+                else:
+                    db.execute("UPDATE session_claims SET reconciliation_pending=0,release_id=?,release_digest=? "
+                        "WHERE server_id=? AND executor_id=? AND session_id=? AND reconciliation_pending=1",
+                        (release_id,release_digest,session.server_id,session.executor_id,session.session_id))
+                db.execute("COMMIT")
+            except BaseException:
+                self._rollback_if_active(db)
+                raise
+        await self._run(retire, urgent=False)
 
     async def get_session_claim(self, session: SessionKey) -> ClaimedSession | None:
         """Read one original claim without scanning unrelated session history."""
@@ -512,6 +568,7 @@ class SQLiteJournal:
                     (key.server_id, key.executor_id, key.operation_id)).fetchone()
                 if operation is None or not operation[0]:
                     raise CoreError("VALIDATION_ERROR", "process_birth")
+                self._validate_launch_birth(db, session, evidence)
                 old = db.execute(
                     "SELECT platform,pid,birth_token,containment FROM process_births WHERE server_id=? AND executor_id=? AND session_id=?",
                     (key.server_id, key.executor_id, session_id)).fetchone()
@@ -930,11 +987,23 @@ class SQLiteJournal:
                     session_owner_generation: int | None = None,
                     authorization_revision: int | None = None,
                     configuration_revision: int | None = None,
+                    process_launch_identity=None,
                     ) -> tuple[OperationReceipt, bool]:
         if not all((key.server_id, key.executor_id, key.operation_id, session_id)):
             raise CoreError("OPERATION_INVALID", "admission")
         if type(claim_session) is not bool:
             raise ValueError("claim_session must be boolean")
+        if process_launch_identity is not None:
+            from .process_launch import validate_launch_identity
+            validate_launch_identity(process_launch_identity)
+            launch = process_launch_identity
+            if (not claim_session or launch.key != SessionKey(key.server_id, key.executor_id, session_id)
+                    or launch.opening_operation_id != key.operation_id
+                    or launch.connection_generation != connection_generation
+                    or launch.owner_generation != session_owner_generation):
+                raise CoreError('PROCESS_LAUNCH_CONFLICT', 'admission', retry_safe=True,
+                                operation_id=key.operation_id)
+        admission_bytes = 1536 if process_launch_identity is not None else 512
         if ((connection_generation is None) !=
                 (session_owner_generation is None)):
             raise ValueError("opening generations must be supplied together")
@@ -961,7 +1030,7 @@ class SQLiteJournal:
             # fences cross-process races before any new admission.
             if not critical and self._get(db, key) is None:
                 self._recover_normal_storage(db, 
-                    512, stage="admission", operation_id=key.operation_id)
+                    admission_bytes, stage="admission", operation_id=key.operation_id)
             db.execute("BEGIN IMMEDIATE")
             try:
                 old = self._get(db, key)
@@ -986,7 +1055,7 @@ class SQLiteJournal:
                     db.execute("COMMIT")
                     return old, False
                 self._require_storage_capacity(db, 
-                    512, critical=critical, stage="admission",
+                    admission_bytes, critical=critical, stage="admission",
                     operation_id=key.operation_id)
                 usage = db.execute(
                     "SELECT event_bytes,event_rows FROM journal_usage WHERE singleton=1"
@@ -1040,7 +1109,7 @@ class SQLiteJournal:
                         raise CoreError("SESSION_CONFLICT", "admission",
                                         operation_id=key.operation_id)
                     db.execute(
-                        "INSERT INTO session_claims VALUES (?,?,?,?)",
+                        "INSERT INTO session_claims(server_id,executor_id,session_id,operation_id) VALUES (?,?,?,?)",
                         (key.server_id, key.executor_id, session_id,
                          key.operation_id))
                     if connection_generation is not None:
@@ -1062,6 +1131,10 @@ class SQLiteJournal:
                                   key.operation_id, intent_hash, session_id,
                                   "SUBMISSION_STARTED" if effect_imminent else "RECEIVED_DURABLE",
                                   int(effect_imminent), int(not effect_imminent), None, None))
+                if process_launch_identity is not None:
+                    # Persist before the possible-effect frontier, in the
+                    # same transaction as the immutable opening claim.
+                    self._insert_process_launch(db, process_launch_identity)
                 db.execute(
                     "UPDATE operation_usage SET operation_rows=operation_rows+1 WHERE singleton=1")
                 db.execute(

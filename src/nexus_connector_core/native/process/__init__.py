@@ -5,7 +5,8 @@ from __future__ import annotations
 import os
 import subprocess
 
-from .birth import observe_recorded_process_birth, snapshot_owned_process_birth
+from .birth import (observe_recorded_process_birth, record_owned_process_birth,
+                    snapshot_owned_process_birth)
 from .preflight import (containment_preflight,
                        containment_requirements, require_containment)
 import sys

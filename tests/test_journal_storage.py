@@ -17,12 +17,17 @@ def event(text: str, *, category: str = "text_delta", server: str = "srv",
 
 def test_physical_pressure_gates_new_work_and_reports_files(tmp_path):
     async def run():
-        limits = JournalLimits(max_storage_bytes=384 * 1024,
+        limits = JournalLimits(max_storage_bytes=8 * 1024 * 1024,
                                reserved_storage_bytes=64 * 1024)
         path = tmp_path / "journal.db"
         journal = SQLiteJournal(path, limits=limits)
         core = LocalRuntimeCore(journal, object(), candidates={}, workspace_roots={})
         before = await core.storage_status()
+        # The schema footprint differs between SQLite builds. Keep the
+        # pressure window above the initial database on every platform.
+        limits = replace(limits, max_storage_bytes=max(
+            1024 * 1024, before.total_bytes * 2 + 256 * 1024))
+        journal.limits = limits
         assert before.database_bytes > 0 and before.page_size > 0
         assert before.total_bytes == (before.database_bytes + before.wal_bytes +
                                       before.shm_bytes)

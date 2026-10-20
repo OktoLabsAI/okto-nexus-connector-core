@@ -1,0 +1,108 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "server_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,160}$"
+            },
+            "executor_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,160}$"
+            },
+            "session_id": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9_-]{1,160}$"
+            }
+          },
+          "required": [
+            "server_id",
+            "executor_id",
+            "session_id"
+          ]
+        },
+        "opening_operation_id": {
+          "type": "string",
+          "pattern": "^[A-Za-z0-9_-]{1,160}$"
+        },
+        "connection_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "owner_generation": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 9007199254740991
+        },
+        "platform": {
+          "enum": [
+            "win32",
+            "linux",
+            "darwin"
+          ]
+        },
+        "containment": {
+          "enum": [
+            "windows_job",
+            "linux_guardian",
+            "darwin_launchd_coalition"
+          ]
+        },
+        "container_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 160
+        },
+        "producer_id": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{32}$"
+        },
+        "schema_version": {
+          "const": 1
+        }
+      },
+      "required": [
+        "key",
+        "opening_operation_id",
+        "connection_generation",
+        "owner_generation",
+        "platform",
+        "containment",
+        "container_id",
+        "producer_id",
+        "schema_version"
+      ]
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 3,
+      "maximum": 9007199254740991
+    },
+    "spawn_claimed": {
+      "const": false
+    },
+    "producer_fenced": {
+      "const": true
+    },
+    "stop_proof": {
+      "const": "NEVER_CLAIMED"
+    }
+  },
+  "required": [
+    "identity",
+    "revision",
+    "spawn_claimed",
+    "producer_fenced",
+    "stop_proof"
+  ],
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

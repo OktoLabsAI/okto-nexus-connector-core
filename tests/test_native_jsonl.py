@@ -1,6 +1,6 @@
 import pytest
 
-from nexus_connector_core.native.jsonl import JSONLDecoder
+from nexus_connector_core.native.jsonl import JSONLDecoder, MAX_NATIVE_FRAME_BYTES
 
 
 def test_fragmented_utf8_crlf_and_unicode_internal():
@@ -30,7 +30,7 @@ def test_incomplete_final_frame_is_error():
         decoder.finish()
 
 
-@pytest.mark.parametrize("limit", [True, 1.5, "8", 0, 1024 * 1024 + 1])
+@pytest.mark.parametrize("limit", [True, 1.5, "8", 0, MAX_NATIVE_FRAME_BYTES + 1])
 def test_invalid_byte_limit_is_rejected_before_feed(limit):
     with pytest.raises(ValueError, match="limit"):
         JSONLDecoder(max_frame_bytes=limit)

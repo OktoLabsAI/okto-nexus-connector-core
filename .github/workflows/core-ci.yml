@@ -12,7 +12,7 @@ jobs:
   test-and-package:
     name: ${{ matrix.os }} / Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
@@ -53,12 +53,15 @@ jobs:
           python -m venv build/macos-venv
           build/macos-venv/bin/python -m pip install dist/*.whl
           build/macos-venv/bin/python -I tools/macos_native_acceptance.py --runs 10 --output build/macos-native-acceptance.json
+          build/macos-venv/bin/python -I tools/macos_planned_crash_acceptance.py --output build/macos-planned-crash.json
       - name: Retain native macOS acceptance evidence
         if: always() && runner.os == 'macOS'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: macos-intel-native-acceptance
-          path: build/macos-native-acceptance.json
+          path: |
+            build/macos-native-acceptance.json
+            build/macos-planned-crash.json
           if-no-files-found: warn
 
   sbom:

@@ -256,16 +256,21 @@ class PiNativeActionOwner:
     def _authorize(self, prepared, session_id, context):
         from dataclasses import replace
         # Opening performs asynchronous identity/environment checks. A lease
-        # renewal during those checks changes its serial and deadline, not the
-        # authorized subject. The provider still verifies live lease validity.
+        # renewal during those checks changes its lease ID, serial and
+        # deadline, not the authorized subject. The provider still verifies
+        # live lease validity.
         try:
             current = self._context_provider()
         except CoreError as error:
             raise CoreError(error.code, 'native_action_launch', retry_safe=True) from error
         comparable = current
         if context.r4_authority is not None and current.r4_authority is not None:
-            if current.r4_authority.lease_serial >= context.r4_authority.lease_serial:
+            serial_advanced = current.r4_authority.lease_serial > context.r4_authority.lease_serial
+            same_lease = (current.r4_authority.lease_serial == context.r4_authority.lease_serial
+                          and current.r4_authority.lease_id == context.r4_authority.lease_id)
+            if serial_advanced or same_lease:
                 comparable = replace(current, r4_authority=replace(current.r4_authority,
+                    lease_id=context.r4_authority.lease_id,
                     lease_serial=context.r4_authority.lease_serial))
         if current.lease_deadline_monotonic >= context.lease_deadline_monotonic:
             comparable = replace(comparable, lease_deadline_monotonic=context.lease_deadline_monotonic)

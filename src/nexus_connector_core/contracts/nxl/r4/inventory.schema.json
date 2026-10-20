@@ -350,6 +350,13 @@
           "minimum": 0,
           "type": "integer"
         },
+        "observations": {
+          "items": {
+            "$ref": "#/$defs/HarnessObservation"
+          },
+          "maxItems": 128,
+          "type": "array"
+        },
         "producer_instance_id": {
           "maxLength": 160,
           "minLength": 1,
@@ -365,7 +372,7 @@
           "type": "string"
         },
         "snapshot_format_version": {
-          "const": 2
+          "const": 3
         }
       },
       "required": [
@@ -379,7 +386,103 @@
         "catalog",
         "availability",
         "evidence",
-        "observation_age_ms"
+        "observation_age_ms",
+        "observations"
+      ],
+      "type": "object"
+    },
+    "HarnessObservation": {
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "properties": {
+            "error_code": {
+              "type": "null"
+            },
+            "observation_age_ms": {
+              "maximum": 300000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "state": {
+              "enum": [
+                "PRESENT",
+                "ABSENT"
+              ]
+            }
+          }
+        },
+        {
+          "properties": {
+            "error_code": {
+              "type": "null"
+            },
+            "observation_age_ms": {
+              "type": "null"
+            },
+            "state": {
+              "const": "PENDING"
+            }
+          }
+        },
+        {
+          "properties": {
+            "error_code": {
+              "type": "string"
+            },
+            "observation_age_ms": {
+              "type": "null"
+            },
+            "state": {
+              "const": "FAILED"
+            }
+          }
+        }
+      ],
+      "properties": {
+        "adapter_id": {
+          "maxLength": 160,
+          "minLength": 1,
+          "type": "string"
+        },
+        "error_code": {
+          "anyOf": [
+            {
+              "maxLength": 80,
+              "pattern": "^[A-Z][A-Z0-9_]*$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "observation_age_ms": {
+          "anyOf": [
+            {
+              "maximum": 300000,
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "state": {
+          "enum": [
+            "PENDING",
+            "PRESENT",
+            "ABSENT",
+            "FAILED"
+          ]
+        }
+      },
+      "required": [
+        "adapter_id",
+        "state",
+        "observation_age_ms",
+        "error_code"
       ],
       "type": "object"
     },

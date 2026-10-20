@@ -9,6 +9,7 @@ prelaunch refusal or observes stop through its native containment handle.
 from __future__ import annotations
 
 from pathlib import Path
+import secrets
 import sqlite3
 import time
 
@@ -18,13 +19,15 @@ from .models import (CoreError, OperationKey, OwnedSlotPage,
                      OwnedSlotReservation, OwnedSlotState, SessionKey)
 from .capacity_storage import (SCHEMA as CAPACITY_SCHEMA, SQLiteCapacityOperations,
                                transfer_reserved_open, release_session_capacity, _changed)
+from .journal_location_storage import (EMPTY_DIGEST, SCHEMA as JOURNAL_LOCATION_SCHEMA,
+                                       SQLiteJournalLocationRegistry)
 
 
-class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
+class SQLiteOwnedSlotLedger(SQLiteCapacityOperations, SQLiteJournalLocationRegistry):
     """A cross-process slot cap independent of per-executor journal files."""
 
     def __init__(self, path: str | Path, *, max_slots: int = 8,
-                 max_storage_bytes: int = 64 * 1024 * 1024):
+                 max_storage_bytes: int = 512 * 1024 * 1024):
         path = Path(path)
         if not path.is_absolute():
             raise ValueError("owned-slot ledger needs an absolute local path")
@@ -79,6 +82,34 @@ class SQLiteOwnedSlotLedger(SQLiteCapacityOperations):
                     ON owned_slot_reservations(released);
             """)
             db.executescript(CAPACITY_SCHEMA)
+            db.executescript(JOURNAL_LOCATION_SCHEMA)
+            db.execute('BEGIN IMMEDIATE')
+            try:
+                identity = db.execute('SELECT store_id FROM managed_store_identity WHERE singleton=1').fetchone()
+                if identity is None:
+                    db.execute('INSERT INTO managed_store_identity(singleton,store_id) VALUES(1,?)',
+                               ('store_' + secrets.token_hex(16),))
+                elif (type(identity[0]) is not str or len(identity[0]) != 38
+                      or not identity[0].startswith('store_')
+                      or any(char not in '0123456789abcdef' for char in identity[0][6:])):
+                    raise CoreError('JOURNAL_UNAVAILABLE', 'slot_ledger_open')
+                head = db.execute('SELECT 1 FROM managed_journal_head WHERE singleton=1').fetchone()
+                if head is None:
+                    has_history = db.execute('SELECT 1 FROM managed_journal_locations LIMIT 1').fetchone()
+                    db.execute('INSERT INTO managed_journal_head(singleton,revision,digest,complete) '
+                               'VALUES(1,0,?,?)', (EMPTY_DIGEST, 0 if has_history else 1))
+                progress = db.execute('SELECT 1 FROM managed_journal_extension_progress '
+                    'WHERE singleton=1').fetchone()
+                if progress is None:
+                    current = db.execute('SELECT revision,complete FROM managed_journal_head '
+                        'WHERE singleton=1').fetchone()
+                    db.execute('INSERT INTO managed_journal_extension_progress '
+                               '(singleton,revision,digest,complete) VALUES(1,0,?,?)',
+                               (EMPTY_DIGEST, 1 if current == (0, 1) else 0))
+                db.execute('COMMIT')
+            except BaseException:
+                self._rollback_if_active(db)
+                raise
             info = self.path.stat()
             self._storage_identity = (info.st_dev, info.st_ino)
         except BaseException:

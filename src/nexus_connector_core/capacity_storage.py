@@ -171,26 +171,32 @@ class SQLiteCapacityOperations:
         return await self._run(read)
 
     async def capacity_opening_for_slot(self, slot):
-        """Attribute an unstarted consumed slot to its canonical opening.
+        """Attribute an unstarted consumed/released slot to its canonical opening.
 
         This is historical association only, never proof that a process stopped
         or authority to release/reexecute. Storage-specific placeholder IDs stay
         inside Core, including while the host recovers under a new boot.
+        A historical OwnedSlotState must match the stored release flag exactly;
+        a formerly occupied observation does not become release evidence.
         """
-        from .models import OwnedSlotReservation
+        from .models import OwnedSlotReservation, OwnedSlotState
         from .journal import validate_claim_namespace
-        if type(slot) is not OwnedSlotReservation or not slot.opening_operation_id:
+        if type(slot) not in (OwnedSlotReservation, OwnedSlotState) or not slot.opening_operation_id:
             raise ValueError('Invalid capacity slot lookup.')
+        released = slot.released if type(slot) is OwnedSlotState else False
+        if type(released) is not bool:
+            raise ValueError('Invalid capacity slot release observation.')
         key = slot.key
         validate_claim_namespace(key.server_id, key.executor_id)
         def read(db):
             self._check_storage_identity(db)
             row = db.execute('SELECT c.request_json,c.consumption_json FROM execution_capacity_reservations c '
                 'JOIN owned_slot_reservations s USING(server_id,executor_id,session_id) '
-                "WHERE s.server_id=? AND s.executor_id=? AND s.session_id=? AND s.released=0 "
+                "WHERE s.server_id=? AND s.executor_id=? AND s.session_id=? AND s.released=? "
                 "AND s.operation_id=? AND s.operation_id='capacity:' || c.reservation_id "
-                "AND c.state IN ('CONSUMED','RELEASE_PENDING') AND c.opening_started=0",
-                (key.server_id, key.executor_id, key.session_id, slot.opening_operation_id)).fetchone()
+                "AND ((s.released=0 AND c.state IN ('CONSUMED','RELEASE_PENDING')) "
+                "OR (s.released=1 AND c.state='RELEASED')) AND c.opening_started=0",
+                (key.server_id, key.executor_id, key.session_id, int(released), slot.opening_operation_id)).fetchone()
             if row is None:
                 return None
             request = CapacityRequest.from_dict(json.loads(row[0]))

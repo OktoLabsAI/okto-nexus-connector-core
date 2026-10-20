@@ -93,7 +93,8 @@ reported instead of smoothed over, per instructions.
 
 from __future__ import annotations
 
-from ..process import spawn_owned_process, observe_owned_process
+from ..process import (spawn_owned_process, observe_owned_process,
+                       record_owned_process_birth)
 from ..framing import (ByteFrameLimitExceeded, IncompleteByteFrame,
                        byte_protocol_lines, stderr_chunks)
 from ...protocol import strict_json
@@ -266,9 +267,11 @@ class _PiTransport:
         native_action: PiNativeActionLaunch | None = None,
         dispatch_guards: "object | None" = None,
         on_ui_request: Callable[[dict[str, Any]], bool] | None = None,
+        container_id: str | None = None,
     ) -> None:
         self._dispatch_guards = dispatch_guards
         self._on_ui_request = on_ui_request
+        self._container_id = container_id
         self._argv = list(argv)
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
@@ -325,7 +328,7 @@ class _PiTransport:
             # New process group so close() can kill the whole tree, not just
             # the immediate child (quality bar: leave no orphans).
             popen_kwargs["start_new_session"] = True
-        self._proc = spawn_owned_process(self._argv, **popen_kwargs)
+        self._proc = spawn_owned_process(self._argv, container_id=self._container_id, **popen_kwargs)
         threading.Thread(target=self._read_stdout, daemon=True, name="pi-stdout").start()
         threading.Thread(target=self._read_stderr, daemon=True, name="pi-stderr").start()
 
@@ -825,6 +828,7 @@ class PiRpcConnector:
                 on_malformed_line=self._on_malformed_line,
                 on_line_processing_error=self._on_line_processing_error,
                 on_reader_exit=self._on_reader_exit,
+                container_id=getattr(self, '_process_container_id', None),
             )
             # Retain process ownership even if readiness negotiation fails;
             # Core must be able to confirm cleanup and retry containment.
@@ -843,6 +847,9 @@ class PiRpcConnector:
                 transport._response_ids_required = (
                     compatibility.get("native_version") == "0.87.1")
                 transport.start()
+                record_owned_process_birth(
+                    getattr(transport, "_proc", None),
+                    getattr(self, "_process_birth_observer", None))
                 # Readiness requires a successful response in the documented
                 # object shape; a rejected command only proves pipe connectivity.
                 response = transport.request(_VERB_GET_STATE, {}, timeout_s=self._handshake_timeout_s)

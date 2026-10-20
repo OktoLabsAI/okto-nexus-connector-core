@@ -64,7 +64,7 @@
         },
         "snapshot_formats": {
           "items": {
-            "const": 2
+            "const": 3
           },
           "maxItems": 1,
           "minItems": 1,
@@ -152,7 +152,7 @@
           "type": "string"
         },
         "snapshot_format": {
-          "const": 2
+          "const": 3
         },
         "type": {
           "const": "welcome"
