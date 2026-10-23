@@ -162,7 +162,12 @@ def candidate(adapter_id: str, path: str | Path, *, explicit: bool = False,
     roots = tuple(root.resolve(strict=True) for root in trusted_roots)
     trusted = explicit or any(resolved.is_relative_to(root) for root in roots)
     if not trusted:
-        raise CoreError("APPROVAL_REQUIRED", "discovery")
+        raise CoreError(
+            "APPROVAL_REQUIRED", "discovery",
+            message=(f"APPROVAL_REQUIRED: the resolved path {resolved} is outside every trusted root. "
+                     f"Roots checked: {', '.join(str(r) for r in roots) or 'none'}. "
+                     "A symlink does not extend trust to its target. "
+                     "Set --harness-root to a directory that contains the resolved binary."))
     return InstallationCandidate(adapter_id, str(resolved), fingerprint(resolved),
                                  "explicit" if explicit else "trusted_root",
                                  "selected", architecture=binary_architecture(resolved),
