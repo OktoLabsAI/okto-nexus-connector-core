@@ -1664,3 +1664,92 @@ def test_copied_peer_terminal_reduces_public_receipt(tmp_path, adapter_id):
         journal.close()
 
     asyncio.run(run())
+
+
+def _claude_frame(kind, native_event, phase=None, outcome=None, operation_id=None):
+    return HarnessEvent("native-session", "claude_code", kind, native_event,
+                        "2026-10-20T00:00:00Z", {}, operation_id=operation_id,
+                        delivery_phase=phase, delivery_outcome=outcome)
+
+
+class _ClaudeBatches(FakeCopiedConnector):
+    """Yields one scripted batch of native frames for each events() call."""
+
+    def __init__(self, batches):
+        super().__init__()
+        self._batches = list(batches)
+
+    def events(self):
+        yield from self._batches.pop(0)
+
+
+def _claude_bridge(connector):
+    harness = HarnessSession("native-session", "claude_code", "agent", "STARTING",
+                             HarnessCapabilities(False, "IMMEDIATE", False, False, True),
+                             "2026-10-20T00:00:00Z")
+    return CopiedAdapterSession(connector, harness, session_id="public-session",
+                                stream_epoch="epoch", context=context())
+
+
+def _turn_frames():
+    return [_claude_frame("turn_started", "system:init", phase="started"),
+            _claude_frame("output_delta", "assistant"),
+            _claude_frame("turn_completed", "result:success", phase="terminal",
+                          outcome="success")]
+
+
+def test_claude_background_subagent_frames_after_turn_are_dropped():
+    # A background subagent keeps emitting after the parent turn ended.
+    stray = [_claude_frame("output_delta", "assistant"),
+             _claude_frame("turn_completed", "result:success", phase="terminal",
+                           outcome="success")]
+    async def run():
+        bridge = _claude_bridge(_ClaudeBatches([_turn_frames() + stray, _turn_frames()]))
+        try:
+            await bridge.send("send_turn", {"text": "one"}, "op-1")
+            first = [event async for event in bridge.events()]
+            assert {event.operation_id for event in first} == {"op-1"}
+            assert len(first) == 3
+            assert not bridge.active_turn()
+            assert bridge._unsolicited_frames == 2
+            await bridge.send("send_turn", {"text": "two"}, "op-2")
+            second = [event async for event in bridge.events()]
+            assert len(second) == 3
+            assert {event.operation_id for event in second} == {"op-2"}
+            assert not bridge.active_turn()
+        finally:
+            await bridge.close()
+
+    asyncio.run(run())
+
+
+def test_claude_self_started_turn_without_active_turn_is_dropped():
+    # A scheduled wakeup starts a turn that no operation owns.
+    async def run():
+        bridge = _claude_bridge(_ClaudeBatches([_turn_frames(), _turn_frames()]))
+        try:
+            assert [event async for event in bridge.events()] == []
+            assert not bridge.active_turn()
+            assert bridge._unsolicited_frames == 3
+            await bridge.send("send_turn", {"text": "next"}, "op-2")
+            events = [event async for event in bridge.events()]
+            assert len(events) == 3
+            assert {event.operation_id for event in events} == {"op-2"}
+        finally:
+            await bridge.close()
+
+    asyncio.run(run())
+
+
+def test_claude_frame_naming_another_operation_still_faults():
+    async def run():
+        frame = _claude_frame("output_delta", "assistant", operation_id="other")
+        bridge = _claude_bridge(_ClaudeBatches([[frame]]))
+        try:
+            await bridge.send("send_turn", {"text": "one"}, "op-1")
+            with pytest.raises(CoreError, match="EVENT_OPERATION_MISMATCH"):
+                _ = [event async for event in bridge.events()]
+        finally:
+            await bridge.close()
+
+    asyncio.run(run())
