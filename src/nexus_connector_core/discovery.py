@@ -19,7 +19,7 @@ from .installation import installation_ref
 from .models import CoreError, InstallationCandidate, Inventory
 from .native.process import require_containment
 from .native.registry import adapter_specs
-from .build_identity import (executable_build_identity,
+from .build_identity import (_file_digest, executable_build_identity,
                                 pi_build_identity)
 from .protocol import canonical_json
 
@@ -62,13 +62,8 @@ def binary_architecture(path: str | Path) -> str | None:
 
 
 def fingerprint(path: Path) -> str:
-    check_discovery_cancelled()
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            check_discovery_cancelled()
-            digest.update(chunk)
-    return "sha256:" + digest.hexdigest()
+    # Shares the process-wide digest cache of the build identity (#82).
+    return _file_digest(path)
 
 
 def _pi_node_cli_fingerprint(node: Path, script: Path) -> str:
