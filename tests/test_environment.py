@@ -288,3 +288,13 @@ def test_daemon_claude_config_override_is_not_treated_as_default(tmp_path, monke
         assert env['CLAUDE_CONFIG_DIR'] == str(state.resolve())
     asyncio.run(run())
 
+
+
+def test_require_provider_home_names_the_setting():
+    from nexus_connector_core.environment import require_provider_home
+    with pytest.raises(CoreError) as error:
+        require_provider_home("claude_stream", None)
+    assert error.value.code == "PROVIDER_AUTH_REQUIRED"
+    assert "provider_home" in error.value.message
+    require_provider_home("claude_stream", "/some/home")
+    require_provider_home("pi_rpc", None)
