@@ -1100,7 +1100,8 @@ class CopiedAdapterFactory:
             from ..configuration_probe import probe_selected_configuration
             def observe_configuration():
                 _revalidate_launch('configuration_discovery')
-                value = probe_selected_configuration(candidate, cwd=prepared.cwd, env=env)
+                value = probe_selected_configuration(candidate, cwd=prepared.cwd, env=env,
+                    native_approvals_enabled=bool(native_approvals_enabled))
                 _revalidate_launch('configuration_discovery')
                 return value
             connector.configuration_observation = observe_configuration

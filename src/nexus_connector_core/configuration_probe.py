@@ -9,7 +9,7 @@ from .models import CoreError
 from .native.process import require_containment, spawn_owned_process, observe_owned_process
 
 
-def probe_selected_configuration(candidate, *, cwd, env):
+def probe_selected_configuration(candidate, *, cwd, env, native_approvals_enabled=False):
     """Observe help only. The host owns selection/authorization; no login is read.
 
     Codex and Pi use their existing authenticated RPC channels instead. This
@@ -50,7 +50,8 @@ def probe_selected_configuration(candidate, *, cwd, env):
         if selected_fingerprint(candidate) != candidate.fingerprint:
             raise CoreError('PROFILE_DRIFT', 'configuration_discovery')
         return discover_harness_configuration(candidate.adapter_id, version=candidate.version,
-            candidate_ref=candidate.installation_ref, cli_help=captured.decode('utf-8',errors='strict'))
+            candidate_ref=candidate.installation_ref, cli_help=captured.decode('utf-8',errors='strict'),
+            native_approvals_enabled=native_approvals_enabled)
     finally:
         if not observe_owned_process(proc)['stop_observed']:
             proc.kill()

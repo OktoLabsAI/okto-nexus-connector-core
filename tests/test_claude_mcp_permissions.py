@@ -58,6 +58,7 @@ def test_invalid_mcp_permission_names_are_not_actionable(name):
 
 
 @pytest.mark.parametrize("extra",[(),("--model","qualified-model"),
+    ("--permission-mode","default"),("--permission-mode","bypassPermissions"),
     ("--strict-mcp-config","--mcp-config",'{"mcpServers":{}}')])
 def test_stream_configuration_keeps_stdio_permission_channel(extra,tmp_path,monkeypatch):
     import nexus_connector_core.native.adapters.claude_code_stream as module
@@ -73,3 +74,55 @@ def test_stream_configuration_keeps_stdio_permission_channel(extra,tmp_path,monk
     with pytest.raises(SpawnObserved):
         native.start(owning_agent_id="agent")
     assert tuple(seen[0])==("claude",*module._DEFAULT_ARGV,*extra,"--permission-prompt-tool","stdio")
+
+
+def _bridge_categories(native, requests):
+    """Run real adapter requests through the Core bridge; return event categories."""
+    import asyncio
+    from nexus_connector_core.native.adapter_types import HarnessEvent
+    from nexus_connector_core.native.redaction import NativeSecretRedactor
+    from nexus_connector_core.native.runtime_bridge import CopiedAdapterSession
+    from test_native_runtime_bridge import context
+    emitted = []
+    native._emit = lambda kind, name, payload: emitted.append(HarnessEvent(
+        "session", "claude_code", kind, name, "2026-09-30T00:00:00Z", payload))
+    native._write_json = lambda value: pytest.fail("a request must wait for the operator")
+    for request_id, params in requests:
+        native._handle_permission_request({"request_id": request_id, "request": params})
+    native.events = lambda: iter(emitted)
+
+    async def run():
+        bridge = CopiedAdapterSession(native, native._session, session_id="bridge-session",
+            stream_epoch="epoch", context=context(), redactor=NativeSecretRedactor([]))
+        bridge._active_operation_id = "turn-operation"
+        try:
+            return [item async for item in bridge.events()]
+        finally:
+            bridge._control_executor.shutdown(wait=True)
+            bridge._force_executor.shutdown(wait=True)
+    return [(item.category, item.operation_id, "native_approval" in item.payload,
+             "native_approval_display" in item.payload) for item in asyncio.run(run())]
+
+
+def test_default_mode_permission_prompt_and_question_become_operator_requests():
+    native = connector()
+    question = {"questions": [{"question": "Which one?", "header": "Pick", "multiSelect": False,
+        "options": [{"label": "a", "description": "A"}, {"label": "b", "description": "B"}]}]}
+    result = _bridge_categories(native, [
+        ("permission", {"subtype": "can_use_tool", "tool_name": "Bash", "tool_use_id": "t1",
+                        "input": {"command": "touch file"}}),
+        ("question", {"subtype": "can_use_tool", "tool_name": "AskUserQuestion", "tool_use_id": "t2",
+                      "input": question})])
+    assert result == [("approval_request", "turn-operation", True, True),
+                      ("input_request", "turn-operation", True, True)]
+
+
+def test_permission_prompt_is_ignored_without_native_approvals():
+    native = connector()
+    native.native_approvals_enabled = False
+    sent = []
+    native._write_json = sent.append
+    native._handle_permission_request({"request_id": "request", "request": {
+        "subtype": "can_use_tool", "tool_name": "Bash", "tool_use_id": "t1", "input": {}}})
+    assert not native._approval_requests
+    assert sent[0]["response"]["subtype"] == "error"
