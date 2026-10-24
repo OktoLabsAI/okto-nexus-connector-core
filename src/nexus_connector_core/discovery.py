@@ -19,7 +19,7 @@ from .installation import installation_ref
 from .models import CoreError, InstallationCandidate, Inventory
 from .native.process import require_containment
 from .native.registry import adapter_specs
-from .build_identity import (executable_build_identity,
+from .build_identity import (_file_digest, executable_build_identity,
                                 pi_build_identity)
 from .protocol import canonical_json
 
@@ -62,13 +62,8 @@ def binary_architecture(path: str | Path) -> str | None:
 
 
 def fingerprint(path: Path) -> str:
-    check_discovery_cancelled()
-    digest = hashlib.sha256()
-    with path.open("rb") as stream:
-        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-            check_discovery_cancelled()
-            digest.update(chunk)
-    return "sha256:" + digest.hexdigest()
+    # Shares the process-wide digest cache of the build identity (#82).
+    return _file_digest(path)
 
 
 def _pi_node_cli_fingerprint(node: Path, script: Path) -> str:
@@ -143,6 +138,13 @@ def selected_fingerprint(selected: InstallationCandidate) -> str:
     return _pi_node_cli_fingerprint(executable, script)
 
 
+def _outside_roots_message(resolved: Path, roots: tuple[Path, ...]) -> str:
+    return (f"APPROVAL_REQUIRED: the resolved path {resolved} is outside every trusted root. "
+            f"Roots checked: {', '.join(str(r) for r in roots) or 'none'}. "
+            "A symlink does not extend trust to its target. "
+            "Set --harness-root to a directory that contains the resolved binary.")
+
+
 def candidate(adapter_id: str, path: str | Path, *, explicit: bool = False,
               trusted_roots: tuple[Path, ...] = ()) -> InstallationCandidate:
     if adapter_id not in EXECUTABLE_NAMES:
@@ -162,7 +164,8 @@ def candidate(adapter_id: str, path: str | Path, *, explicit: bool = False,
     roots = tuple(root.resolve(strict=True) for root in trusted_roots)
     trusted = explicit or any(resolved.is_relative_to(root) for root in roots)
     if not trusted:
-        raise CoreError("APPROVAL_REQUIRED", "discovery")
+        raise CoreError("APPROVAL_REQUIRED", "discovery",
+                        message=_outside_roots_message(resolved, roots))
     return InstallationCandidate(adapter_id, str(resolved), fingerprint(resolved),
                                  "explicit" if explicit else "trusted_root",
                                  "selected", architecture=binary_architecture(resolved),
@@ -331,8 +334,12 @@ def discover_path(adapter_id: str, *, path_env: str | None = None,
                     candidate_pi_node_cli(path, script, explicit=True))
             paths = (Path(item.executable),) + ((Path(item.launch_script),) if item.launch_script else ())
             trusted = all(any(target.is_relative_to(root) for root in roots) for target in paths)
+            outside = next((p for p in paths
+                            if not any(p.is_relative_to(root) for root in roots)), None)
             item = replace(item, source="trusted_root" if trusted else "path",
-                           trust="selected" if trusted else "untrusted")
+                           trust="selected" if trusted else "untrusted",
+                           reason=None if outside is None
+                           else _outside_roots_message(outside, roots))
         except (CoreError, OSError):
             continue
         found[item.installation_ref or installation_ref(adapter_id, item.executable)] = item

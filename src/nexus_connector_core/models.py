@@ -316,6 +316,9 @@ class InstallationCandidate:
     # Byte-identical copies in distinct locations are distinct
     # installations: distinct refs, same build identity.
     installation_ref: str | None = None
+    # #67: why an untrusted candidate is not selected (resolved path and
+    # trusted roots). Informational only; it never changes the trust rule.
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

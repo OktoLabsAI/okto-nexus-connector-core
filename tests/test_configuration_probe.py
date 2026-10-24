@@ -26,6 +26,9 @@ def test_help_probe_drains_pipes_and_rejects_overflow_or_failure(tmp_path, monke
     if success:
         result=probe.probe_selected_configuration(candidate,cwd=tmp_path,env=env)
         assert result['parameters'][1]['values'] == ['low','high']
+        assert not result['human_input']['recipient_routing_implemented']
+        enabled=probe.probe_selected_configuration(candidate,cwd=tmp_path,env=env,native_approvals_enabled=True)
+        assert enabled['human_input']['recipient_routing_implemented'] is True
     else:
         with pytest.raises(CoreError):
             probe.probe_selected_configuration(candidate,cwd=tmp_path,env=env)

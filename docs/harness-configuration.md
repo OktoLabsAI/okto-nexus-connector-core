@@ -71,7 +71,11 @@ allows hosts to reconstruct that public observation without retaining raw help.
 
 Human questions are contract input, not tool permission. The intended recipient
 is the originating interlocutor; the host must implement and authorize that
-routing separately. Codex, Claude and Pi have input bridges subject to build
+routing separately. A Claude permission prompt is an approval request for the
+operator. A Claude question is an input request for the interlocutor. For
+Claude, `recipient_routing_implemented` is true only when the host enables
+native approvals for the session (`native_approvals_enabled`). It is false by
+default, and always false for Codex, Pi and managed contracts. Codex, Claude and Pi have input bridges subject to build
 qualification. Pi supports native `select`, `confirm`, `input` and `editor`
 dialogs and returns the corresponding `extension_ui_response` string, boolean
 or cancellation. It does not invent a native multi-select format. The bundled

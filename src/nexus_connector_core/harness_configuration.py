@@ -112,7 +112,8 @@ def _field(name, label, native, *, applied=False, values=None, scope="session"):
 
 def discover_harness_configuration(adapter_id, *, version=None, candidate_ref=None,
                                    native_models=None, cli_help=None, thinking_levels=None,
-                                   requirements=None, native_parameters=None):
+                                   requirements=None, native_parameters=None,
+                                   native_approvals_enabled=False):
     """Describe configuration and normalize optional, host-observed capabilities.
 
     ``native_models`` is the result of Codex model/list or Pi
@@ -120,8 +121,13 @@ def discover_harness_configuration(adapter_id, *, version=None, candidate_ref=No
     host-captured Claude --help. Neither is persisted verbatim or executed.
     Unknown versions/absent observations remain visibly unverified. Values are
     native spellings: no invented cross-provider effort or permission modes.
+    ``native_approvals_enabled`` tells whether the host sends this session's
+    native questions and permission prompts to its operator. Only Claude reports
+    routing as implemented, and only when the host enables it.
     """
     if version is not None and (not isinstance(version, str) or len(version) > 160):
+        raise CoreError("VALIDATION_ERROR", "configuration_discovery")
+    if type(native_approvals_enabled) is not bool:
         raise CoreError("VALIDATION_ERROR", "configuration_discovery")
     if candidate_ref is not None and (not isinstance(candidate_ref, str) or not 1 <= len(candidate_ref) <= 256):
         raise CoreError("VALIDATION_ERROR", "configuration_discovery")
@@ -284,7 +290,8 @@ def discover_harness_configuration(adapter_id, *, version=None, candidate_ref=No
                  human_input=dict(native_methods=input_methods,
                      core_bridge="implemented_version_qualification_required",
                      recipient_policy="originating_interlocutor",
-                     recipient_routing_implemented=False,
+                     recipient_routing_implemented=(
+                         adapter_id == "claude_stream" and native_approvals_enabled),
                      separate_from_tool_approval=True),
                  nexus_tool_approval=dict(values=["ask", "always_allow"], scope="nexus_tools_only"))
     value["schema_revision"] = "sha256:" + sha256(canonical_json(value)).hexdigest()
