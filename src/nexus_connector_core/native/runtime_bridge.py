@@ -172,6 +172,9 @@ class CopiedAdapterSession:
         self._replacement_operations: deque[str] = deque()
         self._active_turn_id: str | None = None
         self._pi_started_for_active = False
+        # Claude Code can emit frames on its own (background subagent output,
+        # scheduled wakeup, task notification). Count the frames dropped here.
+        self._unsolicited_frames = 0
         self._last_outcome: str | None = None
         self._last_failure_code: str | None = None
         self._recent_codex_turn_ids: deque[str] = deque()
@@ -475,6 +478,20 @@ class CopiedAdapterSession:
             outcome_fn = getattr(self._connector, "delivery_outcome", None)
             phase = native.delivery_phase or (phase_fn(native) if phase_fn else None)
             outcome = native.delivery_outcome or (outcome_fn(native) if outcome_fn else None)
+            # Claude Code can emit frames with no submitted turn. Drop them
+            # instead of faulting a healthy session. A frame that names an
+            # operation still goes through the strict checks below.
+            if (native.harness_kind == "claude_code" and
+                    self._active_operation_id is None and
+                    native.operation_id is None and
+                    (native.kind == "output_delta" or phase == "started" or
+                     (phase == "terminal" and
+                      (native.kind == "turn_completed" or
+                       (native.kind == "error" and
+                        native.native_event.startswith("result:") and
+                        outcome == "failed"))))):
+                self._unsolicited_frames += 1
+                continue
             # Codex streams identify their native turn, not the Nexus operation.
             # Correlate every assistant delta before redaction withholds its tail.
             if native.harness_kind == "codex" and native.native_event == "item/agentMessage/delta":
@@ -1083,7 +1100,8 @@ class CopiedAdapterFactory:
             from ..configuration_probe import probe_selected_configuration
             def observe_configuration():
                 _revalidate_launch('configuration_discovery')
-                value = probe_selected_configuration(candidate, cwd=prepared.cwd, env=env)
+                value = probe_selected_configuration(candidate, cwd=prepared.cwd, env=env,
+                    native_approvals_enabled=bool(native_approvals_enabled))
                 _revalidate_launch('configuration_discovery')
                 return value
             connector.configuration_observation = observe_configuration
