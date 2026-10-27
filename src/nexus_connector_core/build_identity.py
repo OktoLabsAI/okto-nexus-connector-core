@@ -16,10 +16,12 @@ import hashlib
 import json
 import os
 import stat
-from collections import deque
+import sys
+from collections import OrderedDict, deque
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from pathlib import Path
+from threading import Lock
 
 from .discovery_control import (check_discovery_cancelled,
                                 has_discovery_cancellation_scope)
@@ -52,14 +54,56 @@ _IDENTITY_READ_WORKERS = 4
 _PASSIVE_IDENTITY_READ_WORKERS = 2
 
 
+# Process-wide digest cache for whole-file digests (#82). The key is
+# (realpath, size, mtime_ns, inode, ctime_ns): a file that is replaced,
+# resized or touched has a new key and is read again. ctime_ns also catches
+# an in-place rewrite that restores the old mtime (the OS sets ctime itself).
+# Periodic passive observation then reads an unchanged binary once per
+# process, not once per interval.
+# On Windows st_ctime is the creation time, so a same-size rewrite with a
+# restored mtime keeps the same key. The stat key is no proof of sameness
+# there, so Windows does not use the cache and always reads the file.
+_DIGEST_CACHE_LIMIT = 32
+_digest_cache: OrderedDict = OrderedDict()
+_digest_cache_lock = Lock()
+
+
+def _digest_cache_enabled() -> bool:
+    return sys.platform != "win32"
+
+
+def _digest_key(path: Path):
+    try:
+        info = path.stat()
+        return (os.path.realpath(path), info.st_size, info.st_mtime_ns,
+                info.st_ino, info.st_ctime_ns)
+    except OSError:
+        return None
+
+
 def _file_digest(path: Path) -> str:
     check_discovery_cancelled()
+    key = _digest_key(path) if _digest_cache_enabled() else None
+    if key is not None:
+        with _digest_cache_lock:
+            cached = _digest_cache.get(key)
+            if cached is not None:
+                _digest_cache.move_to_end(key)
+                return cached
     digest = hashlib.sha256()
     with path.open("rb") as stream:
         for chunk in iter(lambda: stream.read(_READ_CHUNK), b""):
             check_discovery_cancelled()
             digest.update(chunk)
-    return "sha256:" + digest.hexdigest()
+    value = "sha256:" + digest.hexdigest()
+    # Keep the result only if the file did not change while it was read.
+    if key is not None and _digest_key(path) == key:
+        with _digest_cache_lock:
+            _digest_cache[key] = value
+            _digest_cache.move_to_end(key)
+            while len(_digest_cache) > _DIGEST_CACHE_LIMIT:
+                _digest_cache.popitem(last=False)
+    return value
 
 
 def _file_digest_counted(path: Path, expected: int) -> str:

@@ -18,6 +18,21 @@ def test_passive_discovery_does_not_invent_observed_models_or_native_support(ada
     assert discover_harness_configuration(adapter)['parameters']
 
 
+def test_recipient_routing_is_reported_only_for_claude_with_native_approvals():
+    for adapter in ('codex_app_server', 'claude_stream', 'pi_rpc'):
+        assert not discover_harness_configuration(adapter)['human_input']['recipient_routing_implemented']
+    off = discover_harness_configuration('claude_stream')
+    on = discover_harness_configuration('claude_stream', native_approvals_enabled=True)
+    assert on['human_input']['recipient_routing_implemented'] is True
+    assert on['schema_revision'] != off['schema_revision']
+    assert {**on['human_input'], 'recipient_routing_implemented': False} == off['human_input']
+    for adapter in ('codex_app_server', 'pi_rpc'):
+        other = discover_harness_configuration(adapter, native_approvals_enabled=True)
+        assert not other['human_input']['recipient_routing_implemented']
+    with pytest.raises(CoreError):
+        discover_harness_configuration('claude_stream', native_approvals_enabled='yes')
+
+
 def test_codex_catalog_preserves_model_specific_effort_without_raw_provider_data():
     result = discover_harness_configuration('codex_app_server', native_models={'data': [
         {'id': 'picker-id', 'model': 'model-a', 'supportedReasoningEfforts': [

@@ -313,3 +313,44 @@ def test_native_request_contracts_advertise_only_campaign_proven_shapes():
         "native_version": "2.1.282", "platform": sys.platform,
         "architecture": "x86_64",
     }).conversation
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
+def test_untrusted_symlink_target_error_names_path_and_roots(tmp_path):
+    target = tmp_path / "versions" / "claude"
+    target.parent.mkdir()
+    target.write_text("#!/bin/sh\n")
+    target.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "claude").symlink_to(target)
+    with pytest.raises(CoreError) as error:
+        candidate("claude_stream", bin_dir / "claude", trusted_roots=(bin_dir,))
+    assert error.value.code == "APPROVAL_REQUIRED"
+    assert str(target.resolve()) in error.value.message
+    assert str(bin_dir.resolve()) in error.value.message
+    assert "--harness-root" in error.value.message
+    trusted = candidate("claude_stream", bin_dir / "claude",
+                        trusted_roots=(target.parent,))
+    assert trusted.source == "trusted_root"
+
+
+@pytest.mark.skipif(os.name == "nt", reason="symlinks need privileges on Windows")
+def test_passive_discovery_carries_resolved_path_reason(tmp_path):
+    from nexus_connector_core.discovery import discover_path
+    target = tmp_path / "versions" / "claude"
+    target.parent.mkdir()
+    target.write_text("#!/bin/sh\n")
+    target.chmod(0o755)
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    (bin_dir / "claude").symlink_to(target)
+    (item,) = discover_path("claude_stream", path_env=str(bin_dir),
+                            trusted_roots=(bin_dir,))
+    assert item.trust == "untrusted" and item.source == "path"
+    assert str(target.resolve()) in item.reason
+    assert str(bin_dir.resolve()) in item.reason
+    assert "--harness-root" in item.reason
+    (trusted,) = discover_path("claude_stream", path_env=str(bin_dir),
+                               trusted_roots=(target.parent,))
+    assert trusted.trust == "selected" and trusted.reason is None

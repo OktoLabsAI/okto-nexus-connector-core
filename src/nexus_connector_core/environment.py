@@ -50,6 +50,23 @@ class ProcessHTTPEnvironment(Mapping[str, str]):
         return 'ProcessHTTPEnvironment(<protected>)'
 
 
+_HOME_BOUND_ADAPTERS = frozenset({"claude_stream", "codex_app_server"})
+
+
+def require_provider_home(adapter_id: str, provider_home: str | Path | None) -> None:
+    """Fail a connection test early when the agent has no provider home.
+
+    With ``provider_home`` unset, the child gets an isolated HOME. The agent
+    then cannot find the operator login, and every real turn fails. Hosts call
+    this at connection test time. ``child_environment`` is not changed.
+    """
+    if provider_home is None and adapter_id in _HOME_BOUND_ADAPTERS:
+        raise CoreError("PROVIDER_AUTH_REQUIRED", "environment",
+                        message="provider_home is required for this adapter. "
+                                "Without it, the child runs with an isolated HOME "
+                                "and cannot use the operator login.")
+
+
 async def child_environment(
     prepared: PreparedLaunch,
     resolver: SecretResolver,
