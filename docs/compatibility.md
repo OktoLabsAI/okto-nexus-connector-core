@@ -1,6 +1,6 @@
 # Version and platform compatibility
 
-Current package version: `0.0.12`. Linux guardians persist a private completion
+Current package version: `0.0.13`. Linux guardians persist a private completion
 receipt after reaping their entire owned tree. A replacement owner can confirm
 containment after abrupt owner death without signalling historical process IDs.
 Missing, incomplete or untrusted receipts remain unknown, including externally
@@ -22,8 +22,9 @@ Codex initialization failures preserve observed
 process containment, allowing a terminal startup failure without indefinite
 recovery. A later startup attempt cannot inherit the earlier containment proof.
 
-Native turn-start events retain their phase
-and current operation identity; foreign or idle starts are refused.
+Native turn-start events retain their phase and current operation identity.
+Claude frames without an active operation are dropped; frames naming another
+operation and foreign starts from other adapters remain refused.
 
 Pi native tools include agent list/get,
 capability discovery and workspace-bound coordination health. Their socket
