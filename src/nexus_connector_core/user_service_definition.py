@@ -121,3 +121,44 @@ def windows_definition_digest(xml: str) -> str:
         raise ValueError('Expected a Task Scheduler definition')
     canonical = ET.canonicalize(xml_data=xml, strip_text=True)
     return hashlib.sha256(canonical.encode('utf-8')).hexdigest()
+
+
+def _enablement_tree(xml):
+    windows_definition_digest(xml)  # bounded, entity-free Task Scheduler XML
+    root = ET.fromstring(xml)
+    settings = root.findall(f'{{{TASK_NAMESPACE}}}Settings')
+    if len(settings) != 1:
+        raise ValueError('Exactly one task settings element is required')
+    enabled = settings[0].findall(f'{{{TASK_NAMESPACE}}}Enabled')
+    if len(enabled) > 1 or (enabled and enabled[0].text not in {'true', 'false', '1', '0'}):
+        raise ValueError('Ambiguous task enablement')
+    value = not enabled or enabled[0].text in {'true', '1'}
+    return root, settings[0], enabled, value
+
+
+def windows_with_enabled(xml: str, enabled: bool) -> str:
+    """Render an enablement-only proposal; OS effects remain in the host."""
+    if type(enabled) is not bool:
+        raise ValueError('Enablement must be boolean')
+    root, settings, nodes, _ = _enablement_tree(xml)
+    node = nodes[0] if nodes else ET.SubElement(settings, f'{{{TASK_NAMESPACE}}}Enabled')
+    node.text = 'true' if enabled else 'false'
+    return ET.tostring(root, encoding='unicode')
+
+
+def windows_enablement_matches(before_xml: str, after_xml: str, enabled: bool) -> bool:
+    """Prove that only Settings/Enabled differs, retaining all other fields.
+
+    Used to confirm a retained explicit host intent after a lost native response.
+    This does not establish ownership and never authorizes adopting another task.
+    """
+    if type(enabled) is not bool:
+        raise ValueError('Enablement must be boolean')
+    normalized = []
+    for xml in (before_xml, after_xml):
+        root, settings, nodes, actual = _enablement_tree(xml)
+        for node in nodes:
+            settings.remove(node)
+        normalized.append(ET.canonicalize(xml_data=ET.tostring(root, encoding='unicode'),
+                                         strip_text=True, rewrite_prefixes=True))
+    return actual == enabled and normalized[0] == normalized[1]

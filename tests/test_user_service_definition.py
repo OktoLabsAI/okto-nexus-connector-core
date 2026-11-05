@@ -7,6 +7,7 @@ import pytest
 
 from nexus_connector_core.user_service_definition import (
     TASK_NAMESPACE, UserServiceDefinition, windows_definition_digest, windows_logon_task,
+    windows_with_enabled, windows_enablement_matches,
 )
 
 
@@ -98,4 +99,31 @@ def test_windows_scheduler_validates_xml_without_registering_or_starting(tmp_pat
     # TASK_VALIDATE_ONLY = 1. Microsoft specifies XML validation without
     # registration; no CREATE/UPDATE flags or start commands are sent.
     folder.RegisterTask(spec.name, windows_logon_task(spec), 1, None, None, 3, None)
+    folder.RegisterTask(spec.name, windows_with_enabled(windows_logon_task(spec), False), 1, None, None, 3, None)
     assert absent(), 'XML validation unexpectedly registered a task'
+
+
+def test_enablement_confirmation_preserves_unknown_edits_and_trigger_settings():
+    original = windows_logon_task(definition())
+    disabled = windows_with_enabled(original, False)
+    assert windows_enablement_matches(original, disabled, False)
+    assert not windows_enablement_matches(original, disabled, True)
+    assert windows_enablement_matches(disabled, windows_with_enabled(disabled, True), True)
+    assert not windows_enablement_matches(original, disabled.replace('LeastPrivilege', 'HighestAvailable'), False)
+    assert not windows_enablement_matches(original, disabled.replace('IgnoreNew', 'Parallel'), False)
+    assert not windows_enablement_matches(original, disabled.replace('</ns0:Settings>', '<ns0:Priority>4</ns0:Priority></ns0:Settings>'), False)
+    trigger_edit = disabled.replace('<ns0:Enabled>true</ns0:Enabled>', '<ns0:Enabled>false</ns0:Enabled>')
+    assert not windows_enablement_matches(original, trigger_edit, False)
+
+
+def test_enablement_rejects_ambiguous_input_and_accepts_schema_default():
+    original = windows_logon_task(definition())
+    no_setting = original.replace('<Enabled>true</Enabled><Hidden>', '<Hidden>')
+    assert windows_enablement_matches(original, no_setting, True)
+    assert windows_enablement_matches(original, windows_with_enabled(no_setting, False), False)
+    with pytest.raises(ValueError):
+        windows_with_enabled(original, 'false')
+    with pytest.raises(ValueError):
+        windows_with_enabled(original.replace('</Settings>', '<Enabled>false</Enabled></Settings>'), False)
+    with pytest.raises(ValueError):
+        windows_with_enabled('<!DOCTYPE Task []>' + original, False)
