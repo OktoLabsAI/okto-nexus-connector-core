@@ -162,3 +162,44 @@ def windows_enablement_matches(before_xml: str, after_xml: str, enabled: bool) -
         normalized.append(ET.canonicalize(xml_data=ET.tostring(root, encoding='unicode'),
                                          strip_text=True, rewrite_prefixes=True))
     return actual == enabled and normalized[0] == normalized[1]
+
+
+def _execution_tree(xml):
+    windows_definition_digest(xml)
+    root = ET.fromstring(xml)
+    actions = root.findall(f'{{{TASK_NAMESPACE}}}Actions')
+    if len(actions) != 1 or len(actions[0]) != 1 or actions[0][0].tag != f'{{{TASK_NAMESPACE}}}Exec':
+        raise ValueError('Exactly one executable task action is required')
+    action = actions[0][0]
+    fields = []
+    for name in ('Command', 'Arguments', 'WorkingDirectory'):
+        nodes = action.findall(f'{{{TASK_NAMESPACE}}}{name}')
+        if len(nodes) != 1 or list(nodes[0]):
+            raise ValueError('Ambiguous executable task action')
+        fields.append(nodes[0])
+    return root, fields
+
+
+def windows_with_execution(xml: str, definition: UserServiceDefinition) -> str:
+    """Replace only the reviewed action; retain triggers, principal and policy.
+
+    Hosts retain ownership and drain authority. A new launch token in literal
+    arguments can fence an old queued worker after an environment replacement.
+    """
+    windows_logon_task(definition)  # same absolute-path/literal-argument checks
+    root, fields = _execution_tree(xml)
+    values = (definition.executable, subprocess.list2cmdline(definition.arguments), definition.working_directory)
+    for node, value in zip(fields, values):
+        node.text = value
+    return ET.tostring(root, encoding='unicode')
+
+
+def windows_execution_matches(before_xml: str, after_xml: str, definition: UserServiceDefinition) -> bool:
+    """Confirm an exact action-only effect after a retained host upgrade intent."""
+    proposed = windows_with_execution(before_xml, definition)
+    # Parse both with the strict action shape guard. Unknown settings remain in
+    # the canonical comparison; namespace spelling alone is not a semantic edit.
+    _execution_tree(after_xml)
+    def normalize(xml):
+        return ET.canonicalize(xml_data=xml, strip_text=True, rewrite_prefixes=True)
+    return normalize(proposed) == normalize(after_xml)

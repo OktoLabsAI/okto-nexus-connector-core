@@ -8,6 +8,7 @@ import pytest
 from nexus_connector_core.user_service_definition import (
     TASK_NAMESPACE, UserServiceDefinition, windows_definition_digest, windows_logon_task,
     windows_with_enabled, windows_enablement_matches,
+    windows_with_execution, windows_execution_matches,
 )
 
 
@@ -100,6 +101,8 @@ def test_windows_scheduler_validates_xml_without_registering_or_starting(tmp_pat
     # registration; no CREATE/UPDATE flags or start commands are sent.
     folder.RegisterTask(spec.name, windows_logon_task(spec), 1, None, None, 3, None)
     folder.RegisterTask(spec.name, windows_with_enabled(windows_logon_task(spec), False), 1, None, None, 3, None)
+    folder.RegisterTask(spec.name, windows_with_execution(windows_logon_task(spec),
+        replace(spec, arguments=('-I', '-m', 'unused_upgrade_target', '--token', 'new-token'))), 1, None, None, 3, None)
     assert absent(), 'XML validation unexpectedly registered a task'
 
 
@@ -127,3 +130,32 @@ def test_enablement_rejects_ambiguous_input_and_accepts_schema_default():
         windows_with_enabled(original.replace('</Settings>', '<Enabled>false</Enabled></Settings>'), False)
     with pytest.raises(ValueError):
         windows_with_enabled('<!DOCTYPE Task []>' + original, False)
+
+
+def test_execution_update_preserves_native_policy_and_enablement():
+    original = windows_with_enabled(windows_logon_task(definition()), False)
+    target = definition(executable=r'C:\New environment\pythonw.exe', arguments=('-I', '-m', 'new.entry', 'new-token'))
+    changed = windows_with_execution(original, target)
+    assert windows_execution_matches(original, changed, target)
+    assert 'new-token' in changed and '<ns0:Enabled>false</ns0:Enabled>' in changed
+    for old, new in [('LeastPrivilege', 'HighestAvailable'), ('IgnoreNew', 'Parallel'),
+                     ('PT0S', 'PT5S'), ('InteractiveToken', 'S4U')]:
+        assert not windows_execution_matches(original, changed.replace(old, new), target)
+    assert not windows_execution_matches(original, changed.replace('new-token', 'foreign-token'), target)
+    assert not windows_execution_matches(original, windows_with_enabled(changed, True), target)
+
+
+@pytest.mark.parametrize('change', ['duplicate-action', 'duplicate-command', 'entity', 'expansion'])
+def test_execution_update_refuses_ambiguous_or_expanding_action(change):
+    original = windows_logon_task(definition())
+    target = definition()
+    if change == 'duplicate-action':
+        original = original.replace('</Actions>', '<Exec><Command>x</Command></Exec></Actions>')
+    elif change == 'duplicate-command':
+        original = original.replace('</Exec>', '<Command>x</Command></Exec>')
+    elif change == 'entity':
+        original = '<!DOCTYPE Task []>' + original
+    else:
+        target = definition(executable=r'C:\%OTHER%\pythonw.exe')
+    with pytest.raises(ValueError):
+        windows_with_execution(original, target)
