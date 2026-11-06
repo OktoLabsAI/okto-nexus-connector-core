@@ -52,7 +52,8 @@ class ParticipantClientConfig:
         if self.client == 'generic':
             valid = self.client_version is None and self.file_scope == 'manual'
         else:
-            valid = (isinstance(self.client_version, str) and bool(_VERSION.fullmatch(self.client_version))
+            valid = ((self.client_version is None or
+                isinstance(self.client_version, str) and bool(_VERSION.fullmatch(self.client_version)))
                 and self.file_scope in ('project', 'user', 'selected'))
         if not valid:
             raise CoreError('VALIDATION_ERROR', 'participant_configuration')

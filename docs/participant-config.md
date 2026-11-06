@@ -9,6 +9,7 @@ host's native format qualification. Neither contract grants new authority.
 It records client/version, format/revision, approved origin and `/mcp` endpoint,
 entry name, environment reference and selected file scope. Versions describe
 the client's observed build; constructing a value does not qualify that build.
+An unobserved client build is `None`, never a guessed version or qualification.
 The module performs no filesystem, credential, network or process operations.
 Pi has no participant HTTP renderer; use its existing supported integration.
 
@@ -45,8 +46,12 @@ comments. Invalid/duplicate inputs fail closed. `plan_participant_removal`
 removes only a still-owned entry; it never restores a whole stale backup over
 later user edits. Host-side interruption recovery and protection of backups
 remain explicit obligations: an old file can contain third-party secrets.
-On Windows, the host must verify the selected directory ACL before writing a
-backup; the existing persistence helper inherits that ACL.
+The host can pass `prepare_file(path, kind)` to either persistence helper.
+It runs on each empty file before any source/replacement bytes are written;
+`kind` is `backup` or `replacement`. The host can restrict a backup ACL and
+preserve the selected file's access policy. Failure aborts before replacement.
+Without this callback Windows files inherit the parent ACL, which the host
+must verify. The callback does not add I/O to the pure renderer or import path.
 
 Official format references checked on 2026-11-05:
 [Codex MCP configuration](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)

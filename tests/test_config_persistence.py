@@ -13,6 +13,31 @@ def _plan(source):
                            proposed={"type": "http", "url": "https://nexus.test/mcp"})
 
 
+@pytest.mark.parametrize('refuse', [None, 'backup', 'replacement'])
+def test_host_protection_runs_before_sensitive_bytes_and_failure_preserves_source(tmp_path, refuse):
+    path = tmp_path / 'client.json'
+    raw = b'{"private":"synthetic-other-client-secret"}'
+    path.write_bytes(raw)
+    observed = []
+    def protect(created, kind):
+        assert created.stat().st_size == 0
+        assert path.read_bytes() == raw
+        observed.append(kind)
+        if refuse == kind:
+            raise OSError('Protection unavailable')
+    if refuse:
+        with pytest.raises(OSError, match='Protection unavailable'):
+            apply_json_plan_file(_plan(raw), path, prepare_file=protect)
+        assert path.read_bytes() == raw
+        if refuse == 'backup':
+            assert all(item.stat().st_size == 0 for item in tmp_path.glob('*.bak'))
+    else:
+        result = apply_json_plan_file(_plan(raw), path, prepare_file=protect)
+        assert result.backup_path.read_bytes() == raw
+        assert json.loads(path.read_bytes())['private'] == 'synthetic-other-client-secret'
+    assert observed == (['backup'] if refuse == 'backup' else ['backup', 'replacement'])
+
+
 def test_create_and_update_preserve_source_backup_and_other_entries(tmp_path):
     path = tmp_path / "harness.json"
     first = _plan(None)

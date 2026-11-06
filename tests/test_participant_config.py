@@ -23,6 +23,14 @@ def configuration(client='claude', **changes):
 
 
 @pytest.mark.parametrize('client', ['claude', 'codex'])
+def test_unobserved_build_is_explicitly_unknown_without_inventing_qualification(client):
+    config = configuration(client, client_version=None)
+    assert config.to_dict()['client_version'] is None
+    assert config.credential_environment in export_participant_config(config)
+    assert plan_participant_config(None, config).changed
+
+
+@pytest.mark.parametrize('client', ['claude', 'codex'])
 def test_reference_only_round_trip_and_selected_entry_ownership(client, tmp_path):
     config = configuration(client)
     source = ('{"model":"personalized","mcpServers":{"other":{"command":"not executed"}},"note":"ação"}\n'.encode()

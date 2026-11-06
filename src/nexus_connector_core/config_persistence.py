@@ -65,12 +65,17 @@ def _read_document(path: Path) -> tuple[bytes | None, int | None]:
     return data, mode
 
 
-def _write_new(path: Path, data: bytes, *, mode: int = 0o600) -> None:
+def _write_new(path: Path, data: bytes, *, mode: int = 0o600, prepare_file=None) -> None:
     flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_BINARY", 0)
     fd = os.open(path, flags, 0o600)
     try:
         if os.name != "nt":
             os.fchmod(fd, mode)
+        if prepare_file is not None:
+            prepare_file(path)
+            opened, named = os.fstat(fd), path.lstat()
+            if (opened.st_dev, opened.st_ino) != (named.st_dev, named.st_ino):
+                raise CoreError("PROFILE_DRIFT", "config_apply")
         with os.fdopen(fd, "wb") as target:
             target.write(data)
             target.flush()
@@ -140,32 +145,40 @@ def _file_lock(path: Path, timeout_seconds: float):
 
 
 def apply_json_plan_file(plan: JsonConfigPlan, selected_path: Path, *,
-                         lock_timeout_seconds: float = 5.0) -> ConfigApplyResult:
+                         lock_timeout_seconds: float = 5.0, prepare_file=None) -> ConfigApplyResult:
     """Apply a host-approved plan to a local file with backup and CAS.
 
     Only callers that cooperate on the adjacent lock get serializable writes.
     Failure before replace leaves the source intact. A crash after replace may
     leave a backup, but never a partial target file. On Windows, the new file
-    and backup inherit the selected directory's ACL; the trusted host must
-    verify that ACL before applying a plan containing sensitive values.
+    and backup otherwise inherit the selected directory's ACL. A trusted host
+    may supply prepare_file(path, kind) to protect each still-empty file before
+    any bytes are written; kind is 'backup' or 'replacement'. Failure aborts
+    before replacement and preserves the source.
     """
     return _apply_plan_file(plan, selected_path, apply_json_plan,
-                            lock_timeout_seconds=lock_timeout_seconds)
+                            lock_timeout_seconds=lock_timeout_seconds, prepare_file=prepare_file)
 
 
 def apply_toml_plan_file(plan: TomlConfigPlan, selected_path: Path, *,
-                         lock_timeout_seconds: float = 5.0) -> ConfigApplyResult:
+                         lock_timeout_seconds: float = 5.0, prepare_file=None) -> ConfigApplyResult:
     """Apply a host-approved Codex TOML plan under the same CAS/backup lock."""
     return _apply_plan_file(plan, selected_path, apply_toml_plan,
-                            lock_timeout_seconds=lock_timeout_seconds)
+                            lock_timeout_seconds=lock_timeout_seconds, prepare_file=prepare_file)
 
 
 def _apply_plan_file(plan, selected_path: Path, apply_plan, *,
-                     lock_timeout_seconds: float) -> ConfigApplyResult:
+                     lock_timeout_seconds: float, prepare_file=None) -> ConfigApplyResult:
     path = Path(selected_path)
     if not path.is_absolute() or not path.parent.is_dir():
         raise CoreError("WORKSPACE_UNAVAILABLE", "config_apply")
     lock_path = path.with_name(path.name + ".lock")
+    def write(path, data, *, backup=False, mode=0o600):
+        if prepare_file is None:
+            _write_new(path, data, mode=mode)
+        else:
+            _write_new(path, data, mode=mode,
+                prepare_file=lambda created: prepare_file(created, 'backup' if backup else 'replacement'))
     with _file_lock(lock_path, lock_timeout_seconds):
         current, mode = _read_document(path)
         replacement = apply_plan(plan, current)
@@ -176,9 +189,9 @@ def _apply_plan_file(plan, selected_path: Path, apply_plan, *,
         try:
             if current is not None:
                 backup = path.with_name(f"{path.name}.{uuid4().hex}.bak")
-                _write_new(backup, current)
+                write(backup, current, backup=True)
                 _sync_directory(path.parent)
-            _write_new(temp, replacement, mode=mode or 0o600)
+            write(temp, replacement, mode=mode or 0o600)
             # A cooperating writer cannot intervene under the lock; repeat
             # the read for a best-effort guard against external edits.
             latest, _ = _read_document(path)
