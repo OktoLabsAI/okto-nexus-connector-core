@@ -1,4 +1,13 @@
-# Core API (`0.0.13`)
+# Core API (`0.0.14`)
+
+## External participant configuration
+
+The separate `nexus_connector_core.participant_config` module exposes
+`ParticipantClientConfig`, `PARTICIPANT_CONFIG_REVISION`,
+`participant_client_config`, `export_participant_config`,
+`plan_participant_config` and `plan_participant_removal`.
+See [participant configuration](participant-config.md) for the pure contract,
+ownership rules and the host's credential/persistence responsibilities.
 
 ## Runtime automation
 

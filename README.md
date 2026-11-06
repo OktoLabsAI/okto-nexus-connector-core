@@ -11,7 +11,7 @@ imports neither application.
 - Distribution `okto-nexus-connector-core`, import `nexus_connector_core`,
   Python ≥ 3.11, src-layout, `py.typed`, pure-Python runtime dependencies
   (`rfc8785`, `jsonschema`).
-- Current version: `0.0.2`.
+- Current version: `0.0.14`.
 - First release version: `0.0.1`. Importing the
   package opens no socket, spawns no thread/process, starts no event loop
   and reads no credentials.
@@ -57,6 +57,7 @@ making Core depend on either application's database or transport.
 | Events | Bounded ingest/replay/ACK, per-session fairness and byte/item caps, slow-subscriber isolation, explicit gaps, redaction boundary |
 | Contracts | Core-owned NXL r3 bundle: 20 frame families, intents/events/errors/inventory/capabilities/HTTP shapes, fixtures and JCS hash vectors, offline verifier |
 | Harness integration | Declarative direct-HTTP MCP client configuration (data only), typed non-MCP native-action bridge, packaged Pi extension |
+| External participants | Separate [participant config contract](docs/participant-config.md), reference-only JSON/TOML/manual formats and existing selected-entry CAS planning |
 
 ## What the Core is not
 

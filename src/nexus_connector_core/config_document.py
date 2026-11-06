@@ -222,10 +222,20 @@ def plan_codex_toml_entry(
             not isinstance(template.entry_name, str) or
             not _CODEX_NAME.fullmatch(template.entry_name)):
         raise CoreError("VALIDATION_ERROR", "config_plan")
+    return _plan_codex_entry(document, entry_name=template.entry_name,
+        proposed=template.entry(), fragment=render_codex_toml_fragment(template),
+        previously_owned=previously_owned)
+
+
+def _plan_codex_entry(document: bytes | None, *, entry_name: str,
+                      proposed: Mapping[str, Any], fragment: str,
+                      previously_owned: Mapping[str, Any] | None = None) -> TomlConfigPlan:
+    """Structural editor shared by distinct managed/participant renderers."""
+    if not isinstance(entry_name, str) or not _CODEX_NAME.fullmatch(entry_name):
+        raise CoreError("VALIDATION_ERROR", "config_plan")
     parsed = _parse_toml(document)
     servers = _codex_servers(parsed)
-    name = template.entry_name
-    proposed = template.entry()
+    name = entry_name
     exists = name in servers
     if exists and previously_owned is None:
         raise CoreError("APPROVAL_REQUIRED", "config_plan")
@@ -240,8 +250,7 @@ def plan_codex_toml_entry(
     source = document or b""
     newline = (b"\r\n" if b"\r\n" in source and
                b"\n" not in source.replace(b"\r\n", b"") else b"\n")
-    fragment = render_codex_toml_fragment(template).encode("utf-8").replace(
-        b"\n", newline)
+    fragment = fragment.encode("utf-8").replace(b"\n", newline)
     if exists:
         assert document is not None
         start, end = _owned_toml_span(document, name)
