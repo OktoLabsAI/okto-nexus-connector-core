@@ -76,7 +76,7 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 
 `LocalRuntimeCore` implements `discover`, `prepare`, `open`, `submit`,
 `control`, `decide_native_approval`, `events`, `acknowledge_events`, `compact_events`, `storage_status`,
-`checkpoint_wal`, `inspect`, `claimed_sessions`, `process_birth`,
+`checkpoint_wal`, `inspect`, `claimed_sessions`, `drain_status`, `process_birth`,
 `observe_process_birth`, `persisted_lease`, `reconcile`, `close`, `shutdown`, `renew_lease` and
 `revoke_lease` as defined in `RuntimeCore`. `events` is an async iterator; the
 other public operations above are awaited. `acknowledge_events` is for a
@@ -85,6 +85,16 @@ The local constructor's `reconnect_fence_seconds` bounds the wait for pending
 session native sends before `renew_lease`/`revoke_lease` can report a
 successful generation or revocation update; a busy error leaves that update
 unapplied.
+
+`begin_drain()` and `drain_revision()` are synchronous owner-loop methods. The
+first fences new productive admission without interrupting admitted work; the
+second returns the current activity revision without I/O. `await drain_status()`
+returns bounded `state`, `quiescent`, `resources`, `activity_revision` and
+`owned_sessions` metadata. Missing or incomplete evidence remains `UNKNOWN`.
+The exported `combine_drain_status(reports)` helper is only for owners sharing
+one journal; the host rechecks every revision after awaits. Independent journals
+must not be combined. See [cooperative service drain](lifecycle.md#cooperative-service-drain)
+for ownership retention and the separate explicit containment decision.
 
 `context_observation_supported(SessionKey)` reports optional, observed support
 on a live owned session. `observe_context(SessionKey, envelope, guard=...)` is a
