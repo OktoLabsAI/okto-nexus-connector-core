@@ -57,7 +57,24 @@ observation submits no model prompt. Queries have a total 15-second budget and
 individual 5-second deadlines. Discovery failure produces a sanitized system
 warning and does not terminate an otherwise usable runtime. Event size is bounded.
 
-The Nexus can use that observation for the same endpoint, installation,
+Codex also publishes a session-scoped `core/codex_thread_configuration` lifecycle
+event from its existing `thread/start` or `thread/resume` response. This records
+the reported model, provider, reasoning effort, working directory, approval
+policy, reviewer, sandbox and instruction-source paths. It performs no extra
+native request and reads no instruction or authentication file. The event names
+its response source; it is an observation emitted by Core, not a native
+notification or a new grant. It is retained through the normal journal and event
+replay paths.
+
+Each field is explicitly `reported`, `missing` or `invalid`. Missing fields are
+not filled with configured defaults. Unknown policy members, malformed or
+oversized values and values requiring secret redaction cannot establish the
+effective policy. Instruction references contain paths only, never their file
+contents. This bounded snapshot is separate from the capability catalogue and
+does not establish model output, tool execution, account entitlement or a hard
+token limit. Its installed protocol tests do not replace a real provider campaign.
+
+The Nexus can use the `core/harness_configuration` catalogue for the same endpoint, installation,
 configuration revision and credential epoch for 30 minutes. It reconstructs the
 public description instead of trusting arbitrary labels from an event. A changed
 configuration or expired observation falls back to the passive description until

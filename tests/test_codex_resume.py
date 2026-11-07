@@ -63,7 +63,9 @@ for line in sys.stdin:
         cwd=str(tmp_path), handshake_timeout_s=3)
     try:
         session = connector.start(owning_agent_id="agent", resume_thread_id="thread-one")
-        assert session.metadata == {"thread_id": "thread-one", "resumed": True}
+        assert session.metadata["thread_id"] == "thread-one"
+        assert session.metadata["resumed"] is True
+        assert session.metadata["codex_thread_configuration"]["source"] == "thread/resume/response"
         messages = [json.loads(line) for line in
                     (tmp_path / "observed.jsonl").read_text().splitlines()]
         assert [message["method"] for message in messages] == [

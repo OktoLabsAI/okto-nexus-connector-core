@@ -50,6 +50,7 @@ from ..framing import FrameLimitExceeded, protocol_lines, stderr_chunks
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe
 from ..delta_batches import coalesce_codex_delta
+from ..codex_thread_configuration import METADATA_KEY, observe_thread_response
 
 from ..legacy_environment import child_environment
 
@@ -758,6 +759,11 @@ class CodexAppServerConnector:
                 "Codex resumed thread is not idle.",
                 {"reason": "resume_thread_not_idle"})
 
+        # The response belongs to this thread even if early notifications are
+        # queued (or consumed in a different order). Never retain result/thread:
+        # resume may include the entire transcript and instruction contents.
+        configuration = observe_thread_response(result, method=method, thread_id=thread_id)
+
         session_id = new_harness_session_id()
         state = _ThreadState(session_id=session_id, thread_id=thread_id, owning_agent_id=owning_agent_id)
         with self._sessions_lock:
@@ -785,7 +791,8 @@ class CodexAppServerConnector:
             status=STATUS_STARTING,
             capabilities=self.capabilities,
             started_at=utc_now_iso(),
-            metadata={"thread_id": thread_id, "resumed": resume_thread_id is not None},
+            metadata={"thread_id": thread_id, "resumed": resume_thread_id is not None,
+                      METADATA_KEY: configuration},
             compatibility_report=dict(self._compatibility_report),
         )
 

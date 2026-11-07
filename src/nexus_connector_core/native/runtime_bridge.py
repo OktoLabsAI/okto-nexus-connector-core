@@ -448,6 +448,17 @@ class CopiedAdapterSession:
         await asyncio.to_thread(_guarded_reply)
 
     async def events(self) -> AsyncIterator[RuntimeEvent]:
+        from .codex_thread_configuration import EVENT_TYPE, METADATA_KEY, redact_observation
+
+        metadata = getattr(self._session, 'metadata', {})
+        configuration = metadata.get(METADATA_KEY) if isinstance(metadata, dict) else None
+        if getattr(self._session, 'harness_kind', None) == 'codex' and isinstance(configuration, dict):
+            # Core-originated lifecycle metadata, not a fabricated Codex
+            # notification. It is session-scoped before any queue/discovery
+            # consumption and redacted before the runtime journals the event.
+            payload = redact_observation(configuration, self._redactor.clean)
+            yield RuntimeEvent(self._context.server_id, self._context.executor_id,
+                self._session_id, self._epoch, 0, 'lifecycle', EVENT_TYPE, payload)
         observe_configuration = getattr(self._connector, 'configuration_observation', None)
         if callable(observe_configuration):
             try:
