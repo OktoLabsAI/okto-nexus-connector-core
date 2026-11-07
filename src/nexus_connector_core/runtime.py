@@ -180,6 +180,14 @@ class _Session:
     pending_native_requests: dict[str, bytes] = field(default_factory=dict)
 
 
+@dataclass(frozen=True, slots=True)
+class _ReleasedSessionProof:
+    opening_operation_id: str
+    stream_epoch: str
+    session_owner_generation: int
+    sink_sequence: int | None
+
+
 class _SessionTombstones:
     """Bounded lightweight history for evicted sessions (PC07).
 
@@ -189,21 +197,33 @@ class _SessionTombstones:
     one without inventing process state.
     """
 
-    __slots__ = ("_entries", "_capacity")
+    __slots__ = ("_entries", "_capacity", "_released", "revision")
 
     def __init__(self, capacity: int = 1024):
         if type(capacity) is not int or not 1 <= capacity <= 65536:
             raise ValueError("invalid tombstone capacity")
         self._entries: "dict[SessionKey, str]" = {}
         self._capacity = capacity
+        self._released: dict[SessionKey, _ReleasedSessionProof] = {}
+        self.revision = 0
 
-    def record(self, session: SessionKey, ownership: str) -> None:
+    def record(self, session: SessionKey, ownership: str,
+               proof: _ReleasedSessionProof | None = None) -> None:
         if len(self._entries) >= self._capacity and session not in self._entries:
-            self._entries.pop(next(iter(self._entries)))
+            oldest = next(iter(self._entries))
+            self._entries.pop(oldest)
+            self._released.pop(oldest, None)
         self._entries[session] = ownership
+        self._released.pop(session, None)
+        if ownership == "released" and proof is not None:
+            self._released[session] = proof
+        self.revision += 1
 
     def get(self, session: SessionKey) -> "str | None":
         return self._entries.get(session)
+
+    def released_proof(self, session: SessionKey) -> _ReleasedSessionProof | None:
+        return self._released.get(session)
 
 
 class _ReleaseObligation:
@@ -1882,11 +1902,27 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 async with self._lock:
                     if (self._sessions.get(session) is binding and
                             binding.closed):
+                        # Local, bounded evidence only. A stopped process alone
+                        # cannot retire a claim or prove that producers settled.
+                        proof = None
+                        if (binding.stop_observed and not binding.slot_reserved
+                                and binding.opening_operation_id is not None
+                                and not binding.pending_native_requests
+                                and not binding.pump_pending and not binding.sink_pending
+                                and not binding.lease_cas_pending and not binding.lease_hold
+                                and not binding.superseded
+                                and all(task is None or task.done() for task in (
+                                    binding.pump, binding.sink_task, binding.lease_task,
+                                    binding.force_task, binding.lease_reconcile_task))):
+                            proof = _ReleasedSessionProof(
+                                binding.opening_operation_id, binding.epoch,
+                                binding.context.session_owner_generation,
+                                binding.sink_sequence if self._event_sink is not None else None)
                         del self._sessions[session]
                         self._session_tombstones.record(
                             session,
                             "released" if not binding.slot_reserved
-                            else "unknown")
+                            else "unknown", proof)
             except asyncio.CancelledError:
                 raise
             except Exception:

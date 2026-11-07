@@ -479,8 +479,19 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                     WHERE o.stage NOT IN ('SUCCEEDED','FAILED','CANCELLED')
                     AND NOT (o.stage='SUBMITTED' AND COALESCE(a.terminal_event_expected,1)=0)
                     ORDER BY o.server_id,o.executor_id,o.operation_id LIMIT 257""",
-                'claims': """SELECT server_id,executor_id,session_id,operation_id FROM session_claims
-                    WHERE reconciliation_pending=1 ORDER BY server_id,executor_id,session_id LIMIT 257""",
+                'claims': """WITH selected AS (
+                    SELECT server_id,executor_id,session_id,operation_id FROM session_claims
+                    WHERE reconciliation_pending=1 ORDER BY server_id,executor_id,session_id LIMIT 257)
+                    SELECT c.*,g.owner_generation AS session_owner_generation,
+                      (SELECT stream_epoch FROM (
+                         SELECT e.server_id,e.executor_id,e.session_id,e.stream_epoch FROM event_streams e
+                         WHERE e.server_id=c.server_id AND e.executor_id=c.executor_id
+                           AND e.session_id=c.session_id ORDER BY e.stream_epoch LIMIT 2)
+                       GROUP BY server_id,executor_id,session_id HAVING COUNT(*)=1) AS stream_epoch
+                    FROM selected c LEFT JOIN session_open_generations g
+                      ON g.server_id=c.server_id AND g.executor_id=c.executor_id
+                     AND g.session_id=c.session_id AND g.operation_id=c.operation_id
+                    ORDER BY c.server_id,c.executor_id,c.session_id""",
                 'streams': """SELECT server_id,executor_id,session_id,stream_epoch FROM event_streams
                     WHERE next_sequence-1>acked_sequence
                     ORDER BY server_id,executor_id,session_id,stream_epoch LIMIT 257""",

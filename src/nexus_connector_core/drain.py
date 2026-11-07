@@ -8,6 +8,20 @@ import hashlib
 from .models import CoreError, SessionKey
 
 
+_RELEASE_FIELDS = ('server_id', 'executor_id', 'session_id', 'opening_operation_id',
+                   'stream_epoch', 'session_owner_generation')
+
+
+def _release_identity(scope):
+    if type(scope) is not dict or any(type(scope.get(name)) is not str
+            or not 1 <= len(scope[name]) <= 256 for name in _RELEASE_FIELDS[:-1]):
+        return None
+    generation = scope.get('session_owner_generation')
+    if type(generation) is not int or generation < 1:
+        return None
+    return tuple(scope[name] for name in _RELEASE_FIELDS)
+
+
 class CooperativeDrain:
     def drain_revision(self) -> str:
         """Memory token for host aggregation on this owner loop, not authority."""
@@ -27,6 +41,7 @@ class CooperativeDrain:
             return sorted((k.server_id, k.executor_id, k.session_id) for k in values)
         memory = (self._drain_requested, self._kernel.activity_revision,
                   self._kernel.inflight, self._drain_event_revision, sorted(sessions),
+                  self._session_tombstones.revision,
                   scopes(self._opening), scopes(self._uncertain_opens),
                   scopes(self._uncertain_launches), scopes(self._late_handles),
                   scopes(self._release_obligations),
@@ -65,8 +80,10 @@ class CooperativeDrain:
         self._drain_owner()
         if not self._drain_requested:
             return {'state': 'RUNNING', 'quiescent': False, 'resources': [],
-                    'activity_revision': self.drain_revision(), 'owned_sessions': []}
+                    'activity_revision': self.drain_revision(), 'owned_sessions': [],
+                    'released_sessions': []}
         resources = []
+        released = []
         revision = self.drain_revision()
 
         def add(reason, outcome='BUSY', key=None, **metadata):
@@ -158,8 +175,28 @@ class CooperativeDrain:
             for row in facts['claims']:
                 key = SessionKey(row['server_id'], row['executor_id'], row['session_id'])
                 if key not in self._sessions and key not in self._opening:
+                    scope = {name: row.get(name) for name in _RELEASE_FIELDS}
+                    scope['opening_operation_id'] = row['operation_id']
+                    proof = self._session_tombstones.released_proof(key)
+                    identity = _release_identity(scope)
+                    # A restart, missing generation, absent/ambiguous stream or
+                    # evicted proof stays unknown. Never rewrite durable history.
+                    if (proof is not None and identity is not None
+                            and identity[3:] == (proof.opening_operation_id,
+                                proof.stream_epoch, proof.session_owner_generation)
+                            and (proof.sink_sequence is None or any(
+                                watermark['server_id'] == key.server_id
+                                and watermark['executor_id'] == key.executor_id
+                                and watermark['session_id'] == key.session_id
+                                and watermark['stream_epoch'] == proof.stream_epoch
+                                and watermark['sequence'] <= proof.sink_sequence
+                                for watermark in facts['watermarks']))):
+                        released.append(scope)
+                        continue
                     add('SESSION_RECONCILIATION_PENDING', 'UNKNOWN', key,
-                        opening_operation_id=row['operation_id'])
+                        opening_operation_id=row['operation_id'],
+                        stream_epoch=row.get('stream_epoch'),
+                        session_owner_generation=row.get('session_owner_generation'))
             for row in facts['streams']:
                 key = SessionKey(row['server_id'], row['executor_id'], row['session_id'])
                 add('EVENT_ACK_PENDING', key=key, stream_epoch=row['stream_epoch'])
@@ -183,7 +220,8 @@ class CooperativeDrain:
             resources = [{'reason': 'RESOURCE_LIMIT', 'outcome': 'UNKNOWN'}]
             state = 'UNKNOWN'
         return {'state': state, 'quiescent': state == 'QUIESCENT', 'resources': resources,
-                'activity_revision': revision, 'owned_sessions': owned[:256]}
+                'activity_revision': revision, 'owned_sessions': owned[:256],
+                'released_sessions': released}
 
 
 def combine_drain_status(reports: list[dict]) -> dict:
@@ -191,7 +229,9 @@ def combine_drain_status(reports: list[dict]) -> dict:
 
     The caller must recheck each owner's public drain_revision() after all
     awaits. This pure function supplies no cross-journal or authorization proof.
-    Only an exact opening claim retained by one other owner can be discharged.
+    Only an exact opening claim retained by one other owner, or a complete
+    local eviction proof from that owner, can discharge a claim resource.
+    Other resources (including unresolved receipts and ACKs) remain blockers.
     """
     def unknown(reason):
         return {'state': 'UNKNOWN', 'quiescent': False,
@@ -199,6 +239,7 @@ def combine_drain_status(reports: list[dict]) -> dict:
     if type(reports) is not list or len(reports) > 256:
         return unknown('DRAIN_COMPOSITION_UNAVAILABLE')
     owners = {}
+    releases = {}
     for index, report in enumerate(reports):
         if (type(report) is not dict or report.get('state') not in {'BUSY', 'UNKNOWN', 'QUIESCENT'}
                 or type(report.get('quiescent')) is not bool
@@ -220,6 +261,19 @@ def combine_drain_status(reports: list[dict]) -> dict:
             if key in owners:
                 return unknown('DRAIN_OWNER_CONFLICT')
             owners[key] = (index, scope['opening_operation_id'])
+        released = report.get('released_sessions', [])
+        if type(released) is not list or len(released) > 256:
+            return unknown('DRAIN_COMPOSITION_UNAVAILABLE')
+        for scope in released:
+            identity = _release_identity(scope)
+            if identity is None or set(scope) != set(_RELEASE_FIELDS):
+                return unknown('DRAIN_COMPOSITION_UNAVAILABLE')
+            key = identity[:3]
+            if key in releases:
+                return unknown('DRAIN_OWNER_CONFLICT')
+            releases[key] = (index, identity)
+    if owners.keys() & releases.keys():
+        return unknown('DRAIN_OWNER_CONFLICT')
     resources = []
     for index, report in enumerate(reports):
         for row in report['resources']:
@@ -232,6 +286,10 @@ def combine_drain_status(reports: list[dict]) -> dict:
                     return unknown('DRAIN_COMPOSITION_UNAVAILABLE')
                 owner = owners.get(key)
                 if owner is not None and owner[0] != index and owner[1] == row.get('opening_operation_id'):
+                    continue
+                release = releases.get(key)
+                if (release is not None and release[0] != index
+                        and release[1] == _release_identity(row)):
                     continue
             resources.append(dict(row))
             if len(resources) >= 256:
