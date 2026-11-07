@@ -17,12 +17,25 @@ class OperationKernel:
         self.journal = journal
         self.clock = (clock if isinstance(clock, RollbackFencedClock)
                       else RollbackFencedClock(clock or SystemClock()))
+        self.activity_revision = 0
+        self.inflight = 0
 
     async def execute(self, operation: Operation, context: ExecutionContext,
+                      effect: Callable[[], Awaitable[str | None]], **kwargs) -> OperationReceipt:
+        self.activity_revision += 1
+        self.inflight += 1
+        try:
+            return await self._execute(operation, context, effect, **kwargs)
+        finally:
+            self.inflight -= 1
+            self.activity_revision += 1
+
+    async def _execute(self, operation: Operation, context: ExecutionContext,
                       effect: Callable[[], Awaitable[str | None]], *,
                       containment: bool | None = None,
                       opening_deadline: Callable[[], float] | None = None,
                       process_launch_identity: ProcessLaunchIdentity | None = None,
+                      terminal_event_expected: bool | None = None,
                       completion_stage: str = "SUBMITTED") -> OperationReceipt:
         # Only a caller that has observed completion may request a terminal
         # receipt. Validate before admission or any native effect.
@@ -57,7 +70,8 @@ class OperationKernel:
         digest = intent_hash(operation, context)
         key = OperationKey(context.server_id, context.executor_id,
                            operation.operation_id)
-        admission = dict(critical=operation.action in {
+        admission = dict(action=operation.action, terminal_event_expected=terminal_event_expected,
+                         critical=operation.action in {
                                                      "turn.interrupt", "runtime.close",
                                                      "approval.decide", "input.provide"},
                                                  claim_session=operation.action == "runtime.open",

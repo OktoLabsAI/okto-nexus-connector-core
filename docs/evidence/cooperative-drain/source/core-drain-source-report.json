@@ -1,0 +1,91 @@
+{
+  "scope": "SVC-07 Core cooperative drain only; synthetic native peers, real SQLite",
+  "base_commit": "5d31784362676e7231b5c612c458a4d8f4b5db4a",
+  "product_frozen": true,
+  "files": [
+    {
+      "path": "src/nexus_connector_core/drain.py",
+      "sha256": "f1d81c7b84274e18d6726217a385d7954d21f6f0dadda4202bef5f425a057340"
+    },
+    {
+      "path": "src/nexus_connector_core/runtime.py",
+      "sha256": "c4cf6e4c69c04c55c0dbdd848f371746dff2827d2768c9afe8c75e4af3c97c18"
+    },
+    {
+      "path": "src/nexus_connector_core/kernel.py",
+      "sha256": "d0ea79751775ccd4c5d1198022c23783be9aab883757c5cb2edf29ce07fa0713"
+    },
+    {
+      "path": "src/nexus_connector_core/journal.py",
+      "sha256": "5bfe0a71ae23fa53f91fec33f772f3f945d62a817c1d1da6bfe41ce12f0f12ea"
+    },
+    {
+      "path": "src/nexus_connector_core/ports.py",
+      "sha256": "4b86f2f892f0e20bd4c89a50b13a73d4e59471e20bc5d85c3a7f5491e50b22b4"
+    },
+    {
+      "path": "src/nexus_connector_core/native/runtime_bridge.py",
+      "sha256": "9b25fdd47b80da79f3e933bc4daeabac7158dfcf0f39239a2a8b78786fed75af"
+    },
+    {
+      "path": "src/nexus_connector_core/operation_refusal_r4.py",
+      "sha256": "80e86b145db99cafafda30a471070e64c874b4e8eb1a4e4a67c65d03902d033f"
+    },
+    {
+      "path": "tests/test_cooperative_drain.py",
+      "sha256": "52e88df2897349850995bdcb63faefd1785b668fe20f031ddde794e597ed04f5"
+    },
+    {
+      "path": "tests/test_r4_stopped_refusal.py",
+      "sha256": "16d690b1a6d1c0e7fcd6f56511ca607f76306cc422057a9be3eba4cde8bc7d51"
+    }
+  ],
+  "reports": [
+    {
+      "path": "C:\\Users\\jpamb\\AppData\\Local\\Temp\\svc07-core-drain-9_qowaku\\initial.xml",
+      "sha256": "7cf970da60a2b1f2a9fc010debf2562a962c54ed2f0d332cbddd7ba16640b11b",
+      "tests": 38,
+      "failures": 2,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "path": "C:\\Users\\jpamb\\AppData\\Local\\Temp\\svc07-core-drain-9_qowaku\\directed.xml",
+      "sha256": "9647b7696e14296ae9735039c98148d73c938ed0995a499175027bfc26073955",
+      "tests": 41,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    {
+      "path": "C:\\Users\\jpamb\\AppData\\Local\\Temp\\svc07-core-drain-9_qowaku\\regression.xml",
+      "sha256": "049019d3f705ef9a2742ae5ae36f114b82f73fb1b539837c1e51e30d8ab0d66d",
+      "tests": 209,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    }
+  ],
+  "unique_final_test_identities": 209,
+  "unique_final_outcomes": {
+    "passed": 209
+  },
+  "initial_failures": "Two helper failures called nonexistent runtime.receipt; corrected to journal.get_receipt. No product change needed for those failures.",
+  "lint": {
+    "new_and_clean_touched_files": "passed",
+    "existing_baseline_findings_unchanged": 12,
+    "comparison": "same filename/code/message multisets; shifted line numbers ignored"
+  },
+  "durable_change": "Additive operation_actions metadata, atomic with admission, no receipt/hash changes; legacy missing metadata stays unknown. No inferred backfill.",
+  "contract": {
+    "begin_drain": "sync owner-loop fence only; idempotent, no close/interrupt/renewal",
+    "drain_status": "passive bounded read; RUNNING/BUSY/UNKNOWN/QUIESCENT, quiescent boolean, metadata resources",
+    "bounds": "256 rows + sentinel per journal query and 256 resources; one shared read per runtime, one-second await budget",
+    "preserved": "current authorized native decisions, interrupt/close, events/ack/reconciliation and authorized receipt replay"
+  },
+  "limitations": [
+    "Not a proof of process death or future inactivity.",
+    "Legacy unknown action, uncertain native outcome, missing ACK or unresolved ownership remains non-quiescent.",
+    "No real provider, personal credentials, OS service campaign, wheel build, commit or push by this agent."
+  ]
+}

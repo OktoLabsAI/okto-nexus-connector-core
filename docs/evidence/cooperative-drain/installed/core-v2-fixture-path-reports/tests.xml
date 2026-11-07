@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites name="pytest tests"><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="1.299" timestamp="2026-11-07T07:33:52.187369-03:00" hostname="Alienware_m15"><testcase classname="" name="test_revocation_fences_copied_factory_after_environment_wait" time="0.570" /></testsuite></testsuites>

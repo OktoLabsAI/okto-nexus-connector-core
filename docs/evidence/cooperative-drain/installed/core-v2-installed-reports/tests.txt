@@ -1,0 +1,61 @@
+
+=================================== ERRORS ====================================
+________________________ ERROR collecting test session ________________________
+ImportError while importing test module 'C:\Users\jpamb\AppData\Local\Temp\r3-cooperative-drain-09ucmgsr\core-v2-final-source\tests\test_cooperative_drain.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+core-v2-final-source\tests\test_cooperative_drain.py:17: in <module>
+    from test_runtime import FakeNative, context, make_runtime, _emit_durable_native_request
+E   ModuleNotFoundError: No module named 'test_runtime'
+________________________ ERROR collecting test session ________________________
+ImportError while importing test module 'C:\Users\jpamb\AppData\Local\Temp\r3-cooperative-drain-09ucmgsr\core-v2-final-source\tests\test_cooperative_drain_composition.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+core-v2-final-source\tests\test_cooperative_drain_composition.py:9: in <module>
+    from test_runtime import FakeFactory, context, make_runtime
+E   ModuleNotFoundError: No module named 'test_runtime'
+________________________ ERROR collecting test session ________________________
+ImportError while importing test module 'C:\Users\jpamb\AppData\Local\Temp\r3-cooperative-drain-09ucmgsr\core-v2-final-source\tests\test_kernel_quota_refusal.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+core-v2-final-source\tests\test_kernel_quota_refusal.py:10: in <module>
+    from test_kernel import context
+E   ModuleNotFoundError: No module named 'test_kernel'
+________________________ ERROR collecting test session ________________________
+ImportError while importing test module 'C:\Users\jpamb\AppData\Local\Temp\r3-cooperative-drain-09ucmgsr\core-v2-final-source\tests\test_r4_runtime_leases.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+core-v2-final-source\tests\test_r4_runtime_leases.py:15: in <module>
+    from test_runtime import FakeClock, make_runtime
+E   ModuleNotFoundError: No module named 'test_runtime'
+________________________ ERROR collecting test session ________________________
+ImportError while importing test module 'C:\Users\jpamb\AppData\Local\Temp\r3-cooperative-drain-09ucmgsr\core-v2-final-source\tests\test_r4_stopped_refusal.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+core-v2-final-source\tests\test_r4_stopped_refusal.py:11: in <module>
+    from test_r4_operation_refusal import refusal
+E   ModuleNotFoundError: No module named 'test_r4_operation_refusal'
+________________________ ERROR collecting test session ________________________
+ImportError while importing test module 'C:\Users\jpamb\AppData\Local\Temp\r3-cooperative-drain-09ucmgsr\core-v2-final-source\tests\test_shutdown_resources.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+core-v2-final-source\tests\test_shutdown_resources.py:7: in <module>
+    from test_runtime import make_runtime, context, FakeClock
+E   ModuleNotFoundError: No module named 'test_runtime'
+________________________ ERROR collecting test session ________________________
+ImportError while importing test module 'C:\Users\jpamb\AppData\Local\Temp\r3-cooperative-drain-09ucmgsr\core-v2-final-source\tests\test_uncertain_launch_shutdown.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+core-v2-final-source\tests\test_uncertain_launch_shutdown.py:12: in <module>
+    from test_runtime import make_runtime, context
+E   ModuleNotFoundError: No module named 'test_runtime'
+=========================== short test summary info ===========================
+ERROR core-v2-installed-reports
+ERROR core-v2-installed-reports
+ERROR core-v2-installed-reports
+ERROR core-v2-installed-reports
+ERROR core-v2-installed-reports
+ERROR core-v2-installed-reports
+ERROR core-v2-installed-reports
+!!!!!!!!!!!!!!!!!!! Interrupted: 7 errors during collection !!!!!!!!!!!!!!!!!!!
+7 errors in 3.14s

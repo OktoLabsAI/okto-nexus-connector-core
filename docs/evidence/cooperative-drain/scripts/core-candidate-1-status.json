@@ -1,0 +1,5 @@
+{
+  "status": "superseded_before_install",
+  "reason": "Cross review identified shared-journal multi-runtime claims causing false UNKNOWN; no consumer wheel replaced and no installed acceptance claimed.",
+  "source_manifest": "core-source.json"
+}

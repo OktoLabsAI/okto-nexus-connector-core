@@ -19,7 +19,7 @@ def stopped(code='LEASE_EXPIRED'):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize('code', ['LEASE_EXPIRED', 'LEASE_REVALIDATION_REQUIRED'])
+@pytest.mark.parametrize('code', ['LEASE_EXPIRED', 'LEASE_REVALIDATION_REQUIRED', 'RUNTIME_DRAINING'])
 @pytest.mark.parametrize('crash_after_admission', [False, True])
 async def test_stopped_refusal_survives_restart_without_native_effect(tmp_path, code, crash_after_admission):
     frame, _, proof = stopped(code)

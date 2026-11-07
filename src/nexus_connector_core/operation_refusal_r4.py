@@ -138,7 +138,7 @@ def validate_r4_stopped_refusal(value):
         if (type(value) is not dict or set(value) != {'schema_version', 'kind', 'scope', 'error_code', 'grant_id', 'binding'}
                 or type(value['schema_version']) is not int or value['schema_version'] != 1
                 or value['kind'] != 'stopped_session'
-                or value['error_code'] not in ('LEASE_EXPIRED', 'LEASE_REVALIDATION_REQUIRED')
+                or value['error_code'] not in ('LEASE_EXPIRED', 'LEASE_REVALIDATION_REQUIRED', 'RUNTIME_DRAINING')
                 or type(value['grant_id']) is not str or not 1 <= len(value['grant_id']) <= 160):
             raise ValueError('Invalid stopped-session refusal association.')
         scope = native_action_scope(value['scope'])

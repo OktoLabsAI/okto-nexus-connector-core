@@ -37,6 +37,7 @@ from .ports import Journal, Clock, OwnedSlotLedger
 from .targeting import validate_control_target
 from .lease_runtime_r4 import R4LeaseRuntime
 from .close_runtime import CloseRuntimeMixin
+from .drain import CooperativeDrain
 
 
 def _finite_timing(value: object) -> bool:
@@ -131,6 +132,7 @@ class _Session:
     sink_task: asyncio.Task[None] | None = None
     sink_sequence: int = 0
     sink_pending: bool = False
+    pump_pending: bool = False
     lease_task: asyncio.Task[None] | None = None
     shutdown_task: asyncio.Task[str] | None = None
     force_task: asyncio.Task[None] | None = None
@@ -310,7 +312,7 @@ class _OpeningAttempt:
         self.waiter_done = False
 
 
-class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
+class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
     """One installation's runtime kernel.
 
     The trusted host supplies selected binaries, local roots and a native
@@ -411,6 +413,10 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         self._lock = asyncio.Lock()
         self._event_changed = asyncio.Condition()
         self._shutting_down = False
+        self._drain_requested = False
+        self._drain_owner_loop = None
+        self._drain_read_task = None
+        self._drain_event_revision = 0
         self._shutdown_policy = ShutdownPolicy()
         # C2/R10: tracked cooperative-cleanup tasks (evictions). Shutdown
         # waits for them within the cleanup budget; none is discarded while
@@ -441,6 +447,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
     async def prepare(self, intent: LaunchIntent,
                       context: ExecutionContext) -> PreparedLaunch:
         self._authorize(context, "runtime.open")
+        self._check_drain_admission('runtime.open')
         if (intent.agent_id != context.agent_id or
                 intent.workspace_id != context.workspace_id):
             raise CoreError("BINDING_NOT_AUTHORIZED", "prepare")
@@ -457,6 +464,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         prepared = await asyncio.to_thread(prepare_launch, intent, candidate, root,
                                            validate_build_identity=False)
         self._authorize(self._current_open_context(context), "runtime.open")
+        self._check_drain_admission('runtime.open')
         return prepared
 
     async def open(self, operation: OpenOperation,
@@ -485,6 +493,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         old = await self._existing(semantic, context)
         if old is not None:
             return old
+        self._check_drain_admission('runtime.open')
         async with self._lock:
             if (self._shutting_down or session_key in self._sessions or
                     session_key in self._opening or
@@ -507,7 +516,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 raise CoreError("CAPACITY_EXCEEDED", "open", retry_safe=True,
                                 operation_id=operation.operation_id)
             attempt = _OpeningAttempt()
-            attempt.guard.authority_probe = lambda: self._r4_open_blocked(context, operation.session_id)
+            attempt.guard.authority_probe = lambda: (self._drain_requested or
+                self._r4_open_blocked(context, operation.session_id))
             attempt.guard.context_probe = lambda: self._current_open_context(context, operation.session_id)
             self._opening[session_key] = attempt
         # C4/T04: factories that declare the additive opening_guard seam
@@ -536,6 +546,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             if prepared != refreshed:
                 raise CoreError("PROFILE_DRIFT", "open")
             await asyncio.to_thread(verify_prepared, prepared)
+            self._check_drain_admission('runtime.open')
             if self._factory_accepts_process_launch and prepared.intent.mode == 'managed':
                 from .native.process.launch_identity import plan_process_launch
                 from .native.process.launch_exclusion import HostLaunchExclusion
@@ -567,7 +578,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 nonlocal effect_started, binding_registered
                 self._current_open_context(context, operation.session_id)
                 async with self._lock:
-                    if self._shutting_down:
+                    if self._shutting_down or self._drain_requested:
                         raise EffectNotSent("runtime is draining",
                                             code="RUNTIME_DRAINING")
                 effect_started = True
@@ -593,6 +604,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 # the Future (and any live handle it returns) stays
                 # supervised by the runtime, never abandoned.
                 try:
+                    self._check_drain_admission('runtime.open')
                     current_context = self._current_open_context(context, operation.session_id)
                     open_task = asyncio.ensure_future(
                         self._native_factory.open(
@@ -648,6 +660,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                                   binding.superseded or self._r4_pending(session_key),
                                  binding.faulted),
                         clock=self._clock.monotonic,
+                        productive_drain_probe=lambda: self._drain_requested,
                         deadline_probe=lambda:
                             binding.context.lease_deadline_monotonic)
                     try:
@@ -893,6 +906,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         old = await self._existing(semantic, context)
         if old is not None:
             return old
+        self._check_drain_admission(semantic.action)
         # PC02.02/C2-R01: the in-memory admission fence is a memory-only
         # critical section - no durable I/O under the global lock, so an
         # expired/revoked/closing session is refused even while some other
@@ -957,6 +971,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             old = await self._existing(semantic, context)
             if old is not None:
                 return old
+            self._check_drain_admission(semantic.action)
             binding = self._session(
                 semantic.session_id, context,
                 require_live_lease=semantic.action == "turn.submit")
@@ -1000,6 +1015,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
 
             async def effect() -> None:
                 nonlocal effect_entered
+                self._check_drain_admission(semantic.action)
                 self._check_r4_context(context, semantic.action, semantic.session_id)
                 if binding.draining and semantic.action != "turn.interrupt":
                     raise EffectNotSent("SESSION_CLOSING")
@@ -1012,7 +1028,13 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                 return None
 
             try:
-                return await self._kernel.execute(semantic, context, effect)
+                # Codex/Pi steer modifies the admitted turn; it does not emit
+                # an independent terminal result. Claude replacement does.
+                terminal_expected = (semantic.action == 'turn.submit' or
+                    (semantic.action == 'turn.steer' and binding.adapter_id not in
+                     {'codex_app_server', 'pi_rpc'}))
+                return await self._kernel.execute(semantic, context, effect,
+                    terminal_event_expected=terminal_expected)
             except BaseException as error:
                 if capacity_key is not None and (not effect_entered or (
                         isinstance(error, CoreError) and error.retry_safe and not error.possible_effect)):
@@ -1172,7 +1194,7 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
             if any(getattr(authority, name) != getattr(s, name) for name in (
                     'workspace_binding_id', 'binding_revision', 'credential_epoch', 'session_id')):
                 return None, 'STALE_OBSERVATION'
-            if (self._shutting_down or binding.closed or binding.closing or binding.faulted
+            if (self._shutting_down or self._drain_requested or binding.closed or binding.closing or binding.faulted
                     or binding.draining or binding.lease_hold or binding.superseded):
                 return None, 'RECOVERING'
             try:
@@ -2840,6 +2862,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
         try:
             binding.pump_started.set()
             async for event in binding.native.events():
+                binding.pump_pending = True
+                self._drain_event_revision += 1
                 if (event.session_id != session.session_id or
                         event.server_id != session.server_id or
                         event.executor_id != session.executor_id or
@@ -2882,6 +2906,8 @@ class LocalRuntimeCore(R4LeaseRuntime, CloseRuntimeMixin):
                     self._event_changed.notify_all()
                 if self._event_sink is not None:
                     self._schedule_sink(session, binding)
+                binding.pump_pending = False
+                self._drain_event_revision += 1
         except asyncio.CancelledError:
             # Unexpected watcher cancellation (RC-04-04): outside a
             # Core-initiated close this is an observation loss, not a

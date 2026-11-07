@@ -1,0 +1,12 @@
+........................................................................ [ 33%]
+...........................................F............................ [ 66%]
+........................................................................ [ 99%]
+.                                                                        [100%]
+================================== FAILURES ===================================
+________ test_revocation_fences_copied_factory_after_environment_wait _________
+core-v2-final-source\tests\test_r4_runtime_leases.py:420: in test_revocation_fences_copied_factory_after_environment_wait
+    from tests.regression.test_c4_audit import _pending_open_runtime, _LabAdapter
+E   ModuleNotFoundError: No module named 'tests'
+=========================== short test summary info ===========================
+FAILED core-v2-qualified-reports::test_revocation_fences_copied_factory_after_environment_wait
+1 failed, 216 passed in 46.19s

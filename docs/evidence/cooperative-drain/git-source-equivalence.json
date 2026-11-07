@@ -1,0 +1,71 @@
+{
+  "files": [
+    {
+      "path": "src/nexus_connector_core/drain.py",
+      "qualified_sha256": "65359996135f94e421f4a014fc0f5d95bb8eee2bff4ef87ee9d0b3b217eb766f",
+      "git_index_sha256": "65359996135f94e421f4a014fc0f5d95bb8eee2bff4ef87ee9d0b3b217eb766f",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "src/nexus_connector_core/runtime.py",
+      "qualified_sha256": "c4cf6e4c69c04c55c0dbdd848f371746dff2827d2768c9afe8c75e4af3c97c18",
+      "git_index_sha256": "d5923a76b0dbdc193825cbd263e6f6551486cb1e8d2edee1914727eeecbc3054",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "src/nexus_connector_core/kernel.py",
+      "qualified_sha256": "d0ea79751775ccd4c5d1198022c23783be9aab883757c5cb2edf29ce07fa0713",
+      "git_index_sha256": "f96ade93fb2f29cd2c4781bc59ba3469527f677e34c455067941039e11d1ee3d",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "src/nexus_connector_core/journal.py",
+      "qualified_sha256": "718e46f30b7a5c10d3d20eec7753af60a40c5688f702d2994563211953b026b2",
+      "git_index_sha256": "b68bbdad06c559a5781394f0310442cb351f49ff75d7cba8d16dd29e311d4176",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "src/nexus_connector_core/ports.py",
+      "qualified_sha256": "851ab534cd89b240d25703e42b495441e89403f14fe86610e09fad99665ff94e",
+      "git_index_sha256": "48a84c09af1b7445816fa48dda61fddb58192cd4eb391e93bc0cba6ae6b597fe",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "src/nexus_connector_core/native/runtime_bridge.py",
+      "qualified_sha256": "9b25fdd47b80da79f3e933bc4daeabac7158dfcf0f39239a2a8b78786fed75af",
+      "git_index_sha256": "5ecc45ecba3f18e32a779cf83d2f64c28e163f3a74f9c20a3c707d3657199b98",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "src/nexus_connector_core/operation_refusal_r4.py",
+      "qualified_sha256": "80e86b145db99cafafda30a471070e64c874b4e8eb1a4e4a67c65d03902d033f",
+      "git_index_sha256": "ecf5f38a9922e063e3100aba6223a565a0b64cfff69ea93c34075dfa2d13d883",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "tests/test_cooperative_drain.py",
+      "qualified_sha256": "5171762f072221de25b27a650231e476d540f5b02cf798bea817aeadffaa1a7b",
+      "git_index_sha256": "5171762f072221de25b27a650231e476d540f5b02cf798bea817aeadffaa1a7b",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "tests/test_r4_stopped_refusal.py",
+      "qualified_sha256": "16d690b1a6d1c0e7fcd6f56511ca607f76306cc422057a9be3eba4cde8bc7d51",
+      "git_index_sha256": "16d690b1a6d1c0e7fcd6f56511ca607f76306cc422057a9be3eba4cde8bc7d51",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "src/nexus_connector_core/__init__.py",
+      "qualified_sha256": "2c4ca5d38bac7033748d5eea54aa5acb5d868566136c5a6d6782a5e65c507caf",
+      "git_index_sha256": "bf68e4e174dbe009541315c21c5452f937dea2143899c914e379b43d25e8aeac",
+      "lf_normalized_equal": true
+    },
+    {
+      "path": "tests/test_cooperative_drain_composition.py",
+      "qualified_sha256": "c4dd97257f3bee832a7bd61c3820e7075afeeb6feffa8beacbdc06af5acbd01a",
+      "git_index_sha256": "c4dd97257f3bee832a7bd61c3820e7075afeeb6feffa8beacbdc06af5acbd01a",
+      "lf_normalized_equal": true
+    }
+  ],
+  "classification": "Only Git newline normalization is accepted; original qualification hashes retained."
+}

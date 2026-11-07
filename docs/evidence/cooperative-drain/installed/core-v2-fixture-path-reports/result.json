@@ -1,0 +1,30 @@
+{
+  "command": [
+    "C:\\Users\\jpamb\\AppData\\Local\\Temp\\r3-cooperative-drain-09ucmgsr\\venv\\Scripts\\python.exe",
+    "-I",
+    "-X",
+    "utf8",
+    "-m",
+    "pytest",
+    "-p",
+    "pytest_asyncio.plugin",
+    "-p",
+    "no:cacheprovider",
+    "-c",
+    "C:\\Users\\jpamb\\AppData\\Local\\Temp\\r3-cooperative-drain-09ucmgsr\\core-v2-fixture-path-reports\\pytest.ini",
+    "--import-mode=importlib",
+    "--basetemp",
+    "C:\\Users\\jpamb\\AppData\\Local\\Temp\\r3-cooperative-drain-09ucmgsr\\core-v2-fixture-path-reports\\tmp",
+    "-q",
+    "--tb=short",
+    "--junitxml",
+    "C:\\Users\\jpamb\\AppData\\Local\\Temp\\r3-cooperative-drain-09ucmgsr\\core-v2-fixture-path-reports\\tests.xml",
+    "C:\\Users\\jpamb\\AppData\\Local\\Temp\\r3-cooperative-drain-09ucmgsr\\core-v2-final-source\\tests\\test_r4_runtime_leases.py::test_revocation_fences_copied_factory_after_environment_wait"
+  ],
+  "exit": 0,
+  "changed_inputs": [],
+  "tests": 1,
+  "failures": 0,
+  "fixture_import_fix": "Copied tests and their frozen parent added for tests.regression imports; src is absent from sys.path and application remains installed noneditable wheel.",
+  "package_inputs": "../core-v2-final-reports/inputs.json"
+}

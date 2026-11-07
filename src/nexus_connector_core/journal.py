@@ -222,6 +222,17 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                 error_code TEXT,
                 PRIMARY KEY(server_id, executor_id, operation_id)
             );
+            CREATE TABLE IF NOT EXISTS operation_actions (
+                server_id TEXT NOT NULL,
+                executor_id TEXT NOT NULL,
+                operation_id TEXT NOT NULL,
+                action TEXT NOT NULL,
+                terminal_event_expected INTEGER NOT NULL CHECK(terminal_event_expected IN (0,1)),
+                PRIMARY KEY(server_id, executor_id, operation_id),
+                FOREIGN KEY(server_id, executor_id, operation_id)
+                    REFERENCES operations_v2(server_id, executor_id, operation_id)
+                    ON DELETE CASCADE
+            );
             CREATE TABLE IF NOT EXISTS session_open_generations (
                 server_id TEXT NOT NULL,
                 executor_id TEXT NOT NULL,
@@ -451,6 +462,48 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
         def _worker_impl(db):
             return self._storage_status(db)
         return await self._run(_worker_impl, urgent=False)
+
+    async def drain_snapshot(self) -> dict:
+        """Bounded metadata only; unknown legacy actions remain obligations.
+
+        SUBMITTED means dispatch returned, not turn completion. Known open and
+        control dispatches have no independent turn; submit and replacement
+        steer still require their terminal result. Missing metadata is never backfilled from
+        names, native IDs or a later retry.
+        """
+        def read(db):
+            queries = {
+                'operations': """SELECT o.server_id,o.executor_id,o.session_id,
+                    o.operation_id,o.stage,a.action FROM operations_v2 o
+                    LEFT JOIN operation_actions a USING(server_id,executor_id,operation_id)
+                    WHERE o.stage NOT IN ('SUCCEEDED','FAILED','CANCELLED')
+                    AND NOT (o.stage='SUBMITTED' AND COALESCE(a.terminal_event_expected,1)=0)
+                    ORDER BY o.server_id,o.executor_id,o.operation_id LIMIT 257""",
+                'claims': """SELECT server_id,executor_id,session_id,operation_id FROM session_claims
+                    WHERE reconciliation_pending=1 ORDER BY server_id,executor_id,session_id LIMIT 257""",
+                'streams': """SELECT server_id,executor_id,session_id,stream_epoch FROM event_streams
+                    WHERE next_sequence-1>acked_sequence
+                    ORDER BY server_id,executor_id,session_id,stream_epoch LIMIT 257""",
+                'watermarks': """SELECT server_id,executor_id,session_id,stream_epoch,
+                    next_sequence-1 AS sequence FROM event_streams
+                    WHERE EXISTS (SELECT 1 FROM session_claims c WHERE
+                        c.server_id=event_streams.server_id AND c.executor_id=event_streams.executor_id
+                        AND c.session_id=event_streams.session_id AND c.reconciliation_pending=1)
+                    ORDER BY server_id,executor_id,session_id,stream_epoch LIMIT 257""",
+            }
+            db.execute('BEGIN')
+            try:
+                result = {'truncated': False}
+                for name, sql in queries.items():
+                    cursor = db.execute(sql)
+                    names = [column[0] for column in cursor.description]
+                    rows = cursor.fetchall()
+                    result['truncated'] |= len(rows) > 256
+                    result[name] = [dict(zip(names, row)) for row in rows[:256]]
+                return result
+            finally:
+                db.execute('ROLLBACK')
+        return await self._run(read, urgent=False)
 
     async def claimed_sessions(
             self, server_id: str, executor_id: str, *, after_rowid: int = 0,
@@ -988,11 +1041,22 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                     authorization_revision: int | None = None,
                     configuration_revision: int | None = None,
                     process_launch_identity=None,
+                    action: str | None = None,
+                    terminal_event_expected: bool | None = None,
                     ) -> tuple[OperationReceipt, bool]:
         if not all((key.server_id, key.executor_id, key.operation_id, session_id)):
             raise CoreError("OPERATION_INVALID", "admission")
         if type(claim_session) is not bool:
             raise ValueError("claim_session must be boolean")
+        if action is not None and (type(action) is not str or action not in {
+                'runtime.open', 'runtime.close', 'turn.submit', 'turn.steer',
+                'turn.interrupt', 'approval.decide', 'input.provide'}):
+            raise CoreError('VALIDATION_ERROR', 'admission')
+        if terminal_event_expected is None:
+            terminal_event_expected = action in {'turn.submit', 'turn.steer'}
+        if (type(terminal_event_expected) is not bool or
+                (action == 'turn.submit' and not terminal_event_expected)):
+            raise CoreError('VALIDATION_ERROR', 'admission')
         if process_launch_identity is not None:
             from .process_launch import validate_launch_identity
             validate_launch_identity(process_launch_identity)
@@ -1131,6 +1195,10 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                                   key.operation_id, intent_hash, session_id,
                                   "SUBMISSION_STARTED" if effect_imminent else "RECEIVED_DURABLE",
                                   int(effect_imminent), int(not effect_imminent), None, None))
+                if action is not None:
+                    db.execute('INSERT INTO operation_actions VALUES (?,?,?,?,?)',
+                               (key.server_id, key.executor_id, key.operation_id, action,
+                                int(terminal_event_expected)))
                 if process_launch_identity is not None:
                     # Persist before the possible-effect frontier, in the
                     # same transaction as the immutable opening claim.

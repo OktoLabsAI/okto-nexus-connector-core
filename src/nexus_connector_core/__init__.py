@@ -121,6 +121,7 @@ from .installation import (
     installation_ref, resolve_installation,
 )
 from .runtime import LocalRuntimeCore
+from .drain import combine_drain_status
 from .slot_ledger import SQLiteOwnedSlotLedger
 from .executor_inventory import (
     SNAPSHOT_FORMAT_VERSION, build_executor_inventory_snapshot,
@@ -143,6 +144,7 @@ from .close_operation import r4_close_operation
 __version__ = "0.0.14"
 
 __all__ = [
+    "combine_drain_status",
     'JournalLocation', 'JournalRegistration', 'JournalLocationPage', 'JournalLocationRegistry',
     "IndependentInventoryObserver", "HarnessObservationResult", "HarnessObservation",
     "InventoryObservationBatch", "InventoryRefreshFrontier",

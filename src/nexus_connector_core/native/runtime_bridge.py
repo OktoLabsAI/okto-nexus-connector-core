@@ -86,16 +86,20 @@ class EffectFence:
     its upstream OUTCOME_UNKNOWN handling (no exactly-once claim).
     """
 
-    __slots__ = ("_probe", "_clock", "_lease_deadline", "_deadline_probe")
+    __slots__ = ("_probe", "_clock", "_lease_deadline", "_deadline_probe", "_productive_drain_probe")
 
     def __init__(self, probe=None, *, clock=None, lease_deadline=None,
-                 deadline_probe=None):
+                 deadline_probe=None, productive_drain_probe=None):
         self._probe = probe
         self._clock = clock
         self._lease_deadline = lease_deadline
         self._deadline_probe = deadline_probe
+        self._productive_drain_probe = productive_drain_probe
 
     def check(self, action: str) -> None:
+        if (action in {'send_turn', 'steer'} and self._productive_drain_probe is not None
+                and self._productive_drain_probe()):
+            raise RuntimeCommandNotSent('runtime is draining', code='RUNTIME_DRAINING')
         probe = self._probe
         if probe is not None:
             closed, closing, revoked, expired, faulted = probe()

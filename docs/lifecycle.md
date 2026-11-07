@@ -1,5 +1,46 @@
 # Operations, leases and uncertain outcomes
 
+## Cooperative service drain
+
+The host calls synchronous, idempotent `begin_drain()` on the runtime's owner
+event loop before waiting for admitted work. This fences new prepare/open,
+submit and productive steer operations with `RUNTIME_DRAINING`; it does not
+interrupt native work, renew authority or invoke `shutdown`. Existing operation
+recovery, authorized native decisions, results, acknowledgements, reconciliation
+and explicit close remain available under their normal contracts.
+
+`await drain_status()` returns `state`, `quiescent` and bounded resource metadata.
+States are `RUNNING` before drain, then `BUSY`, `UNKNOWN` or `QUIESCENT`. The
+observation combines producers, native requests, ownership obligations and a
+bounded technical-journal snapshot. A failed, stale, missing or truncated
+observation cannot prove quiescence. It does not poll or close native peers.
+Observation timeouts retain the outstanding read rather than spawning more work.
+
+The host keeps its control/result channels and stores alive while waiting.
+Only proven quiescence or a separately authorized force decision permits the
+host to enter the existing `shutdown(ShutdownPolicy(...))` containment path.
+Neither a drain deadline nor a force request proves that ownership was released.
+
+SQLite adds `operation_actions`, linked to `operations_v2`, atomically with new
+admissions. It records the action and whether an independent terminal event is
+expected; receipt semantics and intent hashes are unchanged. Existing rows are
+not backfilled: unresolved historical operations without this metadata remain
+`UNKNOWN` until reconciliation or explicit containment. Custom Journal adapters
+must support the new admission keywords and `drain_snapshot`; absence of the
+observation API is reported as `UNKNOWN`.
+
+When several runtimes share one journal, collect every owner's report and use
+the public `combine_drain_status(reports)` helper. Reports include exact
+`owned_sessions` and an `activity_revision`; after all awaits the host must
+compare each revision with synchronous `runtime.drain_revision()`. A changed
+composition or revision invalidates quiescence. The helper resolves only an
+exact opening claim retained by one other owner of that same journal. Orphaned
+claims, conflicting owners, pending operations and acknowledgements remain
+unresolved. Do not combine reports across independent journals or treat these
+technical observations as authorization or process-death proof.
+
+## Operation and ownership lifecycle
+
 The host issues a scoped `ExecutionContext`. `prepare` validates identity and
 the selected candidate without starting a provider. It requires a finite,
 numeric monotonic lease deadline; `open` also rejects a lease/grace window

@@ -1,0 +1,5 @@
+Using Python 3.13.1 environment at: venv
+Resolved 1 package in 23ms
+Prepared 1 package in 442ms
+Installed 1 package in 228ms
+ + okto-nexus-connector-core==0.0.14 (from file:///C:/Users/jpamb/AppData/Local/Temp/r3-cooperative-drain-09ucmgsr/core-v2-wheels/okto_nexus_connector_core-0.0.14-py3-none-any.whl)
