@@ -15,7 +15,7 @@ import re
 import subprocess
 import xml.etree.ElementTree as ET
 
-DEFINITION_REVISION = 1
+DEFINITION_REVISION = 2
 TASK_NAMESPACE = 'http://schemas.microsoft.com/windows/2004/02/mit/task'
 
 
@@ -94,9 +94,8 @@ def windows_logon_task(definition: UserServiceDefinition) -> str:
         ('RunOnlyIfNetworkAvailable', 'false'), ('AllowStartOnDemand', 'true'),
         ('Enabled', 'true'), ('Hidden', 'false'), ('ExecutionTimeLimit', 'PT0S')):
         child(settings, name, value)
-    restart = child(settings, 'RestartOnFailure')
-    child(restart, 'Interval', 'PT1M')
-    child(restart, 'Count', '3')
+    # Windows launches the persistent foreground host supervisor. Its one
+    # bounded restart policy must not stack with Scheduler RestartOnFailure.
     action = child(child(task, 'Actions', Context='owner'), 'Exec')
     child(action, 'Command', definition.executable)
     child(action, 'Arguments', subprocess.list2cmdline(definition.arguments))

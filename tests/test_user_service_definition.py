@@ -20,7 +20,7 @@ def definition(**changes):
     return replace(base, **changes)
 
 
-def test_user_task_is_literal_foreground_least_privilege_and_bounded_recovery():
+def test_user_task_is_literal_foreground_least_privilege_without_stacked_recovery():
     spec = definition()
     xml = windows_logon_task(spec)
     root = ET.fromstring(xml)
@@ -36,8 +36,7 @@ def test_user_task_is_literal_foreground_least_privilege_and_bounded_recovery():
     assert text('t:Settings/t:MultipleInstancesPolicy') == 'IgnoreNew'
     assert text('t:Settings/t:ExecutionTimeLimit') == 'PT0S'
     assert text('t:Settings/t:AllowHardTerminate') == 'false'
-    assert text('t:Settings/t:RestartOnFailure/t:Count') == '3'
-    assert text('t:Settings/t:RestartOnFailure/t:Interval') == 'PT1M'
+    assert root.find('t:Settings/t:RestartOnFailure', {'t': TASK_NAMESPACE}) is None
     assert 'S4U' not in xml and 'Password' not in xml and 'BootTrigger' not in xml
 
 
