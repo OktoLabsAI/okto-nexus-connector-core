@@ -50,6 +50,9 @@ for line in sys.stdin:
             "platformFamily": "windows", "platformOs": "windows"}}), flush=True)
     elif method == "initialized":
         initialized = True
+    elif method == "account/read":
+        print(json.dumps({"id": message["id"], "result": {
+            "requiresOpenaiAuth": True, "account": {"type": "apiKey"}}}), flush=True)
     elif method == "thread/start":
         answer = ({"result": {"thread": {"id": "thread-1"}}} if initialized
                   else {"error": {"code": -32000, "message": "Not initialized"}})
@@ -76,12 +79,14 @@ for line in sys.stdin:
             time.sleep(0.01)
         else:
             pytest.fail("synthetic peer did not receive turn/start")
-        assert [message["method"] for message in messages[:4]] == [
-            "initialize", "initialized", "thread/start", "turn/start"]
+        assert [message["method"] for message in messages[:5]] == [
+            "initialize", "initialized", "account/read", "thread/start", "turn/start"]
         assert "id" not in messages[1]
         schema = _codex_schema()
-        _validates(schema, "ThreadStartParams", messages[2]["params"])
-        _validates(schema, "TurnStartParams", messages[3]["params"])
+        _validates(schema, "GetAccountParams", messages[2]["params"])
+        assert messages[2]["params"] == {"refreshToken": False}
+        _validates(schema, "ThreadStartParams", messages[3]["params"])
+        _validates(schema, "TurnStartParams", messages[4]["params"])
         with pytest.raises(NativeAdapterError, match="pending or active turn") as rejected:
             connector.send(session, HarnessCommand(session.session_id, "send_turn",
                                                    {"text": "second turn"}))
@@ -114,6 +119,8 @@ def test_failed_initialize_retains_containment_for_factory_and_retry(tmp_path, m
         ' request=json.loads(line)\n'
         ' if request.get("method")=="initialize":\n'
         '  print(json.dumps({"id":request["id"],"result":{}}),flush=True)\n'
+        ' elif request.get("method")=="account/read":\n'
+        '  print(json.dumps({"id":request["id"],"result":{"requiresOpenaiAuth":False,"account":None}}),flush=True)\n'
         ' elif request.get("method")=="thread/start":\n'
         '  print(json.dumps({"id":request["id"],"result":{"thread":{"id":"retry-thread"}}}),flush=True)\n',
         encoding='utf-8')

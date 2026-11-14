@@ -212,6 +212,8 @@ def main():
 
         if method == "initialize":
             write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"userAgent": "okto-nexus/0.156.1"}})
+        elif method == "account/read":
+            write_msg({"id": req_id, "result": {"requiresOpenaiAuth": True, "account": {"type": "apiKey"}}})
         elif method == "thread/start":
             thread_id = next_thread_id()
             if params.get("_early_notify"):
@@ -1463,6 +1465,8 @@ def test_events_stays_live_after_a_failed_start_is_followed_by_a_successful_retr
         "        if msg.get('method') == 'initialize':\n"
         "            sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': msg['id'], 'result': {}}) + chr(10))\n"
         "            sys.stdout.flush()\n"
+        "        elif msg.get('method') == 'account/read':\n"
+        "            print(json.dumps({'id':msg['id'],'result':{'requiresOpenaiAuth':False,'account':None}}),flush=True)\n"
         "        elif msg.get('method') == 'thread/start':\n"
         "            sys.stdout.write(json.dumps({'jsonrpc': '2.0', 'id': msg['id'], 'result': {'thread': {'id': 'th_retry'}}}) + chr(10))\n"
         "            sys.stdout.flush()\n",

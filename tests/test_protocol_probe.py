@@ -13,6 +13,10 @@ def test_protocol_probe_isolated_and_requires_cleanup(tmp_path, monkeypatch, ada
     calls = []
     class Adapter:
         def __init__(self, **kwargs):
+            if adapter_id == 'codex_app_server':
+                assert kwargs['require_authentication'] is False
+            else:
+                assert 'require_authentication' not in kwargs
             env = kwargs['env']
             assert 'API_KEY' not in env and 'NEXUS_OPERATOR_KEY' not in env
             assert env['HOME'] != 'original-home'

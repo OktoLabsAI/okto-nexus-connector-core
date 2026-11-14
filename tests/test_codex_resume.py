@@ -54,6 +54,9 @@ for line in sys.stdin:
     if method == "initialize":
         print(json.dumps({"id": message["id"], "result": {
             "userAgent": "nexus_connector_core/0.157.0"}}), flush=True)
+    elif method == "account/read":
+        print(json.dumps({"id": message["id"], "result": {
+            "requiresOpenaiAuth": True, "account": {"type": "apiKey"}}}), flush=True)
     elif method == "thread/resume":
         print(json.dumps({"id": message["id"], "result": {
             "thread": {"id": sys.argv[1], "status": {"type": sys.argv[2]}}}}), flush=True)
@@ -69,13 +72,14 @@ for line in sys.stdin:
         messages = [json.loads(line) for line in
                     (tmp_path / "observed.jsonl").read_text().splitlines()]
         assert [message["method"] for message in messages] == [
-            "initialize", "initialized", "thread/resume"]
-        assert messages[2]["params"]["threadId"] == "thread-one"
-        assert messages[2]["params"]["cwd"] == str(tmp_path)
+            "initialize", "initialized", "account/read", "thread/resume"]
+        assert messages[2]["params"] == {"refreshToken": False}
+        assert messages[3]["params"]["threadId"] == "thread-one"
+        assert messages[3]["params"]["cwd"] == str(tmp_path)
         bundle = json.loads(files("nexus_connector_core.native").joinpath(
             "codex_app_server_0_157_0.schemas.json").read_text())
         Draft7Validator({"$ref": "#/definitions/ThreadResumeParams",
-                         "definitions": bundle["definitions"]}).validate(messages[2]["params"])
+                         "definitions": bundle["definitions"]}).validate(messages[3]["params"])
     finally:
         connector.close()
 
@@ -93,6 +97,9 @@ for line in sys.stdin:
     if message.get("method") == "initialize":
         print(json.dumps({"id": message["id"], "result": {
             "userAgent": "nexus_connector_core/0.157.0"}}), flush=True)
+    elif message.get("method") == "account/read":
+        print(json.dumps({"id": message["id"], "result": {
+            "requiresOpenaiAuth": True, "account": {"type": "apiKey"}}}), flush=True)
     elif message.get("method") == "thread/resume":
         print(json.dumps({"id": message["id"], "result": {
             "thread": {"id": sys.argv[1], "status": {"type": sys.argv[2]}}}}), flush=True)

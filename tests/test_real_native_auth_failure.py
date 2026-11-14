@@ -74,16 +74,10 @@ def test_real_codex_missing_login_has_durable_authentication_error(tmp_path):
             time.monotonic() + 60, frozenset({"runtime.open", "turn.submit", "runtime.close"}))
         try:
             prepared = await runtime.prepare(LaunchIntent("agent", "ws", "codex_app_server"), authority)
-            await runtime.open(OpenOperation("open", "session", "epoch", prepared), authority)
-            await runtime.submit(TurnOperation("turn", "session", "Do not call tools. Reply with OK."), authority)
-            async with asyncio.timeout(30):
-                while True:
-                    receipt = await journal.get_receipt(OperationKey("srv", "exe", "turn"))
-                    if receipt and receipt.stage == "FAILED":
-                        break
-                    await asyncio.sleep(.05)
-            assert receipt.error_code == "PROVIDER_AUTH_REQUIRED"
-            assert receipt.possible_effect and not receipt.retry_safe
+            opened = await runtime.open(OpenOperation("open", "session", "epoch", prepared), authority)
+            assert opened.stage == "FAILED" and opened.error_code == "PROVIDER_AUTH_REQUIRED"
+            assert opened.possible_effect and not opened.retry_safe
+            assert await journal.get_receipt(OperationKey("srv", "exe", "turn")) is None
         finally:
             await runtime.shutdown(ShutdownPolicy(2, 2))
             journal.close()

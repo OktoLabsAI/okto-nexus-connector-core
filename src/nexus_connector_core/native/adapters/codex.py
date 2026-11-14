@@ -625,6 +625,7 @@ class CodexAppServerConnector:
         client_info: Mapping[str, str] | None = None,
         handshake_timeout_s: float = 30.0,
         thread_start_overrides: Mapping[str, Any] | None = None,
+        require_authentication: bool = True,
     ) -> None:
         self.capabilities = HarnessCapabilities(
             send_only=False,
@@ -639,6 +640,9 @@ class CodexAppServerConnector:
         self._client_info = _client_info(client_info)
         self._handshake_timeout_s = handshake_timeout_s
         self._thread_start_overrides = dict(thread_start_overrides or {})
+        if type(require_authentication) is not bool:
+            raise ValueError("require_authentication must be boolean")
+        self._require_authentication_for_start = require_authentication
 
         self._transport: _CodexTransport | None = None
         self._startup_close_outcome = "unknown"
@@ -725,7 +729,9 @@ class CodexAppServerConnector:
                 launch_guard = getattr(self, "_launch_guard", None)
                 if launch_guard is not None:
                     launch_guard("codex_start")
-                self._spawn_and_initialize()
+                self._spawn_and_initialize(require_authentication=(
+                    self._require_authentication_for_start and resume_thread_id is None
+                    and self._account_matches_thread_configuration()))
             self._thread_start_attempts += 1
 
         thread_start_params: dict[str, Any] = {
@@ -1016,7 +1022,20 @@ class CodexAppServerConnector:
         return observe_transport_configuration('codex_app_server', self._transport,
             version=self._compatibility_report.get('native_version'))
 
-    def _spawn_and_initialize(self) -> None:
+    def _account_matches_thread_configuration(self) -> bool:
+        # account/read observes the process default provider, not a prospective
+        # thread override or a resumed thread's saved provider. Do not deny a
+        # custom-provider session using another provider's missing account.
+        overrides = self._thread_start_overrides
+        if overrides.get("modelProvider") is not None:
+            return False
+        if overrides.get("cwd") not in (None, self._cwd):
+            return False
+        config = overrides.get("config")
+        neutral = {"model_reasoning_effort", "features.default_mode_request_user_input"}
+        return config is None or (isinstance(config, dict) and not set(config) - neutral)
+
+    def _spawn_and_initialize(self, *, require_authentication=True) -> None:
         """Spawn the child and complete the ``initialize`` handshake.
 
         ``self._transport`` is assigned ONLY after ``initialize`` succeeds
@@ -1069,6 +1088,22 @@ class CodexAppServerConnector:
                 _METHOD_INITIALIZE, {"clientInfo": self._client_info}, timeout_s=self._handshake_timeout_s
             )
             transport.notify("initialized", {})
+            # Read only: never refresh credentials, launch login, or submit a
+            # thread/turn just to discover that this service cannot authenticate.
+            try:
+                account = transport.request("account/read", {"refreshToken": False},
+                                            timeout_s=self._handshake_timeout_s)
+            except NativeAdapterError as error:
+                # Native error text may contain account information. An unknown
+                # observation is not evidence of missing login.
+                native_error = error.details.get("codex_error")
+                unsupported = (isinstance(native_error, dict)
+                    and type(native_error.get("code")) is int and native_error["code"] == -32601)
+                raise NativeAdapterError(ErrorCode.CONFLICT,
+                    "Provider authentication could not be observed.",
+                    {"reason": "protocol_incompatible" if unsupported
+                        else "provider_auth_observation_unconfirmed"}) from None
+            self._require_authentication(account, required=require_authentication)
         except BaseException:
             self._startup_close_outcome = transport.close()
             self._closed_event.set()
@@ -1089,6 +1124,29 @@ class CodexAppServerConnector:
             initialize_result, client_name=self._client_info["name"])
         self._closed_event.clear()
         self._transport = transport
+
+    @staticmethod
+    def _require_authentication(observation, *, required=True) -> None:
+        """Use only the pinned account/read facts; retain no account details."""
+        if not isinstance(observation, dict) or type(observation.get("requiresOpenaiAuth")) is not bool:
+            raise NativeAdapterError(ErrorCode.CONFLICT,
+                "The provider authentication response is not supported.",
+                {"reason": "protocol_incompatible"})
+        if not observation["requiresOpenaiAuth"]:
+            # Custom providers may not use an OpenAI account at all.
+            return
+        if "account" in observation and observation["account"] is None:
+            if not required:
+                return  # Protocol probe or the selected thread's auth context is unknown.
+            raise NativeAdapterError(ErrorCode.PERMISSION_DENIED,
+                "Provider authentication is unavailable. Sign in locally with Codex "
+                "using the approved provider home before retrying.",
+                {"reason": "provider_auth_required"})
+        account = observation.get("account")
+        if not isinstance(account, dict) or account.get("type") not in {"apiKey", "chatgpt", "amazonBedrock"}:
+            raise NativeAdapterError(ErrorCode.CONFLICT,
+                "The provider authentication response is not supported.",
+                {"reason": "protocol_incompatible"})
 
     # ------------------------------------------------------------------ #
     # Inbound translation (native codex event -> domain HarnessEvent)

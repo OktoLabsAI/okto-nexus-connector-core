@@ -188,6 +188,8 @@ def main():
 
         if method == "initialize":
             write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"userAgent": "okto-nexus/0.156.1"}})
+        elif method == "account/read":
+            write_msg({"id": req_id, "result": {"requiresOpenaiAuth": True, "account": {"type": "apiKey"}}})
         elif method == "thread/start":
             thread_id = next_thread_id()
             if params.get("_early_notify"):

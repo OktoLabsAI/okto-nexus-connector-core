@@ -23,7 +23,11 @@ def probe_selected_protocol(candidate, *, env):
         if candidate.adapter_id == 'claude_stream':
             connector = adapter(binary=prepared.argv[0], argv=prepared.argv[1:], cwd=str(root), env=clean_env)
         else:
-            connector = adapter(command=prepared.argv, cwd=str(root), env=clean_env)
+            # A credential-free installation probe observes protocol only. It
+            # sends no turn and must not require an OpenAI account to qualify
+            # an otherwise usable Codex installation.
+            options = {'require_authentication': False} if candidate.adapter_id == 'codex_app_server' else {}
+            connector = adapter(command=prepared.argv, cwd=str(root), env=clean_env, **options)
         connector._launch_guard = lambda stage: verify_prepared(prepared)
         try:
             connector.start(owning_agent_id='protocol-probe')

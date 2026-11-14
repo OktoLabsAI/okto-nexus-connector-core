@@ -1108,6 +1108,8 @@ class CopiedAdapterFactory:
                 raise EffectRejected('Native startup failed and its process was stopped.',
                     failure_code=('NATIVE_PROTOCOL_INCOMPATIBLE'
                         if error.details.get('reason') == 'protocol_incompatible'
+                        else 'PROVIDER_AUTH_REQUIRED'
+                        if error.details.get('reason') == 'provider_auth_required'
                         else 'NATIVE_STARTUP_FAILED')) from error
             raise
         connector._configuration_candidate_ref = prepared.candidate.installation_ref
