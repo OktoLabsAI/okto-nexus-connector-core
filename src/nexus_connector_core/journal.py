@@ -483,6 +483,7 @@ class SQLiteJournal(ProcessLaunchStorageMixin):
                     SELECT server_id,executor_id,session_id,operation_id FROM session_claims
                     WHERE reconciliation_pending=1 ORDER BY server_id,executor_id,session_id LIMIT 257)
                     SELECT c.*,g.owner_generation AS session_owner_generation,
+                      g.connection_generation AS opening_connection_generation,
                       (SELECT stream_epoch FROM (
                          SELECT e.server_id,e.executor_id,e.session_id,e.stream_epoch FROM event_streams e
                          WHERE e.server_id=c.server_id AND e.executor_id=c.executor_id

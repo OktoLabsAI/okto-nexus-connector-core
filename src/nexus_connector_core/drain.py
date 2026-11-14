@@ -4,12 +4,45 @@ from __future__ import annotations
 
 import asyncio
 import hashlib
+from dataclasses import dataclass
 
 from .models import CoreError, SessionKey
+from .process_launch import ProcessLaunchRecord, validate_launch_identity
 
 
 _RELEASE_FIELDS = ('server_id', 'executor_id', 'session_id', 'opening_operation_id',
                    'stream_epoch', 'session_owner_generation')
+
+
+@dataclass(frozen=True, slots=True)
+class _ReleasedUnclaimedLaunchProof:
+    """This owner's fenced launch and confirmed slot release, without a stream.
+
+    Retained only in the bounded local tombstone after durable release. It is
+    not a restart authority or a cross-owner released-session projection.
+    """
+    record: ProcessLaunchRecord
+
+    def matches(self, key, claim, facts):
+        record = self.record
+        if (not isinstance(record, ProcessLaunchRecord) or type(record.revision) is not int
+                or record.revision < 3 or record.spawn_claimed is not False
+                or record.producer_fenced is not True or record.stop_proof != 'NEVER_CLAIMED'):
+            return False
+        try:
+            validate_launch_identity(record.identity)
+        except ValueError:
+            return False
+        identity = record.identity
+        return (identity.key == key and claim.get('operation_id') == identity.opening_operation_id
+            and type(claim.get('opening_connection_generation')) is int
+            and claim['opening_connection_generation'] == identity.connection_generation
+            and type(claim.get('session_owner_generation')) is int
+            and claim['session_owner_generation'] == identity.owner_generation
+            and claim.get('stream_epoch') is None
+            and not any((row['server_id'], row['executor_id'], row['session_id'])
+                == (key.server_id, key.executor_id, key.session_id)
+                for name in ('streams', 'watermarks') for row in facts[name]))
 
 
 def _release_identity(scope):
@@ -179,6 +212,13 @@ class CooperativeDrain:
                     scope['opening_operation_id'] = row['operation_id']
                     proof = self._session_tombstones.released_proof(key)
                     identity = _release_identity(scope)
+                    if isinstance(proof, _ReleasedUnclaimedLaunchProof):
+                        if proof.matches(key, row, facts):
+                            # No stream ever existed for this fenced producer.
+                            # Keep generic stream release and shared-owner
+                            # composition unchanged; this is local proof only.
+                            continue
+                        proof = None
                     # A restart, missing generation, absent/ambiguous stream or
                     # evicted proof stays unknown. Never rewrite durable history.
                     if (proof is not None and identity is not None

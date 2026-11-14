@@ -37,7 +37,7 @@ from .ports import Journal, Clock, OwnedSlotLedger
 from .targeting import validate_control_target
 from .lease_runtime_r4 import R4LeaseRuntime
 from .close_runtime import CloseRuntimeMixin
-from .drain import CooperativeDrain
+from .drain import CooperativeDrain, _ReleasedUnclaimedLaunchProof
 
 
 def _finite_timing(value: object) -> bool:
@@ -204,11 +204,11 @@ class _SessionTombstones:
             raise ValueError("invalid tombstone capacity")
         self._entries: "dict[SessionKey, str]" = {}
         self._capacity = capacity
-        self._released: dict[SessionKey, _ReleasedSessionProof] = {}
+        self._released: dict[SessionKey, _ReleasedSessionProof | _ReleasedUnclaimedLaunchProof] = {}
         self.revision = 0
 
     def record(self, session: SessionKey, ownership: str,
-               proof: _ReleasedSessionProof | None = None) -> None:
+               proof: _ReleasedSessionProof | _ReleasedUnclaimedLaunchProof | None = None) -> None:
         if len(self._entries) >= self._capacity and session not in self._entries:
             oldest = next(iter(self._entries))
             self._entries.pop(oldest)
@@ -222,7 +222,7 @@ class _SessionTombstones:
     def get(self, session: SessionKey) -> "str | None":
         return self._entries.get(session)
 
-    def released_proof(self, session: SessionKey) -> _ReleasedSessionProof | None:
+    def released_proof(self, session: SessionKey) -> _ReleasedSessionProof | _ReleasedUnclaimedLaunchProof | None:
         return self._released.get(session)
 
 
@@ -236,15 +236,16 @@ class _ReleaseObligation:
     spawning or forcing an already-stopped resource again.
     """
 
-    __slots__ = ("key", "session_id", "attempt", "retry_task")
+    __slots__ = ("key", "session_id", "attempt", "retry_task", "release_proof")
 
     def __init__(self, key: "OperationKey", session_id: str,
-                 attempt: "._OpeningAttempt | None"):
+                  attempt: "._OpeningAttempt | None", release_proof=None):
         self.key = key
         self.session_id = session_id
         # C10/Z02: optional - owned sessions (independent containment)
         # have no opening attempt to signal.
         self.attempt = attempt
+        self.release_proof = release_proof
         # C9/Y02: the owned durable-release producer (coalesced; the
         # obligation survives a budget-expired wait).
         self.retry_task: "asyncio.Task | None" = None
@@ -1573,13 +1574,21 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             stop_container=recover_launch_container)
         if recovered.state != 'STOPPED':
             return
+        proof = None
         if recovered.record.stop_proof == 'NEVER_CLAIMED':
-            await self._journal.settle_unclaimed_process_launch(identity)
+            receipt = await self._journal.settle_unclaimed_process_launch(identity)
+            if (recovered.record.identity != identity or recovered.record.spawn_claimed is not False
+                    or recovered.record.producer_fenced is not True or receipt.stage != 'FAILED'
+                    or receipt.operation_id != identity.opening_operation_id
+                    or receipt.session_id != session.session_id):
+                raise CoreError('RECONCILIATION_REQUIRED', 'failed_launch_release')
+            proof = _ReleasedUnclaimedLaunchProof(recovered.record)
         # The opening's unknown receipt remains unknown for a claimed launch.
         # Stopped resources and durable release are separate observations.
         self._session_tombstones.record(session, 'unknown')
         await self._durable_release(session,
-            OperationKey(session.server_id, session.executor_id, identity.opening_operation_id), None)
+            OperationKey(session.server_id, session.executor_id, identity.opening_operation_id), None,
+            release_proof=proof)
 
     def _dispose_factory_if_resolved(self) -> None:
         if self._factory_disposed:
@@ -2326,7 +2335,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                     binding.opening_operation_id == obligation.key.operation_id):
                 binding.slot_reserved = False
             if self._session_tombstones.get(session) is not None:
-                self._session_tombstones.record(session, "released")
+                self._session_tombstones.record(session, "released", obligation.release_proof)
             self._uncertain_opens.discard(session)
             self._opening.pop(session, None)
             if obligation.attempt is not None:
@@ -2377,7 +2386,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
 
     async def _durable_release(self, session: SessionKey,
                                key: "OperationKey",
-                               attempt: "._OpeningAttempt | None") -> bool:
+                               attempt: "._OpeningAttempt | None", *, release_proof=None) -> bool:
         """The ONE durable-release route for a proven-stopped slot
         (C10/Z02.3): initial release of a stopped handle, containment
         retry and shutdown all consult the OBLIGATION first.
@@ -2393,8 +2402,10 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         obligation = self._release_obligations.get(session)
         if obligation is None:
             obligation = _ReleaseObligation(key, session.session_id,
-                                            attempt)
+                                            attempt, release_proof)
             self._release_obligations[session] = obligation
+        elif release_proof is not None and (obligation.key != key or obligation.release_proof != release_proof):
+            raise CoreError('RECONCILIATION_REQUIRED', 'failed_launch_release')
         self._schedule_release_retries()
         task = obligation.retry_task
         if task is None:
