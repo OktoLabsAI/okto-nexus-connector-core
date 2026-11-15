@@ -13,7 +13,7 @@ INPUT_METHODS = {USER_INPUT, ELICITATION}
 def claude_permission_tool_supported(name):
     """Recognize a bounded permission target, never grant its execution."""
     return isinstance(name, str) and (
-        name in {"Write", "Edit", "Bash", "AskUserQuestion"} or
+        name in {"Write", "Edit", "Bash", "PowerShell", "AskUserQuestion"} or
         (len(name) <= 256 and re.fullmatch(
             r"mcp__[A-Za-z0-9_-]+__[A-Za-z0-9_-]+", name, re.ASCII) is not None))
 

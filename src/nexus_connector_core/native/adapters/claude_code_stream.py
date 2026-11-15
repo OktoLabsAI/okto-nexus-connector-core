@@ -1031,6 +1031,9 @@ class ClaudeCodeStreamConnector:
                  and isinstance(params.get("input"), dict))
         encoded = json.dumps([request_id, params], sort_keys=True, separators=(",", ":"))
         valid = valid and len(encoded.encode()) <= 16384
+        if valid and params["tool_name"] == "PowerShell":
+            command = params["input"].get("command")
+            valid = isinstance(command, str) and bool(command.strip())
         if valid and params["tool_name"] == "AskUserQuestion":
             try:
                 validate_request(CLAUDE_INPUT, params)
