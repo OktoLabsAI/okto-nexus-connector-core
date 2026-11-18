@@ -1351,8 +1351,13 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         observed_birth = await self.observe_process_birth(key)
         birth = observed_birth.record
         if (observed_birth.state != 'MATCHING_LIVE' or birth is None or birth.key != key
-                or birth.opening_operation_id != operation.operation_id
-                or getattr(binding.native, 'owned_process_birth', None) != birth.evidence):
+                or birth.opening_operation_id != operation.operation_id):
+            raise CoreError('PROCESS_BIRTH_CONFLICT', stage)
+        birth_reader = getattr(binding.native, 'owned_process_birth', None)
+        # The copied adapter observes the retained OS handle through a method.
+        # Older host ports may already expose a recorded birth value.
+        native_birth = await asyncio.to_thread(birth_reader) if callable(birth_reader) else birth_reader
+        if native_birth != birth.evidence:
             raise CoreError('PROCESS_BIRTH_CONFLICT', stage)
 
         durable_lease = await self.persisted_lease(key)

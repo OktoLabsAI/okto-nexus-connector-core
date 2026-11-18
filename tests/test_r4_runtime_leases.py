@@ -86,6 +86,8 @@ def test_native_presenter_proof_rechecks_the_exact_opening_process_and_lease(tmp
             assert proof.key == key and proof.process == recorded and proof.target == target
             assert proof.owner_generation == proof.connection_generation == 1
             assert proof.connection_id == 'connection' and proof.boot_id == runtime.r4_boot_id
+            factory.native.owned_process_birth = lambda: birth
+            assert await prove() == proof
 
             async def read():
                 return await runtime.read_live_codex_thread(req.scope, target, 'exact-thread', **channel)
