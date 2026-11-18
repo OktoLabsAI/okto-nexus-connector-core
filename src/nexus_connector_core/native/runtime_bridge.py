@@ -165,6 +165,7 @@ class CopiedAdapterSession:
         # coalesce onto the shared unit instead of piling units on the
         # control pool while a backend hangs.
         self._observe_inflight: asyncio.Task | None = None
+        self._thread_read_inflight: asyncio.Task | None = None
         self.native_id = session.session_id
         self._closed = False
         self._preset_bridge = None
@@ -652,6 +653,33 @@ class CopiedAdapterSession:
                 if self._observe_inflight is done:
                     self._observe_inflight = None
             task.add_done_callback(_clear)
+        return await asyncio.shield(task)
+
+    async def read_owned_codex_thread(self, thread_id: str) -> dict:
+        """Coalesce presenter metadata reads independently of containment capacity."""
+        reader = getattr(self._connector, "read_owned_thread", None)
+        if self._session.harness_kind != "codex" or not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", "native_presentation_read")
+        if self._close_started or self._session.metadata.get("thread_id") != thread_id:
+            raise CoreError("SESSION_CONFLICT", "native_presentation_read")
+        task = self._thread_read_inflight
+        if task is None or task.done():
+            async def read():
+                try:
+                    return await asyncio.to_thread(reader, self._session, thread_id)
+                except NativeAdapterError:
+                    raise CoreError("NATIVE_UNAVAILABLE", "native_presentation_read") from None
+
+            task = asyncio.create_task(read())
+            self._thread_read_inflight = task
+
+            def clear(done):
+                if self._thread_read_inflight is done:
+                    self._thread_read_inflight = None
+                if not done.cancelled():
+                    done.exception()
+
+            task.add_done_callback(clear)
         return await asyncio.shield(task)
 
     async def close(self) -> str:

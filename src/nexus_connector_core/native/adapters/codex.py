@@ -85,6 +85,7 @@ __all__ = ["CodexAppServerConnector"]
 _METHOD_INITIALIZE = "initialize"
 _METHOD_THREAD_START = "thread/start"
 _METHOD_THREAD_RESUME = "thread/resume"
+_METHOD_THREAD_READ = "thread/read"
 _METHOD_THREAD_FORK = "thread/fork"
 _METHOD_THREAD_INJECT_ITEMS = "thread/inject_items"
 _METHOD_THREAD_UNSUBSCRIBE = "thread/unsubscribe"
@@ -380,8 +381,7 @@ class _CodexTransport:
             self._write_lock.release()
 
     def request(self, method: str, params: Mapping[str, Any], *, timeout_s: float) -> Any:
-        """Correlated call - used ONLY for the handshake (``initialize``,
-        ``thread/start``). Blocks on a single ``Queue.get(timeout=...)``,
+        """Correlated handshake or read. Blocks on a single ``Queue.get(timeout=...)``,
         never a poll loop. Forbidden for :meth:`send`-issued commands (D2's
         "no correlated reply" contract) - see the module's mismatch note on
         why the handshake still needs correlation.
@@ -801,6 +801,35 @@ class CodexAppServerConnector:
                       METADATA_KEY: configuration},
             compatibility_report=dict(self._compatibility_report),
         )
+
+    def read_owned_thread(self, session: HarnessSession, thread_id: str) -> dict:
+        """Observe one registered thread without reading history or changing subscriptions."""
+        with self._sessions_lock:
+            state = self._sessions_by_id.get(session.session_id)
+            transport = self._transport
+            if (state is None or state.thread_id != thread_id or state.ended or state.closing
+                    or transport is None or not transport.is_alive()):
+                raise NativeAdapterError(ErrorCode.NOT_FOUND, "The owned Codex thread is unavailable.")
+        try:
+            result = transport.request(_METHOD_THREAD_READ, {"threadId": thread_id, "includeTurns": False},
+                                       timeout_s=min(self._handshake_timeout_s, 3.0))
+        except NativeAdapterError:
+            raise NativeAdapterError(ErrorCode.CONFLICT, "The owned Codex thread read failed.") from None
+        with self._sessions_lock:
+            if (self._sessions_by_id.get(session.session_id) is not state or self._transport is not transport
+                    or state.closing or state.ended or not transport.is_alive()):
+                raise NativeAdapterError(ErrorCode.CONFLICT, "The owned Codex thread changed during the read.")
+        thread = result.get("thread") if type(result) is dict else None
+        if type(thread) is not dict or thread.get("id") != thread_id or thread.get("turns") != []:
+            raise NativeAdapterError(ErrorCode.CONFLICT, "The Codex read did not return the exact metadata.")
+        status = thread.get("status")
+        kind = status.get("type") if type(status) is dict else None
+        created, updated, ephemeral = (thread.get(name) for name in ("createdAt", "updatedAt", "ephemeral"))
+        if (kind not in ("idle", "active", "systemError") or type(ephemeral) is not bool
+                or any(type(value) is not int or not 0 <= value < 2**53 for value in (created, updated))):
+            raise NativeAdapterError(ErrorCode.CONFLICT, "The Codex thread metadata is unsupported.")
+        return {"thread_id": thread_id, "status": kind, "created_at": created,
+                "updated_at": updated, "ephemeral": ephemeral}
 
     def send(self, session: HarnessSession, command: HarnessCommand) -> None:
         with self._sessions_lock:

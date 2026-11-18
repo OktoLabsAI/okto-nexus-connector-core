@@ -3,6 +3,7 @@
 import asyncio
 import json
 import sys
+import threading
 import time
 from dataclasses import replace
 from importlib.resources import files
@@ -14,7 +15,7 @@ from nexus_connector_core import CoreError, ExecutionContext
 from nexus_connector_core.models import InstallationCandidate, LaunchIntent, PreparedLaunch
 from nexus_connector_core.native.adapter_types import HarnessCapabilities, HarnessSession, NativeAdapterError
 from nexus_connector_core.native.adapters.codex import CodexAppServerConnector
-from nexus_connector_core.native.runtime_bridge import CodexResumeGrant, CopiedAdapterFactory
+from nexus_connector_core.native.runtime_bridge import CodexResumeGrant, CopiedAdapterFactory, CopiedAdapterSession
 
 
 def _context():
@@ -60,6 +61,11 @@ for line in sys.stdin:
     elif method == "thread/resume":
         print(json.dumps({"id": message["id"], "result": {
             "thread": {"id": sys.argv[1], "status": {"type": sys.argv[2]}}}}), flush=True)
+    elif method == "thread/read":
+        print(json.dumps({"id": message["id"], "result": {
+            "thread": {"id": sys.argv[1], "status": {"type": sys.argv[2]}, "turns": [],
+                       "createdAt": 10, "updatedAt": 20, "ephemeral": False,
+                       "preview": "native text", "path": "private path"}}}), flush=True)
 """, encoding="utf-8")
     connector = CodexAppServerConnector(
         command=(sys.executable, str(peer), "thread-one", "idle"),
@@ -69,17 +75,25 @@ for line in sys.stdin:
         assert session.metadata["thread_id"] == "thread-one"
         assert session.metadata["resumed"] is True
         assert session.metadata["codex_thread_configuration"]["source"] == "thread/resume/response"
+        with pytest.raises(NativeAdapterError, match="unavailable"):
+            connector.read_owned_thread(session, "another-thread")
+        assert connector.read_owned_thread(session, "thread-one") == {
+            "thread_id": "thread-one", "status": "idle", "created_at": 10, "updated_at": 20, "ephemeral": False,
+        }
         messages = [json.loads(line) for line in
                     (tmp_path / "observed.jsonl").read_text().splitlines()]
         assert [message["method"] for message in messages] == [
-            "initialize", "initialized", "account/read", "thread/resume"]
+            "initialize", "initialized", "account/read", "thread/resume", "thread/read"]
         assert messages[2]["params"] == {"refreshToken": False}
         assert messages[3]["params"]["threadId"] == "thread-one"
         assert messages[3]["params"]["cwd"] == str(tmp_path)
+        assert messages[4]["params"] == {"threadId": "thread-one", "includeTurns": False}
         bundle = json.loads(files("nexus_connector_core.native").joinpath(
             "codex_app_server_0_157_0.schemas.json").read_text())
         Draft7Validator({"$ref": "#/definitions/ThreadResumeParams",
                          "definitions": bundle["definitions"]}).validate(messages[3]["params"])
+        Draft7Validator({"$ref": "#/definitions/ThreadReadParams",
+                         "definitions": bundle["definitions"]}).validate(messages[4]["params"])
     finally:
         connector.close()
 
@@ -126,6 +140,42 @@ def test_codex_resume_rejects_invalid_id_or_start_only_overrides_before_spawn():
     with pytest.raises(NativeAdapterError):
         incompatible.start(owning_agent_id="agent", resume_thread_id="thread-one")
     assert incompatible._transport is None
+
+
+def test_concurrent_metadata_readers_share_the_native_call_when_one_disconnects():
+    async def run():
+        loop = asyncio.get_running_loop()
+        began, release = asyncio.Event(), threading.Event()
+        calls = []
+
+        class Native:
+            def read_owned_thread(self, session, thread_id):
+                calls.append((session.session_id, thread_id))
+                loop.call_soon_threadsafe(began.set)
+                assert release.wait(2)
+                return {"thread_id": thread_id}
+
+        session = HarnessSession("adapter-session", "codex", "agent", "STARTING",
+            HarnessCapabilities(False, None, False, False, True), "2026-11-18T00:00:00Z",
+            metadata={"thread_id": "exact-thread"})
+        bridge = CopiedAdapterSession(Native(), session, session_id="session",
+            stream_epoch="epoch", context=_context())
+        first = asyncio.create_task(bridge.read_owned_codex_thread("exact-thread"))
+        try:
+            await asyncio.wait_for(began.wait(), timeout=2)
+            first.cancel()
+            with pytest.raises(asyncio.CancelledError):
+                await first
+            with pytest.raises(CoreError, match="SESSION_CONFLICT"):
+                await bridge.read_owned_codex_thread("other-thread")
+            second = asyncio.create_task(bridge.read_owned_codex_thread("exact-thread"))
+            release.set()
+            assert await second == {"thread_id": "exact-thread"}
+            assert calls == [("adapter-session", "exact-thread")]
+        finally:
+            release.set()
+
+    asyncio.run(run())
 
 
 def test_codex_resume_grant_validated_before_native_open(monkeypatch, tmp_path):

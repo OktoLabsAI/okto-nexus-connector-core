@@ -86,6 +86,36 @@ def test_native_presenter_proof_rechecks_the_exact_opening_process_and_lease(tmp
             assert proof.key == key and proof.process == recorded and proof.target == target
             assert proof.owner_generation == proof.connection_generation == 1
             assert proof.connection_id == 'connection' and proof.boot_id == runtime.r4_boot_id
+
+            async def read():
+                return await runtime.read_live_codex_thread(req.scope, target, 'exact-thread', **channel)
+
+            with pytest.raises(CoreError, match='CAPABILITY_UNSUPPORTED'):
+                await read()
+
+            async def snapshot(thread_id):
+                assert thread_id == 'exact-thread'
+                return {'thread_id': thread_id, 'status': 'idle'}
+
+            factory.native.read_owned_codex_thread = snapshot
+            assert await read() == {'thread_id': 'exact-thread', 'status': 'idle'}
+
+            async def wrong_response(_thread_id):
+                return {'thread_id': 'sibling'}
+
+            factory.native.read_owned_codex_thread = wrong_response
+            with pytest.raises(CoreError, match='SESSION_CONFLICT'):
+                await read()
+
+            async def process_changed(thread_id):
+                nonlocal observation
+                observation = 'DIFFERENT_BIRTH'
+                return {'thread_id': thread_id}
+
+            factory.native.read_owned_codex_thread = process_changed
+            with pytest.raises(CoreError, match='PROCESS_BIRTH_CONFLICT'):
+                await read()
+            observation = 'MATCHING_LIVE'
             for changes in ({'native_session_id': 'sibling'}, {'stream_epoch': 'retired-epoch'},
                             {'opening_operation_id': 'another-open'}, {'adapter_id': 'pi_rpc'}):
                 with pytest.raises(CoreError, match='SESSION_CONFLICT'):

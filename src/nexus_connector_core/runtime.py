@@ -1322,7 +1322,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 scope, connection_id=connection_id, connection_generation=connection_generation)
             key = SessionKey(context.server_id, context.executor_id, scope['session_id'])
             binding = self._sessions.get(key)
-            if binding is None or any((binding.faulted, binding.stop_observed, binding.lease_hold,
+            if binding is None or any((binding.closing, binding.draining, binding.faulted,
+                                       binding.stop_observed, binding.lease_hold,
                                        binding.lease_expired, not binding.slot_reserved)):
                 raise CoreError('SESSION_UNKNOWN', stage)
             if binding.context != context:
@@ -1360,6 +1361,27 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         return NativeSessionOwnerProof(
             key, target, context.session_owner_generation, connection_id,
             connection_generation, context.r4_authority.boot_id, birth)
+
+    async def read_live_codex_thread(
+            self, scope: Mapping, target: NativeSessionTarget, thread_id: str, *,
+            connection_id: str, connection_generation: int) -> dict:
+        """Observe metadata on this already-owned engine for a trusted host."""
+        stage = "native_presentation_read"
+        if (not isinstance(target, NativeSessionTarget) or target.adapter_id != "codex_app_server"
+                or type(thread_id) is not str or not 1 <= len(thread_id) <= 160 or not thread_id.isprintable()):
+            raise CoreError("VALIDATION_ERROR", stage)
+        channel = dict(connection_id=connection_id, connection_generation=connection_generation)
+        before = await self.prove_live_native_session(scope, target, **channel)
+        binding = self._sessions.get(before.key)
+        reader = getattr(binding.native, "read_owned_codex_thread", None) if binding is not None else None
+        if not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        result = await reader(thread_id)
+        after = await self.prove_live_native_session(scope, target, **channel)
+        if (before != after or self._sessions.get(before.key) is not binding
+                or not isinstance(result, dict) or result.get("thread_id") != thread_id):
+            raise CoreError("SESSION_CONFLICT", stage)
+        return result
 
     async def legacy_operation_receipt(
             self, server_id: str, executor_id: str,
