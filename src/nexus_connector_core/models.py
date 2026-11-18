@@ -250,6 +250,27 @@ class ProcessBirthObservation:
 
 
 @dataclass(frozen=True, slots=True)
+class NativeSessionTarget:
+    opening_operation_id: str
+    adapter_id: str
+    native_session_id: str
+    stream_epoch: str
+
+
+@dataclass(frozen=True, slots=True)
+class NativeSessionOwnerProof:
+    """Point-in-time evidence for a trusted host preparing a presenter."""
+
+    key: SessionKey
+    target: NativeSessionTarget
+    owner_generation: int
+    connection_id: str
+    connection_generation: int
+    boot_id: str
+    process: ProcessBirthRecord
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeEvent:
     server_id: str
     executor_id: str

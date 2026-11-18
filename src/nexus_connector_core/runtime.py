@@ -29,6 +29,7 @@ from .models import (
     SessionKey, ShutdownPolicy, ShutdownReport, TurnOperation,
     StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord, ProcessBirthEvidence,
     ProcessBirthObservation,
+    NativeSessionTarget, NativeSessionOwnerProof,
 )
 from .profiles import prepare_launch, verify_prepared
 from .protocol import intent_hash
@@ -1300,6 +1301,65 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         if type(session.session_id) is not str or not session.session_id:
             raise ValueError("invalid process birth session")
         return await self._journal.get_process_birth(session)
+
+    async def prove_live_native_session(
+            self, scope: Mapping, target: NativeSessionTarget, *,
+            connection_id: str, connection_generation: int) -> NativeSessionOwnerProof:
+        """Match one exact R4 lease and its Core-owned engine for a trusted host.
+
+        A successful proof is an observation. A presenter must enforce its
+        independent authorization and recheck current ownership at effects.
+        """
+        stage = 'native_session_proof'
+        if not isinstance(target, NativeSessionTarget) or any(
+                type(value) is not str or not 1 <= len(value) <= 160 or not value.isprintable()
+                for value in (target.opening_operation_id, target.adapter_id,
+                              target.native_session_id, target.stream_epoch)):
+            raise CoreError('VALIDATION_ERROR', stage)
+
+        def current():
+            context = self.r4_native_action_context(
+                scope, connection_id=connection_id, connection_generation=connection_generation)
+            key = SessionKey(context.server_id, context.executor_id, scope['session_id'])
+            binding = self._sessions.get(key)
+            if binding is None or any((binding.faulted, binding.stop_observed, binding.lease_hold,
+                                       binding.lease_expired, not binding.slot_reserved)):
+                raise CoreError('SESSION_UNKNOWN', stage)
+            if binding.context != context:
+                raise CoreError('STALE_GENERATION', stage)
+            observed = NativeSessionTarget(binding.opening_operation_id, binding.adapter_id,
+                                           binding.native.native_id, binding.epoch)
+            if observed != target:
+                raise CoreError('SESSION_CONFLICT', stage)
+            return key, context, binding
+
+        key, _, binding = current()
+        operation = OperationKey(key.server_id, key.executor_id, target.opening_operation_id)
+        receipt = await self._journal.get_receipt(operation)
+        slot = await self._owned_slots.owned_slot_state(key)
+        if (receipt is None or receipt.session_id != key.session_id or receipt.operation_id != operation.operation_id
+                or receipt.stage not in ('SUBMITTED', 'SUCCEEDED') or not receipt.possible_effect
+                or receipt.native_id != target.native_session_id
+                or slot is None or slot.key != key or slot.released or slot.opening_operation_id != operation.operation_id):
+            raise CoreError('SESSION_CONFLICT', stage)
+
+        observed_birth = await self.observe_process_birth(key)
+        birth = observed_birth.record
+        if (observed_birth.state != 'MATCHING_LIVE' or birth is None or birth.key != key
+                or birth.opening_operation_id != operation.operation_id
+                or getattr(binding.native, 'owned_process_birth', None) != birth.evidence):
+            raise CoreError('PROCESS_BIRTH_CONFLICT', stage)
+
+        durable_lease = await self.persisted_lease(key)
+        proved_key, context, still_current = current()
+        expected_lease = SessionLeaseState(
+            key, context.connection_generation, context.session_owner_generation,
+            context.authorization_revision, context.configuration_revision, False)
+        if proved_key != key or still_current is not binding or durable_lease != expected_lease:
+            raise CoreError('STALE_GENERATION', stage)
+        return NativeSessionOwnerProof(
+            key, target, context.session_owner_generation, connection_id,
+            connection_generation, context.r4_authority.boot_id, birth)
 
     async def legacy_operation_receipt(
             self, server_id: str, executor_id: str,

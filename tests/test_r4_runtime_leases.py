@@ -7,7 +7,7 @@ import pytest
 
 from nexus_connector_core import (
     CloseOperation, ControlOperation, CoreError, LaunchIntent, NativeApprovalOperation,
-    OpenOperation, OperationKey, R4LeaseAttempt,
+    NativeSessionTarget, OpenOperation, OperationKey, ProcessBirthEvidence, R4LeaseAttempt,
     R4_PREVIEW_REVISION, SessionKey, ShutdownPolicy, TurnOperation,
     r4_submit_intent_hash, project_r4_turn_receipt,
     r4_native_decision_operation,
@@ -51,6 +51,84 @@ def operation(request, operation_id="turn", **changes):
 async def open_session(runtime, context):
     prepared = await runtime.prepare(LaunchIntent("agent", "ws", "codex_app_server"), context)
     return await runtime.open(OpenOperation("open", "session", "epoch", prepared), context)
+
+
+def test_native_presenter_proof_rechecks_the_exact_opening_process_and_lease(tmp_path, monkeypatch):
+    from nexus_connector_core.native import process
+
+    async def run():
+        clock = FakeClock()
+        runtime, journal, factory = make_runtime(tmp_path, clock=clock)
+        req = await attempt(runtime, clock)
+        key = SessionKey('srv', 'exe', 'session')
+        target = NativeSessionTarget('open', 'codex_app_server', 'native-1', 'epoch')
+        birth = ProcessBirthEvidence('win32', 1234, 'filetime:12345678', 'windows_job')
+        channel = {'connection_id': 'connection', 'connection_generation': 1}
+
+        async def prove(bound_scope=req.scope, selected=target, **source):
+            return await runtime.prove_live_native_session(bound_scope, selected, **(channel | source))
+
+        try:
+            installed = await runtime.install_r4_lease(req, grant(req))
+            await open_session(runtime, installed.context)
+            with pytest.raises(CoreError, match='PROCESS_BIRTH_CONFLICT'):
+                await prove()
+            recorded = await journal.record_process_birth(OperationKey('srv', 'exe', 'open'), key.session_id, birth)
+            factory.native.owned_process_birth = birth
+            observation = 'MATCHING_LIVE'
+
+            def observe(evidence):
+                assert evidence == birth
+                return observation
+
+            monkeypatch.setattr(process, 'observe_recorded_process_birth', observe)
+            proof = await prove()
+            assert proof.key == key and proof.process == recorded and proof.target == target
+            assert proof.owner_generation == proof.connection_generation == 1
+            assert proof.connection_id == 'connection' and proof.boot_id == runtime.r4_boot_id
+            for changes in ({'native_session_id': 'sibling'}, {'stream_epoch': 'retired-epoch'},
+                            {'opening_operation_id': 'another-open'}, {'adapter_id': 'pi_rpc'}):
+                with pytest.raises(CoreError, match='SESSION_CONFLICT'):
+                    await prove(selected=replace(target, **changes))
+            with pytest.raises(CoreError, match='STALE_GENERATION'):
+                await prove(bound_scope=dict(req.scope) | {'session_owner_generation': 2})
+            with pytest.raises(CoreError, match='STALE_GENERATION'):
+                await prove(connection_id='old-connection')
+
+            observation = 'DIFFERENT_BIRTH'
+            with pytest.raises(CoreError, match='PROCESS_BIRTH_CONFLICT'):
+                await prove()
+            observation = 'MATCHING_LIVE'
+            factory.native.owned_process_birth = replace(birth, birth_token='different-owner')
+            with pytest.raises(CoreError, match='PROCESS_BIRTH_CONFLICT'):
+                await prove()
+            factory.native.owned_process_birth = birth
+
+            saved_lease = await journal.get_session_lease(key)
+
+            async def advanced_lease(session):
+                assert session == key
+                return replace(saved_lease, owner_generation=2)
+
+            with monkeypatch.context() as temporary:
+                temporary.setattr(journal, 'get_session_lease', advanced_lease)
+                with pytest.raises(CoreError, match='STALE_GENERATION'):
+                    await prove()
+
+            def expiring_observation(evidence):
+                assert evidence == birth
+                clock.advance(61)
+                return 'MATCHING_LIVE'
+
+            monkeypatch.setattr(process, 'observe_recorded_process_birth', expiring_observation)
+            with pytest.raises(CoreError, match='LEASE_EXPIRED'):
+                await prove()
+            assert factory.open_count == 1 and not factory.native.sent
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+
+    asyncio.run(run())
 
 
 def test_initial_application_binds_full_scope_before_effect_and_preserves_replay(tmp_path):

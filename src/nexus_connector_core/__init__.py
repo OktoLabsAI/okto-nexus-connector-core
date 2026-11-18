@@ -22,6 +22,8 @@ from .models import (
     OwnedSlotPage,
     ProcessBirthEvidence,
     ProcessBirthRecord,
+    NativeSessionTarget,
+    NativeSessionOwnerProof,
     ProcessBirthObservation,
     RuntimeEvent,
     EventCursor,
@@ -141,9 +143,10 @@ from .native.native_inputs import response_for as native_input_response
 from .targeting import get_control_targeting, validate_control_target
 from .close_operation import r4_close_operation
 
-__version__ = "0.0.15"
+__version__ = "0.0.16"
 
 __all__ = [
+    "NativeSessionTarget", "NativeSessionOwnerProof",
     "combine_drain_status",
     'JournalLocation', 'JournalRegistration', 'JournalLocationPage', 'JournalLocationRegistry',
     "IndependentInventoryObserver", "HarnessObservationResult", "HarnessObservation",
