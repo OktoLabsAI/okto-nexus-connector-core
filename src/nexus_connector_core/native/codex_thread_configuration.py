@@ -8,8 +8,9 @@ Paths are native references, validated lexically without filesystem access.
 """
 from __future__ import annotations
 
-from pathlib import PurePosixPath, PureWindowsPath
 from collections.abc import Callable
+from copy import deepcopy
+from pathlib import PurePosixPath, PureWindowsPath
 
 from ..protocol import canonical_json
 
@@ -24,6 +25,15 @@ MAX_FIELD_BYTES = 16_384
 MAX_OBSERVATION_BYTES = 48_000
 MAX_PATH_BYTES = 4096
 MAX_REFERENCES = 32
+_VIEWER_FIELDS = {
+    "cwd": "cwd",
+    "model": "model",
+    "model_provider": "modelProvider",
+    "approval_policy": "approvalPolicy",
+    "approvals_reviewer": "approvalsReviewer",
+    "sandbox": "sandbox",
+    "reasoning_effort": "reasoningEffort",
+}
 
 
 class _InvalidField(ValueError):
@@ -192,3 +202,28 @@ def observe_thread_response(response: dict, *, method: str, thread_id: str) -> d
         "thread_id": thread_id,
         "fields": fields,
     })
+
+
+def retain_viewer_opening(observation: dict) -> dict | None:
+    """Retain a private copy of reported startup facts needed by the viewer."""
+    fields = observation["fields"]
+    if any(fields[field]["status"] != "reported" for field in _VIEWER_FIELDS.values()):
+        return None
+    opening = {name: fields[field]["value"] for name, field in _VIEWER_FIELDS.items()}
+    if opening["reasoning_effort"] not in ("none", "minimal", "low", "medium", "high", "xhigh"):
+        return None
+    return deepcopy(opening)
+
+
+def observe_viewer_context(thread: dict, read: dict, opening: dict | None) -> dict | None:
+    """Return complete startup context only if the current read agrees with the opening."""
+    if (opening is None or thread.get("cwd") != opening["cwd"]
+            or thread.get("modelProvider") != opening["model_provider"]):
+        return None
+    try:
+        session_id = _text(thread.get("sessionId"), 256)
+        cli_version = _text(thread.get("cliVersion"), 256)
+        source = _enum(thread.get("source"), ("cli", "vscode", "exec", "appServer", "unknown"))
+    except _InvalidField:
+        return None
+    return {**read, **deepcopy(opening), "session_id": session_id, "cli_version": cli_version, "source": source}

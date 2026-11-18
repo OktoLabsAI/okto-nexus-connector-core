@@ -107,6 +107,13 @@ exact registered Codex thread. It returns bounded metadata and leaves the
 engine subscription, work and lease intact. The Core adapter session ID and
 the Codex thread ID are distinct.
 
+When the engine reports all supported startup fields, the result also contains
+`viewer_context`. The adapter obtains the current rollout identity and version
+from the exact thread and requires its working directory and provider to match
+the private opening record. Older or incomplete replies retain the basic
+metadata. The context excludes transcript, instructions and account data. Hosts
+still qualify the viewer build and enforce presentation authorization.
+
 `context_observation_supported(SessionKey)` reports optional, observed support
 on a live owned session. `observe_context(SessionKey, envelope, guard=...)` is a
 trusted-host context-storage port, not an execution command or a remote R4 action.

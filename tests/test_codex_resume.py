@@ -41,11 +41,28 @@ def _grant(prepared, session_id, context):
         prepared.root_fingerprint, prepared.profile_fingerprint, True, True, True)
 
 
-def test_codex_resume_wire_and_identity(tmp_path):
+@pytest.mark.parametrize("shape", ["legacy", "complete", "moved", "missing-effort"])
+def test_codex_resume_wire_and_identity(tmp_path, shape):
     peer = tmp_path / "resume_peer.py"
     peer.write_text("""
 import json
+import os
 import sys
+
+shape = sys.argv[3]
+cwd = os.getcwd()
+opening = {
+    "cwd": cwd, "model": "synthetic", "modelProvider": "fixture",
+    "approvalPolicy": "never", "approvalsReviewer": "user",
+    "sandbox": {"type": "readOnly", "networkAccess": False},
+    "reasoningEffort": None if shape == "missing-effort" else "medium",
+    "instructionSources": ["private instruction reference"],
+} if shape != "legacy" else {}
+viewer = {
+    "cwd": cwd if shape != "moved" else os.path.dirname(cwd),
+    "modelProvider": "fixture", "sessionId": "native-rollout",
+    "cliVersion": "0.170.0", "source": "cli",
+} if shape != "legacy" else {}
 
 for line in sys.stdin:
     message = json.loads(line)
@@ -59,16 +76,16 @@ for line in sys.stdin:
         print(json.dumps({"id": message["id"], "result": {
             "requiresOpenaiAuth": True, "account": {"type": "apiKey"}}}), flush=True)
     elif method == "thread/resume":
-        print(json.dumps({"id": message["id"], "result": {
+        print(json.dumps({"id": message["id"], "result": {**opening,
             "thread": {"id": sys.argv[1], "status": {"type": sys.argv[2]}}}}), flush=True)
     elif method == "thread/read":
         print(json.dumps({"id": message["id"], "result": {
-            "thread": {"id": sys.argv[1], "status": {"type": sys.argv[2]}, "turns": [],
+            "thread": {**viewer, "id": sys.argv[1], "status": {"type": sys.argv[2]}, "turns": [],
                        "createdAt": 10, "updatedAt": 20, "ephemeral": False,
                        "preview": "native text", "path": "private path"}}}), flush=True)
 """, encoding="utf-8")
     connector = CodexAppServerConnector(
-        command=(sys.executable, str(peer), "thread-one", "idle"),
+        command=(sys.executable, str(peer), "thread-one", "idle", shape),
         cwd=str(tmp_path), handshake_timeout_s=3)
     try:
         session = connector.start(owning_agent_id="agent", resume_thread_id="thread-one")
@@ -77,9 +94,20 @@ for line in sys.stdin:
         assert session.metadata["codex_thread_configuration"]["source"] == "thread/resume/response"
         with pytest.raises(NativeAdapterError, match="unavailable"):
             connector.read_owned_thread(session, "another-thread")
-        assert connector.read_owned_thread(session, "thread-one") == {
+        base = {
             "thread_id": "thread-one", "status": "idle", "created_at": 10, "updated_at": 20, "ephemeral": False,
         }
+        if shape != "legacy":
+            session.metadata["codex_thread_configuration"]["fields"]["model"]["value"] = "changed by caller"
+        first_read = connector.read_owned_thread(session, "thread-one")
+        if shape == "complete":
+            assert first_read == {**base, "viewer_context": {**base, "session_id": "native-rollout",
+                "cwd": str(tmp_path), "model": "synthetic", "model_provider": "fixture",
+                "approval_policy": "never", "approvals_reviewer": "user", "cli_version": "0.170.0",
+                "source": "cli", "sandbox": {"type": "readOnly", "networkAccess": False},
+                "reasoning_effort": "medium"}}
+        else:
+            assert first_read == base
         messages = [json.loads(line) for line in
                     (tmp_path / "observed.jsonl").read_text().splitlines()]
         assert [message["method"] for message in messages] == [

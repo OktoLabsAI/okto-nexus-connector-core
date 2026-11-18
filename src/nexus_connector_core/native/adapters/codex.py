@@ -50,7 +50,12 @@ from ..framing import FrameLimitExceeded, protocol_lines, stderr_chunks
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe
 from ..delta_batches import coalesce_codex_delta
-from ..codex_thread_configuration import METADATA_KEY, observe_thread_response
+from ..codex_thread_configuration import (
+    METADATA_KEY,
+    observe_thread_response,
+    observe_viewer_context,
+    retain_viewer_opening,
+)
 
 from ..legacy_environment import child_environment
 
@@ -223,6 +228,7 @@ class _ThreadState:
     closing: bool = False
     close_unconfirmed: bool = False
     pending_start_id: int | None = None
+    viewer_opening: dict | None = None
 
 
 class _StderrTail:
@@ -771,7 +777,8 @@ class CodexAppServerConnector:
         configuration = observe_thread_response(result, method=method, thread_id=thread_id)
 
         session_id = new_harness_session_id()
-        state = _ThreadState(session_id=session_id, thread_id=thread_id, owning_agent_id=owning_agent_id)
+        state = _ThreadState(session_id=session_id, thread_id=thread_id, owning_agent_id=owning_agent_id,
+                             viewer_opening=retain_viewer_opening(configuration))
         with self._sessions_lock:
             if self._early_event_failed:
                 raise EarlyEventLimitExceeded("early_event_limit_exceeded")
@@ -828,8 +835,10 @@ class CodexAppServerConnector:
         if (kind not in ("idle", "active", "systemError") or type(ephemeral) is not bool
                 or any(type(value) is not int or not 0 <= value < 2**53 for value in (created, updated))):
             raise NativeAdapterError(ErrorCode.CONFLICT, "The Codex thread metadata is unsupported.")
-        return {"thread_id": thread_id, "status": kind, "created_at": created,
+        read = {"thread_id": thread_id, "status": kind, "created_at": created,
                 "updated_at": updated, "ephemeral": ephemeral}
+        viewer_context = observe_viewer_context(thread, read, state.viewer_opening)
+        return read if viewer_context is None else {**read, "viewer_context": viewer_context}
 
     def send(self, session: HarnessSession, command: HarnessCommand) -> None:
         with self._sessions_lock:
