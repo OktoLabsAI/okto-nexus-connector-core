@@ -1,6 +1,10 @@
 # Version and platform compatibility
 
-Current package version: `0.0.14`. Linux guardians persist a private completion
+Current package version `0.0.16` adds trusted-host owner and Codex thread metadata
+observations. Native terminal presentation requires separate transport and
+adapter qualification. Core and R4 protocol revisions remain unchanged.
+
+Linux guardians persist a private completion
 receipt after reaping their entire owned tree. A replacement owner can confirm
 containment after abrupt owner death without signalling historical process IDs.
 Missing, incomplete or untrusted receipts remain unknown, including externally

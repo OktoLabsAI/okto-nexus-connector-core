@@ -1,4 +1,4 @@
-# Core API (`0.0.14`)
+# Core API (`0.0.16`)
 
 ## External participant configuration
 
@@ -91,10 +91,21 @@ first fences new productive admission without interrupting admitted work; the
 second returns the current activity revision without I/O. `await drain_status()`
 returns bounded `state`, `quiescent`, `resources`, `activity_revision` and
 `owned_sessions` metadata. Missing or incomplete evidence remains `UNKNOWN`.
-The exported `combine_drain_status(reports)` helper is only for owners sharing
+The exported `combine_drain_status` helper is only for owners sharing
 one journal; the host rechecks every revision after awaits. Independent journals
-must not be combined. See [cooperative service drain](lifecycle.md#cooperative-service-drain)
+must not be combined. See [cooperative service drain](lifecycle.md)
 for ownership retention and the separate explicit containment decision.
+
+`NativeSessionTarget` describes the exact opening operation, adapter, native
+adapter session and stream epoch. `prove_live_native_session` returns
+`NativeSessionOwnerProof` after checking the current lease, retained opening
+receipt, owned slot and operating-system process birth. This observation is
+for trusted hosts. They authorize the human presentation separately.
+
+`read_live_codex_thread` checks the same owner before and after reading the
+exact registered Codex thread. It returns bounded metadata and leaves the
+engine subscription, work and lease intact. The Core adapter session ID and
+the Codex thread ID are distinct.
 
 `context_observation_supported(SessionKey)` reports optional, observed support
 on a live owned session. `observe_context(SessionKey, envelope, guard=...)` is a
