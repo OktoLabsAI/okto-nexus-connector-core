@@ -57,7 +57,8 @@ adapter modules and `CopiedAdapterFactory` are not a public host API.
 | `DiscoveryRequest`, `Inventory`, `InstallationCandidate` | Discover or pass explicitly selected local native candidates; discovery is not qualification. |
 | `LaunchIntent`, `PreparedLaunch`, `OpenOperation` | Prepare a selected managed launch and open a session. `open` revalidates binary/profile/root before native effect. |
 | `TurnOperation`, `ControlOperation`, `CloseOperation` | Submit text, interrupt/steer a targeted turn, or close an owned session. Steer targeting is adapter-specific (see below). Use a new operation ID for each new intent. |
-| `CodexResumeGrant` | Public trusted-host resume contract for binding one stored Codex thread to one open (C2/R09). Construct from this package; the bridge validates the exact type and every binding field. |
+| `CodexResumeGrant` | Trusted-host proof for opening one exact saved Codex thread. An `OpenOperation` with `resume_thread_id` requires a matching grant before environment resolution and binds the target to the operation and R4 receipt. |
+| `CodexRolloutEvidence` | Private host record for the exact rollout under the engine's state home. It includes the file identity, size and SHA-256 digest. |
 | `NativeApprovalOperation` | Host-authorized response to one pending Codex/Claude native approval or input request. The host passes the redacted event's `native_approval` projection; the adapter checks it against its original in-memory request. |
 | `Operation`, `OperationKey`, `OperationReceipt`, `intent_hash`, `submit_frame_intent_hash` | Semantic intent identity and namespace-scoped durable receipt. Reuse an operation ID only for the identical intent. |
 | `SessionKey`, `RuntimeSnapshot`, `ReconcileRequest`, `ReconcileReport` | Namespace-scoped inspection and recovery queries. A missing process-local handle yields unknown ownership, not proof of stop. |
@@ -106,6 +107,14 @@ for trusted hosts. They authorize the human presentation separately.
 exact registered Codex thread. It returns bounded metadata and leaves the
 engine subscription, work and lease intact. The Core adapter session ID and
 the Codex thread ID are distinct.
+
+`read_live_codex_rollout` uses the same ownership checks and returns
+`NativeSessionOwnerProof` with `CodexRolloutEvidence` when the owned Codex
+thread is idle and its exact workspace-bound rollout is available. A busy
+thread, a pending native request or unavailable file returns no evidence.
+Keep the state home, relative path and native thread ID on the executing host.
+Before issuing a resume grant, the host separately verifies retirement,
+rechecks the file and obtains authority for the successor.
 
 When the engine reports all supported startup fields, the result also contains
 `viewer_context`. The adapter obtains the current rollout identity and version
