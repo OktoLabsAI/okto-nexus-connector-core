@@ -11,7 +11,7 @@ imports neither application.
 - Distribution `okto-nexus-connector-core`, import `nexus_connector_core`,
   Python ≥ 3.11, src-layout, `py.typed`, pure-Python runtime dependencies
   (`rfc8785`, `jsonschema`).
-- Current version: `0.0.14`.
+- Current version: `0.0.15`.
 - First release version: `0.0.1`. Importing the
   package opens no socket, spawns no thread/process, starts no event loop
   and reads no credentials.
