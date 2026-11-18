@@ -1,6 +1,7 @@
 """Restart projection uses a pre-effect hash association, never raw input."""
 from copy import deepcopy
 from dataclasses import replace
+import hashlib
 import json
 
 import pytest
@@ -19,8 +20,11 @@ from test_r4_decision_bridge import decision_frame
 
 
 @pytest.mark.parametrize('action', ['runtime.open', 'turn.submit', 'turn.steer', 'turn.interrupt',
-                                   'runtime.close', 'approval.decide', 'input.provide'])
+                                   'runtime.close', 'approval.decide', 'input.provide', 'codex-resume'])
 def test_binding_recovery_matches_live_projection_for_all_actions(action):
+    resume_thread_id = 'PRIVATE_canonical_codex_thread' if action == 'codex-resume' else None
+    if resume_thread_id is not None:
+        action = 'runtime.open'
     frame = decision_frame(action) if action in ('approval.decide', 'input.provide') else _frame()
     frame['action'] = action
     context = ExecutionContext(*(frame[k] for k in ('server_id', 'executor_id', 'binding_id', 'agent_id', 'workspace_id')),
@@ -37,6 +41,10 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
         options = dict(prepared=prepared, stream_epoch='stream')
         semantic = Operation(frame['operation_id'], frame['session_id'], action,
             dict(adapter_id=candidate.adapter_id, root_fingerprint='root-fp', profile_fingerprint='profile-fp', stream_epoch='stream'))
+        if resume_thread_id is not None:
+            options['resume_thread_id'] = resume_thread_id
+            semantic = replace(semantic, payload=dict(semantic.payload,
+                resume_thread_sha256=hashlib.sha256(resume_thread_id.encode('ascii')).hexdigest()))
     elif action in ('approval.decide', 'input.provide'):
         operation = r4_native_decision_operation(frame)
         options = dict(applied_operation=operation)
@@ -60,7 +68,17 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
     key = OperationKey(context.server_id, context.executor_id, frame['operation_id'])
     recovered = project_r4_bound_receipt(json.loads(saved), receipt, key=key, receipt_revision=1)
     if action == 'runtime.open':
-        live = project_r4_open_receipt(frame, receipt, context, prepared, stream_epoch='stream', receipt_revision=1)
+        live = project_r4_open_receipt(frame, receipt, context, prepared, stream_epoch='stream',
+            receipt_revision=1, resume_thread_id=resume_thread_id)
+        if resume_thread_id is not None:
+            for wrong_thread in (None, 'PRIVATE_other_thread'):
+                wrong_binding = prepare_r4_receipt_binding(frame, context, prepared=prepared,
+                    stream_epoch='stream', resume_thread_id=wrong_thread)
+                with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
+                    project_r4_bound_receipt(wrong_binding, receipt, key=key, receipt_revision=1)
+                with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
+                    project_r4_open_receipt(frame, receipt, context, prepared, stream_epoch='stream',
+                        receipt_revision=1, resume_thread_id=wrong_thread)
     elif action in ('approval.decide', 'input.provide'):
         live = project_r4_decision_receipt(frame, receipt, context, operation, receipt_revision=1)
     else:

@@ -13,16 +13,18 @@ from typing import Any, Mapping
 from .frame_codec_r4 import decode_r4_frame, encode_r4_frame
 from .installation import effective_installation_ref
 from .models import (
-    CoreError, ExecutionContext, NativeApprovalOperation, Operation, OperationReceipt, PreparedLaunch,
+    CoreError, ExecutionContext, NativeApprovalOperation, OpenOperation, Operation,
+    OperationReceipt, PreparedLaunch,
 )
 from .decision_bridge_r4 import native_decision_semantic, r4_native_decision_operation
+from .open_operation import open_operation_semantic
 from .protocol import canonical_json, intent_hash
 
 
 def project_r4_open_receipt(
     submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
     context: ExecutionContext, prepared: PreparedLaunch, *,
-    stream_epoch: str, receipt_revision: int,
+    stream_epoch: str, receipt_revision: int, resume_thread_id: str | None = None,
 ) -> dict[str, Any]:
     """Verify the selected local launch and Core open journal receipt."""
     frame = _checked_submit(
@@ -40,13 +42,12 @@ def project_r4_open_receipt(
         raise CoreError("PROFILE_DRIFT", "r4_receipt_projection",
                         possible_effect=True,
                         operation_id=core_receipt.operation_id)
-    semantic = Operation(
-        frame["operation_id"], frame["session_id"], "runtime.open",
-        {"adapter_id": prepared.intent.adapter_id,
-         "profile_fingerprint": prepared.profile_fingerprint,
-         "root_fingerprint": prepared.root_fingerprint,
-         "stream_epoch": stream_epoch},
-    )
+    try:
+        semantic = open_operation_semantic(OpenOperation(frame["operation_id"],
+            frame["session_id"], stream_epoch, prepared, resume_thread_id=resume_thread_id))
+    except CoreError as error:
+        raise CoreError(error.code, "r4_receipt_projection", possible_effect=True,
+                        operation_id=core_receipt.operation_id) from error
     if core_receipt.intent_hash != intent_hash(semantic, context):
         raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
                         possible_effect=True,

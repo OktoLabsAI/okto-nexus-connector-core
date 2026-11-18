@@ -17,7 +17,6 @@ from typing import Protocol
 
 from .discovery import discover_installations
 from .clock import RollbackFencedClock, SystemClock
-from .identifiers import is_codex_thread_id
 from .journal import (SQLiteJournal, validate_claim_namespace,
                       validate_claim_page, validate_compaction_rows)
 from .kernel import OperationKernel
@@ -33,6 +32,7 @@ from .models import (
     NativeSessionTarget, NativeSessionOwnerProof,
 )
 from .profiles import prepare_launch, verify_prepared
+from .open_operation import open_operation_semantic
 from .protocol import intent_hash
 from .protocol import canonical_json
 from .ports import Journal, Clock, OwnedSlotLedger
@@ -504,21 +504,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         if (prepared.intent.agent_id != context.agent_id or
                 prepared.intent.workspace_id != context.workspace_id):
             raise CoreError("BINDING_NOT_AUTHORIZED", "open")
-        parameters = {
-            "adapter_id": prepared.intent.adapter_id,
-            "profile_fingerprint": prepared.profile_fingerprint,
-            "root_fingerprint": prepared.root_fingerprint,
-            "stream_epoch": operation.stream_epoch,
-        }
         resume_thread_id = operation.resume_thread_id
-        if resume_thread_id is not None:
-            if not is_codex_thread_id(resume_thread_id):
-                raise CoreError("VALIDATION_ERROR", "codex_resume", retry_safe=True)
-            # Include the resume identity in deduplication without recording
-            # the native thread identifier in the canonical operation payload.
-            parameters["resume_thread_sha256"] = hashlib.sha256(
-                resume_thread_id.encode("ascii")).hexdigest()
-        semantic = Operation(operation.operation_id, operation.session_id, "runtime.open", parameters)
+        semantic = open_operation_semantic(operation)
         session_key = SessionKey(context.server_id, context.executor_id,
                                  operation.session_id)
         # C2/R01+C2/R04: the dedup read is authorized I/O and never runs
@@ -527,10 +514,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         old = await self._existing(semantic, context)
         if old is not None:
             return old
-        if resume_thread_id is not None and (
-                prepared.intent.adapter_id != "codex_app_server" or
-                prepared.intent.mode != "managed" or
-                not self._factory_accepts_codex_resume):
+        if resume_thread_id is not None and not self._factory_accepts_codex_resume:
             raise CoreError("CAPABILITY_UNSUPPORTED", "codex_resume", retry_safe=True)
         self._check_drain_admission('runtime.open')
         async with self._lock:

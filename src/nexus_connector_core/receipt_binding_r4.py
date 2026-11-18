@@ -7,12 +7,13 @@ Its digest detects corruption; it is not a signature from an untrusted peer.
 import hashlib
 import re
 
-from .models import CoreError, NativeApprovalOperation, Operation, OperationKey, OperationReceipt, PreparedLaunch
+from .models import CoreError, NativeApprovalOperation, OpenOperation, Operation, OperationKey, OperationReceipt, PreparedLaunch
 from .harness_configuration import harness_settings_dict
 from .protocol import canonical_json, intent_hash, strict_json
 from .frame_codec_r4 import decode_r4_frame, encode_r4_frame
 from .installation import effective_installation_ref
 from .close_operation import close_operation_semantic, r4_close_operation
+from .open_operation import open_operation_semantic
 from .decision_bridge_r4 import native_decision_semantic, r4_native_decision_operation
 from .receipt_bridge_r4 import _checked_source
 
@@ -25,11 +26,13 @@ _ACTIONS = {'runtime.open', 'turn.submit', 'turn.steer', 'turn.interrupt',
 
 
 def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
-                               stream_epoch=None, applied_operation=None):
-    """Validate and hash the exact local semantic before its native effect."""
+                               stream_epoch=None, applied_operation=None, resume_thread_id=None):
+    """Validate and hash the exact local semantic, including a host's resume target."""
     try:
         frame = _checked_source(submit_frame, context, action=submit_frame.get('action'))
         action, payload = frame['action'], frame['payload']
+        if resume_thread_id is not None and action != 'runtime.open':
+            raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
         if action == 'runtime.open':
             if (not isinstance(prepared, PreparedLaunch) or not isinstance(stream_epoch, str) or
                     not stream_epoch or prepared.intent.agent_id != context.agent_id or
@@ -40,9 +43,8 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
                     list(prepared.intent.mcp_preset) != payload.get('mcp_preset', []) or
                     effective_installation_ref(prepared.candidate) != payload['candidate_ref']):
                 raise CoreError('PROFILE_DRIFT', 'r4_receipt_binding')
-            semantic = Operation(frame['operation_id'], frame['session_id'], action,
-                {'adapter_id': prepared.intent.adapter_id, 'profile_fingerprint': prepared.profile_fingerprint,
-                 'root_fingerprint': prepared.root_fingerprint, 'stream_epoch': stream_epoch})
+            semantic = open_operation_semantic(OpenOperation(frame['operation_id'],
+                frame['session_id'], stream_epoch, prepared, resume_thread_id=resume_thread_id))
         elif action == 'runtime.close':
             semantic = close_operation_semantic(r4_close_operation(frame))
         elif action in ('approval.decide', 'input.provide'):
