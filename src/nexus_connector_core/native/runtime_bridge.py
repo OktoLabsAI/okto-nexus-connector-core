@@ -761,7 +761,8 @@ class CopiedAdapterSession:
                 await self._preset_bridge.close()
             if self._preset_config is not None:
                 self._preset_config.close()
-        return state, "UNKNOWN"
+        turn = lifecycle.get("turn_state")
+        return state, turn if state == "RUNNING" and turn in ("IDLE", "BUSY") else "UNKNOWN"
 
 
 class CopiedAdapterFactory:

@@ -896,11 +896,17 @@ class CodexAppServerConnector:
         return self.events(session_id=session_id)
 
     def observe_lifecycle(self, session):
-        result = observe_owned_process(self._transport._proc if self._transport else None)
+        transport = self._transport
+        process = transport._proc if transport else None
+        result = observe_owned_process(process) if process is not None else {"stop_observed": False, "exit_code": None}
         with self._sessions_lock:
             state = self._sessions_by_id.get(session.session_id)
             result["active_turn"] = bool(state and (
                 state.active_turn_id or state.pending_start_id is not None or state.close_unconfirmed))
+            if (state is not None and state.thread_id == session.metadata.get("thread_id")
+                    and not state.ended and not state.closing and transport is self._transport
+                    and process is not None and transport.is_alive()):
+                result["turn_state"] = "BUSY" if result["active_turn"] else "IDLE"
         return result
 
     def events(self, *, session_id=None) -> Iterator[HarnessEvent]:

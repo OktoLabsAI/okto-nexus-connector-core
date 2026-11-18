@@ -5,8 +5,10 @@ import os
 import queue
 import sys
 import time
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -204,6 +206,38 @@ class FakeCopiedConnector:
 
     def observe_lifecycle(self, session):
         return {"stop_observed": self.closed}
+
+
+def test_copied_codex_observes_idle_only_for_its_live_thread():
+    async def run():
+        connector = CodexAppServerConnector()
+        exit_status = None
+        process = SimpleNamespace(poll=lambda: exit_status)
+        connector._transport = SimpleNamespace(_proc=process, is_alive=lambda: exit_status is None)
+        state = _ThreadState("native", "reviewed-thread", "agent")
+        native = SimpleNamespace(session_id="native", metadata={"thread_id": "reviewed-thread"})
+        with ThreadPoolExecutor(max_workers=1) as pool:
+            bridge = CopiedAdapterSession(connector, native, session_id="session", stream_epoch="epoch",
+                                          context=context(), control_executor=pool, force_executor=pool)
+            assert await bridge.observe() == ("RUNNING", "UNKNOWN")
+            connector._sessions_by_id[native.session_id] = state
+            assert await bridge.observe() == ("RUNNING", "IDLE")
+            state.pending_start_id = 5
+            assert await bridge.observe() == ("RUNNING", "BUSY")
+            state.pending_start_id, state.active_turn_id = None, "active"
+            assert await bridge.observe() == ("RUNNING", "BUSY")
+            state.active_turn_id = None
+            assert await bridge.observe() == ("RUNNING", "IDLE")
+            state.closing = True
+            assert await bridge.observe() == ("RUNNING", "UNKNOWN")
+            state.closing = False
+            native.metadata["thread_id"] = "another-thread"
+            assert await bridge.observe() == ("RUNNING", "UNKNOWN")
+            native.metadata["thread_id"] = state.thread_id
+            exit_status = 0
+            assert await bridge.observe() == ("STOPPED", "UNKNOWN")
+
+    asyncio.run(run())
 
 
 def test_codex_approval_reply_uses_original_pending_method():
