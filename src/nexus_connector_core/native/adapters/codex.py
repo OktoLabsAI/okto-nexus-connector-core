@@ -48,6 +48,7 @@ from ..process import (spawn_owned_process, observe_owned_process,
                        record_owned_process_birth)
 from ..framing import FrameLimitExceeded, protocol_lines, stderr_chunks
 from ...protocol import strict_json
+from ...identifiers import is_codex_thread_id
 from ..event_buffers import NativeEventHistory, subscribe
 from ..delta_batches import coalesce_codex_delta
 from ..codex_thread_configuration import (
@@ -705,9 +706,7 @@ class CodexAppServerConnector:
     # ------------------------------------------------------------------ #
     def start(self, *, owning_agent_id: str,
               resume_thread_id: str | None = None) -> HarnessSession:
-        if resume_thread_id is not None and (
-                not isinstance(resume_thread_id, str) or
-                not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}", resume_thread_id)):
+        if resume_thread_id is not None and not is_codex_thread_id(resume_thread_id):
             raise NativeAdapterError(ErrorCode.VALIDATION_ERROR,
                 "invalid Codex resume thread identity.", {"reason": "invalid_resume_thread_id"})
         if resume_thread_id is not None:

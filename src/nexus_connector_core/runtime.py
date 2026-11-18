@@ -17,6 +17,7 @@ from typing import Protocol
 
 from .discovery import discover_installations
 from .clock import RollbackFencedClock, SystemClock
+from .identifiers import is_codex_thread_id
 from .journal import (SQLiteJournal, validate_claim_namespace,
                       validate_claim_page, validate_compaction_rows)
 from .kernel import OperationKernel
@@ -113,6 +114,7 @@ class NativeFactory(Protocol):
     Managed factories may declare ``opening_guard`` and the async
     ``process_birth_recorder`` callback. The latter must finish after spawn
     and before handshake, with the factory retaining containment on failure.
+    An explicit ``resume_thread_id`` parameter advertises exact saved resume.
     """
 
     async def open(self, prepared: PreparedLaunch, session_id: str,
@@ -424,11 +426,13 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             self._factory_accepts_opening_guard = "opening_guard" in factory_parameters
             self._factory_accepts_birth_recorder = "process_birth_recorder" in factory_parameters
             self._factory_accepts_process_launch = "process_launch" in factory_parameters
+            self._factory_accepts_codex_resume = "resume_thread_id" in factory_parameters
         except (TypeError, ValueError, AttributeError):
             # Legacy seams (bare async functions) do not declare it.
             self._factory_accepts_opening_guard = False
             self._factory_accepts_birth_recorder = False
             self._factory_accepts_process_launch = False
+            self._factory_accepts_codex_resume = False
         self._uncertain_opens: set[SessionKey] = set()
         self._uncertain_launches = {}
         self._launch_recovery_tasks = {}
@@ -500,13 +504,21 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         if (prepared.intent.agent_id != context.agent_id or
                 prepared.intent.workspace_id != context.workspace_id):
             raise CoreError("BINDING_NOT_AUTHORIZED", "open")
-        semantic = Operation(operation.operation_id, operation.session_id,
-                             "runtime.open", {
-                                 "adapter_id": prepared.intent.adapter_id,
-                                 "profile_fingerprint": prepared.profile_fingerprint,
-                                 "root_fingerprint": prepared.root_fingerprint,
-                                 "stream_epoch": operation.stream_epoch,
-                             })
+        parameters = {
+            "adapter_id": prepared.intent.adapter_id,
+            "profile_fingerprint": prepared.profile_fingerprint,
+            "root_fingerprint": prepared.root_fingerprint,
+            "stream_epoch": operation.stream_epoch,
+        }
+        resume_thread_id = operation.resume_thread_id
+        if resume_thread_id is not None:
+            if not is_codex_thread_id(resume_thread_id):
+                raise CoreError("VALIDATION_ERROR", "codex_resume", retry_safe=True)
+            # Include the resume identity in deduplication without recording
+            # the native thread identifier in the canonical operation payload.
+            parameters["resume_thread_sha256"] = hashlib.sha256(
+                resume_thread_id.encode("ascii")).hexdigest()
+        semantic = Operation(operation.operation_id, operation.session_id, "runtime.open", parameters)
         session_key = SessionKey(context.server_id, context.executor_id,
                                  operation.session_id)
         # C2/R01+C2/R04: the dedup read is authorized I/O and never runs
@@ -515,6 +527,11 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         old = await self._existing(semantic, context)
         if old is not None:
             return old
+        if resume_thread_id is not None and (
+                prepared.intent.adapter_id != "codex_app_server" or
+                prepared.intent.mode != "managed" or
+                not self._factory_accepts_codex_resume):
+            raise CoreError("CAPABILITY_UNSUPPORTED", "codex_resume", retry_safe=True)
         self._check_drain_admission('runtime.open')
         async with self._lock:
             if (self._shutting_down or session_key in self._sessions or
@@ -546,6 +563,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         # receive the draining fence (legacy/test factories without the
         # parameter are simply not passed it).
         open_kwargs = {"stream_epoch": operation.stream_epoch}
+        if resume_thread_id is not None:
+            open_kwargs["resume_thread_id"] = resume_thread_id
         if self._factory_accepts_opening_guard:
             open_kwargs["opening_guard"] = attempt.guard
         effect_started = False

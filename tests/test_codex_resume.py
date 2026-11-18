@@ -236,6 +236,7 @@ def test_codex_resume_grant_validated_before_native_open(monkeypatch, tmp_path):
 
     async def run():
         async def environment(_prepared):
+            seen.append(("environment",))
             return {}
 
         async def good_grant(p, session_id, c):
@@ -245,6 +246,25 @@ def test_codex_resume_grant_validated_before_native_open(monkeypatch, tmp_path):
             prepared, "new-session", context, stream_epoch="epoch")
         assert seen[-1] == ("start", "agent", "thread-one")
         seen.clear()
+
+        await CopiedAdapterFactory(environment, codex_resume=good_grant).open(
+            prepared, "new-session", context, stream_epoch="epoch",
+            resume_thread_id="thread-one")
+        assert seen[-1] == ("start", "agent", "thread-one")
+        seen.clear()
+
+        async def missing_grant(*_args):
+            return None
+
+        for callback, requested_thread in (
+                (None, "thread-one"), (missing_grant, "thread-one"),
+                (good_grant, "different-thread")):
+            with pytest.raises(CoreError, match="BINDING_NOT_AUTHORIZED") as refused:
+                await CopiedAdapterFactory(environment, codex_resume=callback).open(
+                    prepared, "new-session", context, stream_epoch="epoch",
+                    resume_thread_id=requested_thread)
+            assert refused.value.retry_safe and not refused.value.possible_effect
+            assert not seen
 
         async def wrong_grant(p, session_id, c):
             return replace(_grant(p, session_id, c), agent_id="other-agent")

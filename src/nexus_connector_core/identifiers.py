@@ -10,11 +10,18 @@ the bounded legacy query, but no new long ID is admitted.
 
 from __future__ import annotations
 
+import re
+
 from .models import CoreError
 
 NEXUS_ID_MAX_LENGTH = 160
 NEXUS_LEGACY_ID_MAX_LENGTH = 256
 _RESERVED_PREFIX = "core.internal."
+_CODEX_THREAD_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}")
+
+
+def is_codex_thread_id(value: object) -> bool:
+    return type(value) is str and _CODEX_THREAD_ID.fullmatch(value) is not None
 
 
 def validate_external_id(operation_id: object, *, stage: str = "admission",

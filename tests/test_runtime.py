@@ -433,6 +433,43 @@ def test_async_runtime_admission_events_reconcile_and_close(tmp_path):
     asyncio.run(run())
 
 
+def test_explicit_resume_binds_receipt_to_exact_thread(tmp_path):
+    class ResumeFactory(FakeFactory):
+        async def open(self, prepared, session_id, context, *, stream_epoch, resume_thread_id):
+            assert resume_thread_id == "private-thread-one"
+            return await super().open(prepared, session_id, context, stream_epoch=stream_epoch)
+
+    async def run():
+        original, journal, legacy_factory = make_runtime(tmp_path)
+        ctx = context()
+        intent = LaunchIntent("agent", "ws", "codex_app_server")
+        prepared = await original.prepare(intent, ctx)
+        operation = OpenOperation("open-resume", "successor", "epoch", prepared,
+                                  resume_thread_id="private-thread-one")
+        with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
+            await original.open(operation, ctx)
+        assert legacy_factory.open_count == 0
+        await original.shutdown(ShutdownPolicy())
+
+        factory = ResumeFactory()
+        runtime = LocalRuntimeCore(journal, factory,
+                                   candidates={intent.adapter_id: prepared.candidate},
+                                   workspace_roots={intent.workspace_id: str(tmp_path)})
+        try:
+            receipt = await runtime.open(operation, ctx)
+            assert receipt.stage == "SUBMITTED"
+            assert await runtime.open(operation, ctx) == receipt
+            for thread in ("private-thread-two", None):
+                with pytest.raises(CoreError, match="OPERATION_CONFLICT"):
+                    await runtime.open(replace(operation, resume_thread_id=thread), ctx)
+            assert factory.open_count == 1
+        finally:
+            await runtime.shutdown(ShutdownPolicy())
+            await journal.aclose()
+
+    asyncio.run(run())
+
+
 def test_runtime_prepare_defers_full_build_hash_until_open(tmp_path, monkeypatch):
     from nexus_connector_core import build_identity
 

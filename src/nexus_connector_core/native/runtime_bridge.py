@@ -7,7 +7,6 @@ from .adapter_types import RuntimeCommandRejected
 import asyncio
 import concurrent.futures
 import json
-import re
 import sys
 import time
 from collections import deque
@@ -18,6 +17,7 @@ from typing import Any, Protocol
 from ..models import (CoreError, EffectNotSent, ExecutionContext, PreparedLaunch,
                       ProcessBirthEvidence, RuntimeEvent)
 from ..harness_config import _token_env_name
+from ..identifiers import is_codex_thread_id
 from ..pi_extension_resource import PiNativeActionLaunch
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, RuntimeCommandNotSent)
@@ -812,13 +812,14 @@ class CopiedAdapterFactory:
                    opening_guard=None,
                    process_birth_recorder: Callable[[ProcessBirthEvidence], Awaitable[None]] | None = None,
                    process_launch=None,
+                   resume_thread_id: str | None = None,
                    ) -> CopiedAdapterSession:
         resources = []
         try:
             return await self._open(prepared, session_id, context, stream_epoch=stream_epoch,
                                     opening_guard=opening_guard, resources=resources,
                                     process_birth_recorder=process_birth_recorder,
-                                    process_launch=process_launch)
+                                    process_launch=process_launch, resume_thread_id=resume_thread_id)
         except BaseException:
             for resource in resources:
                 resource.close()
@@ -826,11 +827,13 @@ class CopiedAdapterFactory:
 
     async def _open(self, prepared: PreparedLaunch, session_id: str,
                     context: ExecutionContext, *, stream_epoch: str, opening_guard, resources,
-                    process_birth_recorder=None, process_launch=None):
+                    process_birth_recorder=None, process_launch=None, resume_thread_id=None):
         spec = adapter_spec(prepared.intent.adapter_id)
         registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
             raise CoreError("CAPABILITY_UNSUPPORTED", "open", retry_safe=True)
+        if resume_thread_id is not None and (spec.native_kind != "codex" or registered is not None):
+            raise CoreError("CAPABILITY_UNSUPPORTED", "codex_resume", retry_safe=True)
         # PC11: refuse productive work before secrets/spawn when the host's
         # containment backend cannot honor its contract. Never a silent
         # fallback to bare kill(pid).
@@ -910,6 +913,33 @@ class CopiedAdapterFactory:
 
         content_snapshot = await asyncio.to_thread(_launch_signature)
         kind = spec.native_kind
+        resume_grant = None
+        if kind == "codex" and registered is None:
+            resume_grant = (await self._codex_resume(prepared, session_id, context)
+                            if self._codex_resume is not None else None)
+            await _validate_frontier("codex_resume")
+            if resume_thread_id is not None and (
+                    not is_codex_thread_id(resume_thread_id) or
+                    type(resume_grant) is not CodexResumeGrant or
+                    resume_grant.thread_id != resume_thread_id):
+                raise CoreError("BINDING_NOT_AUTHORIZED", "codex_resume", retry_safe=True)
+            if resume_grant is not None and (
+                    type(resume_grant) is not CodexResumeGrant or
+                    not is_codex_thread_id(resume_grant.thread_id) or
+                    resume_grant.session_id != session_id or
+                    resume_grant.server_id != context.server_id or
+                    resume_grant.executor_id != context.executor_id or
+                    resume_grant.binding_id != context.binding_id or
+                    resume_grant.agent_id != context.agent_id or
+                    resume_grant.workspace_id != context.workspace_id or
+                    resume_grant.session_owner_generation != context.session_owner_generation or
+                    resume_grant.candidate_fingerprint != prepared.candidate.fingerprint or
+                    resume_grant.root_fingerprint != prepared.root_fingerprint or
+                    resume_grant.profile_fingerprint != prepared.profile_fingerprint or
+                    resume_grant.terminal_observed is not True or
+                    resume_grant.persisted_rollout_observed is not True or
+                    resume_grant.exclusive_owner is not True):
+                raise CoreError("BINDING_NOT_AUTHORIZED", "codex_resume", retry_safe=True)
         candidate = prepared.candidate
         def is_qualified(observed):
             return qualified_build(kind, observed.version, sys.platform,
@@ -986,32 +1016,9 @@ class CopiedAdapterFactory:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "environment",
                                 retry_safe=True)
         native_action = None
-        resume_grant = None
         if registered is not None:
             connector = load_adapter(spec.adapter_id)(command=command, cwd=prepared.cwd, env=env)
         elif kind == "codex":
-            resume_grant = (await self._codex_resume(prepared, session_id, context)
-                            if self._codex_resume is not None else None)
-            await _validate_frontier('codex_resume')
-            if resume_grant is not None and (
-                    type(resume_grant) is not CodexResumeGrant or
-                    not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_-]{0,255}",
-                                     resume_grant.thread_id) or
-                    resume_grant.session_id != session_id or
-                    resume_grant.server_id != context.server_id or
-                    resume_grant.executor_id != context.executor_id or
-                    resume_grant.binding_id != context.binding_id or
-                    resume_grant.agent_id != context.agent_id or
-                    resume_grant.workspace_id != context.workspace_id or
-                    resume_grant.session_owner_generation != context.session_owner_generation or
-                    resume_grant.candidate_fingerprint != prepared.candidate.fingerprint or
-                    resume_grant.root_fingerprint != prepared.root_fingerprint or
-                    resume_grant.profile_fingerprint != prepared.profile_fingerprint or
-                    resume_grant.terminal_observed is not True or
-                    resume_grant.persisted_rollout_observed is not True or
-                    resume_grant.exclusive_owner is not True):
-                raise CoreError("BINDING_NOT_AUTHORIZED", "codex_resume",
-                                retry_safe=True)
             client_kwargs = (dict(self._codex_client_info)
                              if self._codex_client_info is not None else {})
             # PC08 (F07): the explicit model reaches the verified native

@@ -71,6 +71,7 @@ def create_runtime(
     codex_client_info / codex_resume / pi_native_action:
         Trusted-host callbacks: validated Codex client identity, the
         resume-grant seam and the scoped Pi native-action launch.
+        An open with an explicit resume thread requires a matching grant.
     native_approvals_enabled:
         Explicit opt-in for the native approval/input seam (off by
         default; requires both approval actions in every launch context).
