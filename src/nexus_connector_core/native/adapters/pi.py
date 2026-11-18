@@ -97,6 +97,7 @@ from ..process import (spawn_owned_process, observe_owned_process,
                        record_owned_process_birth)
 from ..framing import (ByteFrameLimitExceeded, IncompleteByteFrame,
                        byte_protocol_lines, stderr_chunks)
+from ...models import ProcessBirthEvidence
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
 
@@ -312,7 +313,7 @@ class _PiTransport:
         self._termination_requested = threading.Event()
 
     # ------------------------------------------------------------------ #
-    def start(self) -> None:
+    def start(self, *, process_birth_observer: Callable[[ProcessBirthEvidence], None] | None = None) -> None:
         full_env = child_environment(self._env, native_action=self._native_action)
         popen_kwargs: dict[str, Any] = dict(
             cwd=self._cwd,
@@ -329,6 +330,8 @@ class _PiTransport:
             # the immediate child (quality bar: leave no orphans).
             popen_kwargs["start_new_session"] = True
         self._proc = spawn_owned_process(self._argv, container_id=self._container_id, **popen_kwargs)
+        # The stdout reader can answer unsolicited extension requests before get_state.
+        record_owned_process_birth(self._proc, process_birth_observer)
         threading.Thread(target=self._read_stdout, daemon=True, name="pi-stdout").start()
         threading.Thread(target=self._read_stderr, daemon=True, name="pi-stderr").start()
 
@@ -846,10 +849,7 @@ class PiRpcConnector:
                 # ID-less serialized fallback limited to earlier observations.
                 transport._response_ids_required = (
                     compatibility.get("native_version") == "0.87.1")
-                transport.start()
-                record_owned_process_birth(
-                    getattr(transport, "_proc", None),
-                    getattr(self, "_process_birth_observer", None))
+                transport.start(process_birth_observer=getattr(self, "_process_birth_observer", None))
                 # Readiness requires a successful response in the documented
                 # object shape; a rejected command only proves pipe connectivity.
                 response = transport.request(_VERB_GET_STATE, {}, timeout_s=self._handshake_timeout_s)

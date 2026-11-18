@@ -2,6 +2,7 @@
 
 import asyncio
 import sys
+import threading
 import time
 from pathlib import Path
 
@@ -78,6 +79,17 @@ def _runtime(tmp_path, monkeypatch, adapter, *, no_ack=False):
 @pytest.mark.parametrize("fail_write", [False, True])
 def test_birth_is_durable_before_startup_finishes_and_write_failure_contains(
         tmp_path, monkeypatch, adapter, fail_write):
+    pi_readers = []
+    if adapter == "pi_rpc":
+        start_thread = threading.Thread.start
+
+        def observe_start(thread):
+            if thread.name in {"pi-stdout", "pi-stderr"}:
+                pi_readers.append(thread.name)
+            return start_thread(thread)
+
+        monkeypatch.setattr(threading.Thread, "start", observe_start)
+
     async def run():
         runtime, journal, factory, created = _runtime(tmp_path, monkeypatch, adapter)
         original = journal.record_process_birth
@@ -120,6 +132,7 @@ def test_birth_is_durable_before_startup_finishes_and_write_failure_contains(
             # recording is held. Claude's startup itself is held at this point.
             log = tmp_path / "peer-0.jsonl"
             assert not log.exists() or not log.read_text().strip()
+            assert not pi_readers, "Pi could dispatch startup UI replies before recording birth"
             release.set()
             if fail_write:
                 with pytest.raises(CoreError) as caught:
