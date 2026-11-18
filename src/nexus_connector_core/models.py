@@ -271,6 +271,19 @@ class NativeSessionOwnerProof:
 
 
 @dataclass(frozen=True, slots=True)
+class CodexRolloutEvidence:
+    """Private host observation of a saved file, without authority to resume it."""
+
+    thread_id: str = field(repr=False)
+    state_home: str = field(repr=False)
+    relative_path: tuple[str, ...] = field(repr=False)
+    home_identity: tuple[int, int]
+    file_identity: tuple[int, int]
+    byte_size: int
+    sha256: str
+
+
+@dataclass(frozen=True, slots=True)
 class RuntimeEvent:
     server_id: str
     executor_id: str

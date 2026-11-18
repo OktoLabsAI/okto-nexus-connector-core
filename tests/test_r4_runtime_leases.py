@@ -6,7 +6,7 @@ from dataclasses import replace
 import pytest
 
 from nexus_connector_core import (
-    CloseOperation, ControlOperation, CoreError, LaunchIntent, NativeApprovalOperation,
+    CloseOperation, CodexRolloutEvidence, ControlOperation, CoreError, LaunchIntent, NativeApprovalOperation,
     NativeSessionTarget, OpenOperation, OperationKey, ProcessBirthEvidence, R4LeaseAttempt,
     R4_PREVIEW_REVISION, SessionKey, ShutdownPolicy, TurnOperation,
     r4_submit_intent_hash, project_r4_turn_receipt,
@@ -99,6 +99,33 @@ def test_native_presenter_proof_rechecks_the_exact_opening_process_and_lease(tmp
 
             factory.native.read_owned_codex_thread = snapshot
             assert await read() == {'thread_id': 'exact-thread', 'status': 'idle'}
+
+            async def read_rollout():
+                return await runtime.read_live_codex_rollout(req.scope, target, 'exact-thread', **channel)
+
+            rollout = CodexRolloutEvidence('exact-thread', 'private-state', ('sessions', 'rollout.jsonl'),
+                                           (1, 2), (1, 3), 42, 'a' * 64)
+            requested = []
+
+            async def snapshot_rollout(thread_id):
+                requested.append(thread_id)
+                return rollout
+
+            factory.native.read_owned_codex_rollout = snapshot_rollout
+            assert await read_rollout() == (proof, rollout)
+            factory.native.active_turn = lambda: True
+            assert await read_rollout() is None and requested == ['exact-thread']
+            factory.native.active_turn = lambda: False
+
+            async def rollout_after_owner_changed(thread_id):
+                nonlocal observation
+                observation = 'DIFFERENT_BIRTH'
+                return replace(rollout, thread_id=thread_id)
+
+            factory.native.read_owned_codex_rollout = rollout_after_owner_changed
+            with pytest.raises(CoreError, match='PROCESS_BIRTH_CONFLICT'):
+                await read_rollout()
+            observation = 'MATCHING_LIVE'
 
             async def wrong_response(_thread_id):
                 return {'thread_id': 'sibling'}

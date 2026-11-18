@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Iterator, Mappin
 from dataclasses import dataclass, replace
 from typing import Any, Protocol
 
-from ..models import (CoreError, EffectNotSent, ExecutionContext, PreparedLaunch,
+from ..models import (CodexRolloutEvidence, CoreError, EffectNotSent, ExecutionContext, PreparedLaunch,
                       ProcessBirthEvidence, RuntimeEvent)
 from ..harness_config import _token_env_name
 from ..identifiers import is_codex_thread_id
@@ -681,6 +681,18 @@ class CopiedAdapterSession:
 
             task.add_done_callback(clear)
         return await asyncio.shield(task)
+
+    async def read_owned_codex_rollout(self, thread_id: str) -> CodexRolloutEvidence | None:
+        stage = "native_rollout_read"
+        reader = getattr(self._connector, "read_owned_rollout", None)
+        if self._session.harness_kind != "codex" or not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        if self._close_started or self._session.metadata.get("thread_id") != thread_id:
+            raise CoreError("SESSION_CONFLICT", stage)
+        try:
+            return await asyncio.to_thread(reader, self._session, thread_id)
+        except NativeAdapterError:
+            raise CoreError("NATIVE_UNAVAILABLE", stage) from None
 
     async def close(self) -> str:
         preset_error = None

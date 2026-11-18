@@ -51,6 +51,8 @@ from ...protocol import strict_json
 from ...identifiers import is_codex_thread_id
 from ..event_buffers import NativeEventHistory, subscribe
 from ..delta_batches import coalesce_codex_delta
+from ..codex_rollout import observe_rollout
+from ...models import CodexRolloutEvidence
 from ..codex_thread_configuration import (
     METADATA_KEY,
     observe_thread_response,
@@ -69,6 +71,7 @@ import threading
 import time
 from collections import deque
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from ..adapter_types import utc_now_iso
@@ -810,6 +813,29 @@ class CodexAppServerConnector:
 
     def read_owned_thread(self, session: HarnessSession, thread_id: str) -> dict:
         """Observe one registered thread without reading history or changing subscriptions."""
+        thread, read, state, _ = self._read_owned_thread(session, thread_id)
+        viewer_context = observe_viewer_context(thread, read, state.viewer_opening)
+        return read if viewer_context is None else {**read, "viewer_context": viewer_context}
+
+    def read_owned_rollout(self, session: HarnessSession, thread_id: str) -> CodexRolloutEvidence | None:
+        """Observe the persisted file without exporting a path through the presenter."""
+        thread, read, state, transport = self._read_owned_thread(session, thread_id)
+        native_cwd = thread.get("cwd")
+        if (read["status"] != "idle" or read["ephemeral"] or self._cwd is None
+                or type(native_cwd) is not str or Path(native_cwd) != Path(self._cwd)):
+            return None
+        evidence = observe_rollout((transport._env or {}).get("CODEX_HOME"), thread.get("path"),
+                                   thread_id, self._cwd)
+        with self._sessions_lock:
+            if (self._sessions_by_id.get(session.session_id) is not state or self._transport is not transport
+                    or state.closing or state.ended or not transport.is_alive()
+                    or state.active_turn_id is not None or state.pending_start_id is not None
+                    or any(item["pending"] and item["session_id"] == state.session_id
+                           for item in self._approval_requests.values())):
+                return None
+        return evidence
+
+    def _read_owned_thread(self, session: HarnessSession, thread_id: str) -> tuple:
         with self._sessions_lock:
             state = self._sessions_by_id.get(session.session_id)
             transport = self._transport
@@ -836,8 +862,7 @@ class CodexAppServerConnector:
             raise NativeAdapterError(ErrorCode.CONFLICT, "The Codex thread metadata is unsupported.")
         read = {"thread_id": thread_id, "status": kind, "created_at": created,
                 "updated_at": updated, "ephemeral": ephemeral}
-        viewer_context = observe_viewer_context(thread, read, state.viewer_opening)
-        return read if viewer_context is None else {**read, "viewer_context": viewer_context}
+        return thread, read, state, transport
 
     def send(self, session: HarnessSession, command: HarnessCommand) -> None:
         with self._sessions_lock:

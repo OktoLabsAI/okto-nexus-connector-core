@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, AsyncIterator, Callable, Mapping, Protocol
 
 from .models import (
-    CloseOperation, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
+    CloseOperation, CodexRolloutEvidence, ControlOperation, NativeApprovalOperation, DiscoveryRequest, EventCursor,
     ExecutionContext, Inventory, LaunchIntent, OpenOperation, OperationReceipt,
     R4LeaseApplication,
     OperationKey, OwnedSlotPage, OwnedSlotReservation, OwnedSlotState, PreparedLaunch, ReconcileReport, ReconcileRequest, RuntimeEvent,
     SessionKey, SessionClaimPage, ClaimedSession, SessionLeaseState, ProcessBirthEvidence,
     ProcessBirthRecord,
-    ProcessBirthObservation,
+    ProcessBirthObservation, NativeSessionOwnerProof, NativeSessionTarget,
     RuntimeSnapshot, ShutdownPolicy, ShutdownReport, StorageStatus,
     TurnOperation,
 )
@@ -105,6 +105,10 @@ class RuntimeCore(Protocol):
                                           release_digest: str) -> None: ...
     async def process_birth(self, session: SessionKey) -> ProcessBirthRecord | None: ...
     async def observe_process_birth(self, session: SessionKey) -> ProcessBirthObservation: ...
+    async def read_live_codex_rollout(
+            self, scope: Mapping[str, Any], target: NativeSessionTarget, thread_id: str, *,
+            connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, CodexRolloutEvidence] | None: ...
     async def reconcile(self, request: ReconcileRequest) -> ReconcileReport: ...
     async def close(self, operation: CloseOperation,
                     context: ExecutionContext, *,

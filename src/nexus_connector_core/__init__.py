@@ -24,6 +24,7 @@ from .models import (
     ProcessBirthRecord,
     NativeSessionTarget,
     NativeSessionOwnerProof,
+    CodexRolloutEvidence,
     ProcessBirthObservation,
     RuntimeEvent,
     EventCursor,
@@ -146,7 +147,7 @@ from .close_operation import r4_close_operation
 __version__ = "0.0.16"
 
 __all__ = [
-    "NativeSessionTarget", "NativeSessionOwnerProof",
+    "NativeSessionTarget", "NativeSessionOwnerProof", "CodexRolloutEvidence",
     "combine_drain_status",
     'JournalLocation', 'JournalRegistration', 'JournalLocationPage', 'JournalLocationRegistry',
     "IndependentInventoryObserver", "HarnessObservationResult", "HarnessObservation",

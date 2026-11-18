@@ -21,7 +21,7 @@ from .journal import (SQLiteJournal, validate_claim_namespace,
                       validate_claim_page, validate_compaction_rows)
 from .kernel import OperationKernel
 from .models import (
-    CloseOperation, ControlOperation, CoreError, DiscoveryRequest, EventCursor,
+    CloseOperation, CodexRolloutEvidence, ControlOperation, CoreError, DiscoveryRequest, EventCursor,
     EffectNotSent, EffectRejected, ExecutionContext, InstallationCandidate, Inventory, LaunchIntent,
     OpenOperation, Operation, OperationKey, OperationReceipt, NativeApprovalOperation,
     PreparedLaunch, OperationCapacityDeferred,
@@ -32,6 +32,7 @@ from .models import (
     NativeSessionTarget, NativeSessionOwnerProof,
 )
 from .profiles import prepare_launch, verify_prepared
+from .identifiers import is_codex_thread_id
 from .open_operation import open_operation_semantic
 from .protocol import intent_hash
 from .protocol import canonical_json
@@ -1385,6 +1386,36 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 or not isinstance(result, dict) or result.get("thread_id") != thread_id):
             raise CoreError("SESSION_CONFLICT", stage)
         return result
+
+    async def read_live_codex_rollout(
+            self, scope: Mapping, target: NativeSessionTarget, thread_id: str, *,
+            connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, CodexRolloutEvidence] | None:
+        """Bind a private file observation to the same live Core owner across the read."""
+        stage = "native_rollout_read"
+        if (not isinstance(target, NativeSessionTarget) or target.adapter_id != "codex_app_server"
+                or not is_codex_thread_id(thread_id)):
+            raise CoreError("VALIDATION_ERROR", stage)
+        channel = dict(connection_id=connection_id, connection_generation=connection_generation)
+        before = await self.prove_live_native_session(scope, target, **channel)
+        binding = self._sessions.get(before.key)
+        reader = getattr(binding.native, "read_owned_codex_rollout", None) if binding is not None else None
+        if not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        if binding.normal_lock.locked():
+            return None
+        async with binding.normal_lock:
+            if self._active_turn(binding) or binding.pending_native_requests:
+                return None
+            rollout = await reader(thread_id)
+            after = await self.prove_live_native_session(scope, target, **channel)
+            if before != after or self._sessions.get(before.key) is not binding:
+                raise CoreError("STALE_GENERATION", stage)
+            if rollout is None or self._active_turn(binding) or binding.pending_native_requests:
+                return None
+            if type(rollout) is not CodexRolloutEvidence or rollout.thread_id != thread_id:
+                raise CoreError("SESSION_CONFLICT", stage)
+        return before, rollout
 
     async def legacy_operation_receipt(
             self, server_id: str, executor_id: str,
