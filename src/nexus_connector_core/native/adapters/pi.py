@@ -129,6 +129,7 @@ from ..adapter_types import (
     new_harness_session_id,
 )
 from ..adapter_types import ErrorCode, NativeAdapterError, RuntimeCommandNotSent, RuntimeCommandRejected
+from ..pi_chat_facts import PI_CHAT_EVENT, valid_pi_chat_fact
 from ..pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_fact, valid_pi_steer_operation
 
 __all__ = ["PiRpcConnector"]
@@ -1227,6 +1228,11 @@ class PiRpcConnector:
     def _on_push_event(self, msg: dict[str, Any]) -> None:
         native_type = msg.get("type")
         hosted = self._transport is not None and self._transport._hosted_rpc_ready
+        if native_type == PI_CHAT_EVENT:
+            payload = {key: value for key, value in msg.items() if key != "type"}
+            if hosted and payload.get("native_session_id") == self._session_id and valid_pi_chat_fact(payload):
+                self._push_event("tool_activity", native_type, payload)
+            return
         if native_type == PI_STEER_EVENT:
             if hosted and valid_pi_steer_fact(msg):
                 self._push_event("tool_activity", native_type,

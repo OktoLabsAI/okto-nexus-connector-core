@@ -28,6 +28,7 @@ from .claude_terminal_resume import (
     ClaudeTerminalResumeGrant, open_saved_claude_terminal, require_claude_resume_grant, require_reviewed_claude_terminal,
 )
 from .claude_terminal_submission import ClaudeTerminalSession
+from .pi_chat_facts import PI_CHAT_EVENT
 from .pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_operation
 
 #: Reserved capacity for containment/observation calls (C2/R02): physical
@@ -580,6 +581,10 @@ class CopiedAdapterSession:
                 else:
                     continue
                 native = replace(native, payload=native.payload | {"turn_operation_id": self._active_operation_id})
+            if native.harness_kind == "pi" and native.native_event == PI_CHAT_EVENT:
+                if not self._pi_started_for_active or self._active_operation_id is None:
+                    continue
+                native = replace(native, operation_id=self._active_operation_id)
             if native.kind == "turn_started":
                 if native.harness_kind == "codex" and (
                         self._active_operation_id is None or
