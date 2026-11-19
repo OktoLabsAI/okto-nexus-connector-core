@@ -220,6 +220,7 @@ _WRITE_LOCK_TIMEOUT_S = 10.0
 class _PendingTurn:
     operation_id: str | None
     interrupted: bool = False
+    started_session_uuid: str | None = None
 
 
 @dataclass(slots=True)
@@ -350,6 +351,8 @@ class ClaudeCodeStreamConnector:
         # interrupted" lives at.
         self._turn_in_flight = False
         self._pending_turns: deque[_PendingTurn] = deque()
+        self._history_session_uuid: str | None = None
+        self._history_identity_conflict = False
         self._interrupt_request_counter = 0
         self._reviewed_interrupt: _ReviewedInterrupt | None = None
         # Set by the stdout reader thread the moment the HEAD turn's
@@ -981,9 +984,26 @@ class ClaudeCodeStreamConnector:
             with self._state_lock:
                 self._approval_generation += 1
                 self._approval_turn_active = bool(self._pending_turns)
+                if self._pending_turns:
+                    observed = self._observe_history_uuid(obj)
+                    if observed is not None:
+                        self._pending_turns[0].started_session_uuid = observed
             self._emit("turn_started", "system:init", obj)
         else:
             self._emit("tool_activity", f"system:{subtype}", obj)
+
+    def _observe_history_uuid(self, obj):
+        """Retain contradictions for the lifetime of this native owner."""
+        from ..claude_history_identity import claude_session_uuid
+
+        if 'session_id' not in obj:
+            return None
+        observed = claude_session_uuid(obj['session_id'])
+        if observed is None or self._history_session_uuid not in (None, observed):
+            self._history_identity_conflict = True
+            return None
+        self._history_session_uuid = observed
+        return observed
 
     def _handle_stream_event(self, obj: dict[str, Any]) -> None:
         event = obj.get("event") or {}
@@ -1050,8 +1070,11 @@ class ClaudeCodeStreamConnector:
             return "success" if event.native_event == "result:success" and not event.payload.get("is_error") else "failed"
 
     def _handle_result(self, obj: dict[str, Any]) -> None:
+        from ..claude_history_identity import CLAUDE_HISTORY_IDENTITY
+
         subtype = obj.get("subtype")
         is_success = subtype == "success"
+        history_identity = None
         with self._state_lock:
             self._approval_turn_active = False
             for entry in self._approval_requests.values():
@@ -1063,6 +1086,11 @@ class ClaudeCodeStreamConnector:
             # even when `steer()` has since queued a second, still-pending
             # one behind it (see `_pending_turns`'s docstring in `__init__`).
             turn = self._pending_turns.popleft() if self._pending_turns else None
+            if turn is not None:
+                observed = self._observe_history_uuid(obj)
+                if (is_success and not self._history_identity_conflict and observed is not None
+                        and turn.started_session_uuid == observed):
+                    history_identity = {'schema_version': 1, 'session_id': observed}
             interrupted = turn.interrupted if turn is not None else False
             review = self._reviewed_interrupt
             if review is not None and turn is review.turn:
@@ -1080,6 +1108,11 @@ class ClaudeCodeStreamConnector:
         if isinstance(obj.get("result"), str):
             self._emit("output_delta", "result:output", {"text": obj["result"], "final": True})
         payload = {**obj, "interrupted_by_connector": interrupted}
+        # This fact comes from two observations made by the owned adapter.
+        # A field sent by the native peer never supplies it on its own.
+        payload.pop(CLAUDE_HISTORY_IDENTITY, None)
+        if history_identity is not None and not interrupted:
+            payload[CLAUDE_HISTORY_IDENTITY] = history_identity
         if is_success or interrupted:
             # A result caused by THIS connector's own interrupt is a
             # successful steer/interrupt outcome, not a harness failure -
