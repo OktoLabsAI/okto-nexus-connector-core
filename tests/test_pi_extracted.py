@@ -4,11 +4,14 @@ import sys
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
 
+from nexus_connector_core import CoreError, InstallationCandidate, pi_extension_resource
 from nexus_connector_core.native.adapter_types import STATUS_RUNNING, HarnessCommand, HarnessSession, NativeAdapterError
 from nexus_connector_core.native.adapters.pi import PiRpcConnector, _PiTransport
 
@@ -61,6 +64,46 @@ def test_pi_node_cli_default_version_command_probes_package():
                                           "--version"]
     direct = PiRpcConnector(command=("pi", "--mode", "rpc"))
     assert direct._version_command == ["pi", "--version"]
+
+
+def test_hosted_pi_rejects_a_stock_peer_that_cannot_prove_the_owner(tmp_path):
+    peer = Path(__file__).parent / "fixtures" / "pi_rpc_ids_peer.py"
+    connector = PiRpcConnector(
+        command=(sys.executable, "selected-pi-entry.js", "--mode", "rpc"), hosted_rpc=peer,
+        version_command=(sys.executable, "-c", "print('0.87.1')"),
+        cwd=str(tmp_path), handshake_timeout_s=5, command_timeout_s=5,
+    )
+    try:
+        argv = connector._build_argv("session")
+        assert argv == [sys.executable, str(peer), "selected-pi-entry.js", "--mode", "rpc", "--session-id", "session"]
+        with pytest.raises(NativeAdapterError, match="hosted RPC did not confirm"):
+            connector.start(owning_agent_id="agent")
+        assert not connector._transport.is_alive()
+    finally:
+        connector.close()
+
+
+def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch):
+    candidate = InstallationCandidate("pi_rpc", "node.exe", "pair", "explicit", "selected",
+                                      version="0.87.1", architecture="x86_64",
+                                      launch_script="selected-pi-entry.js", build_identity="closure")
+    argv = (candidate.executable, candidate.launch_script, "--mode", "rpc")
+    monkeypatch.setattr(pi_extension_resource, "sys", SimpleNamespace(platform="win32"))
+    observed = Mock(return_value=pi_extension_resource._HOSTED_NODE_BUILD)
+    monkeypatch.setattr(pi_extension_resource, "fingerprint", observed)
+    qualify = pi_extension_resource.qualify_pi_hosted_rpc
+    assert qualify(argv, candidate).name == "hosted_rpc.js"
+    observed.assert_called_once_with(Path(candidate.executable))
+    for command, selected in ((argv, replace(candidate, launch_script="other.js")),
+                              (argv, replace(candidate, build_identity=None)),
+                              (argv, replace(candidate, version="0.87.2")),
+                              (argv[:2] + ("--mode", "json"), candidate)):
+        with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED") as refused:
+            qualify(command, selected)
+        assert refused.value.retry_safe
+    observed.return_value = "sha256:different"
+    with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
+        qualify(argv, candidate)
 
 
 @pytest.mark.parametrize("verb", ["steer", "abort"])

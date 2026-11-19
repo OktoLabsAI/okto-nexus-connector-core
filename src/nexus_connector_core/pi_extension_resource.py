@@ -1,8 +1,33 @@
 """Locate the versioned, Core-owned Pi extension in an installed wheel."""
 
-from importlib.resources import files
+import sys
 from dataclasses import dataclass
+from importlib.resources import files
 from pathlib import Path
+
+from .discovery import fingerprint
+from .models import CoreError, InstallationCandidate
+
+_HOSTED_NODE_BUILD = "sha256:3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5"
+
+
+def pi_hosted_rpc_path() -> Path:
+    """Launch asset shipped alongside the trusted Pi extension."""
+    return Path(str(files("nexus_connector_core").joinpath("pi_extension", "hosted_rpc.js"))).resolve(strict=True)
+
+
+def qualify_pi_hosted_rpc(command: tuple[str, ...], candidate: InstallationCandidate) -> Path:
+    """Only the selected Windows Node/Pi package pair may use the hosted path."""
+    if (sys.platform != "win32" or candidate.version != "0.87.1" or candidate.architecture != "x86_64"
+            or not candidate.build_identity or not candidate.launch_script
+            or tuple(command[:4]) != (candidate.executable, candidate.launch_script, "--mode", "rpc")):
+        raise CoreError("CAPABILITY_UNSUPPORTED", "pi_hosted_rpc", retry_safe=True)
+    try:
+        if fingerprint(Path(candidate.executable)) != _HOSTED_NODE_BUILD:
+            raise CoreError("CAPABILITY_UNSUPPORTED", "pi_hosted_rpc", retry_safe=True)
+        return pi_hosted_rpc_path()
+    except OSError as exc:
+        raise CoreError("CAPABILITY_UNSUPPORTED", "pi_hosted_rpc", retry_safe=True) from exc
 
 
 def pi_extension_path() -> Path:

@@ -18,7 +18,7 @@ from ..models import (CodexRolloutEvidence, CoreError, EffectNotSent, ExecutionC
                       ProcessBirthEvidence, RuntimeEvent)
 from ..harness_config import _token_env_name
 from ..identifiers import is_codex_thread_id
-from ..pi_extension_resource import PiNativeActionLaunch
+from ..pi_extension_resource import PiNativeActionLaunch, qualify_pi_hosted_rpc
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, RuntimeCommandNotSent)
 from .adapters.compatibility import qualified_build, can_probe_protocol
@@ -787,6 +787,7 @@ class CopiedAdapterFactory:
                                              Awaitable[Mapping[str, str]]],
                  *, pi_native_action: Callable[[PreparedLaunch, str, ExecutionContext],
                                               Awaitable[PiNativeActionLaunch | None]] | None = None,
+                 pi_hosted_rpc: bool = False,
                  codex_client_info: Mapping[str, str] | None = None,
                  codex_resume: Callable[[PreparedLaunch, str, ExecutionContext],
                                         Awaitable[CodexResumeGrant | None]] | None = None,
@@ -799,6 +800,7 @@ class CopiedAdapterFactory:
             raise ValueError("native_approvals_from_lease must be bool")
         self._environment = environment
         self._pi_native_action = pi_native_action
+        self._pi_hosted_rpc = pi_hosted_rpc
         self._codex_client_info = (dict(codex_client_info)
                                    if codex_client_info is not None else None)
         self._codex_resume = codex_resume
@@ -1061,6 +1063,10 @@ class CopiedAdapterFactory:
                                                       cwd=prepared.cwd, env=env,
                                                       **client_kwargs)
         elif kind == "pi":
+            hosted = {}
+            if self._pi_hosted_rpc:
+                hosted["hosted_rpc"] = await asyncio.to_thread(qualify_pi_hosted_rpc, command, candidate)
+                _revalidate_launch("pi_hosted_rpc")
             native_action = (await self._pi_native_action(prepared, session_id, context)
                              if self._pi_native_action is not None else None)
             await _validate_frontier('native_action')
@@ -1071,7 +1077,7 @@ class CopiedAdapterFactory:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "native_action_launch")
             connector = load_adapter(spec.adapter_id)(command=command,
                                                       cwd=prepared.cwd, env=env,
-                                                      native_action=native_action)
+                                                      native_action=native_action, **hosted)
         else:
             connector = load_adapter(spec.adapter_id)(binary=command[0],
                                                       argv=command[1:],

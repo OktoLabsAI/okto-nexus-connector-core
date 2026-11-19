@@ -113,6 +113,7 @@ import subprocess
 import threading
 from collections import deque
 from dataclasses import replace
+from pathlib import Path
 from typing import Any, Callable, Iterator, Mapping, Sequence
 
 from ..adapter_types import utc_now_iso
@@ -269,6 +270,7 @@ class _PiTransport:
         dispatch_guards: "object | None" = None,
         on_ui_request: Callable[[dict[str, Any]], bool] | None = None,
         container_id: str | None = None,
+        hosted_session_id: str | None = None,
     ) -> None:
         self._dispatch_guards = dispatch_guards
         self._on_ui_request = on_ui_request
@@ -277,6 +279,9 @@ class _PiTransport:
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
         self._native_action = native_action
+        self._hosted_session_id = hosted_session_id
+        self._hosted_rpc_notices = 0
+        self._hosted_rpc_ready = False
         self._on_push_event = on_push_event
         self._on_unmatched_response = on_unmatched_response
         self._on_child_exit = on_child_exit
@@ -612,6 +617,11 @@ class _PiTransport:
             # a shape either the response or push-event paths can use.
             self._on_malformed_line(json.dumps(msg), "top-level JSON value is not an object")
             return
+        if self._hosted_session_id is not None and msg.get("type") == "nexus_pi_owned_rpc":
+            self._hosted_rpc_notices += 1
+            self._hosted_rpc_ready = (self._hosted_rpc_notices == 1 and type(msg.get("revision")) is int
+                and msg == {"type": "nexus_pi_owned_rpc", "revision": 1, "session_id": self._hosted_session_id})
+            return
         if msg.get("type") == _TYPE_RESPONSE:
             verb = msg.get("command")
             response_id = msg.get("id")
@@ -707,6 +717,7 @@ class PiRpcConnector:
         handshake_timeout_s: float = 30.0,
         command_timeout_s: float = 30.0,
         version_command: Sequence[str] | None = None,
+        hosted_rpc: Path | None = None,
     ) -> None:
         self.capabilities = HarnessCapabilities(
             send_only=False,
@@ -733,6 +744,7 @@ class PiRpcConnector:
         if native_action is not None and not isinstance(native_action, PiNativeActionLaunch):
             raise TypeError("native_action must be a trusted PiNativeActionLaunch")
         self._native_action = native_action
+        self._hosted_rpc = hosted_rpc
         self._handshake_timeout_s = handshake_timeout_s
         self._command_timeout_s = command_timeout_s
 
@@ -854,6 +866,7 @@ class PiRpcConnector:
                 on_line_processing_error=self._on_line_processing_error,
                 on_reader_exit=self._on_reader_exit,
                 container_id=getattr(self, '_process_container_id', None),
+                hosted_session_id=session_id if self._hosted_rpc is not None else None,
             )
             # Retain process ownership even if readiness negotiation fails;
             # Core must be able to confirm cleanup and retry containment.
@@ -879,6 +892,11 @@ class PiRpcConnector:
                     raise NativeAdapterError(ErrorCode.CONFIG_ERROR,
                         "protocol_incompatible: Pi get_state readiness was rejected or malformed.",
                         {"reason": "protocol_incompatible", "stage": "get_state"})
+                if self._hosted_rpc is not None and (not transport._response_ids_required
+                        or not transport._hosted_rpc_ready or response["data"].get("sessionId") != session_id):
+                    raise NativeAdapterError(ErrorCode.CONFIG_ERROR,
+                        "The hosted RPC did not confirm the selected Pi session.",
+                        {"reason": "protocol_incompatible", "stage": "hosted_rpc"})
             except BaseException:
                 transport.close()
                 with self._session_lock:
@@ -984,6 +1002,8 @@ class PiRpcConnector:
     # ------------------------------------------------------------------ #
     def _build_argv(self, pi_session_id: str) -> list[str]:
         argv = list(self._command) + ["--session-id", pi_session_id]
+        if self._hosted_rpc is not None:
+            argv.insert(1, str(self._hosted_rpc))
         if self._provider:
             argv += ["--provider", self._provider]
         if self._model:
