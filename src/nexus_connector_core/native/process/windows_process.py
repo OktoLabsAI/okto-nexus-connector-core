@@ -2,7 +2,7 @@
 
 The JOB_LIST startup attribute removes the create-then-assign orphan window.
 See https://devblogs.microsoft.com/oldnewthing/20230209-00/?p=107812 .
-Only native harness stdio launches use this deliberately narrow Popen adapter.
+Native harness launches use either three separate pipes or a host-owned ConPTY.
 """
 import ctypes
 from ctypes import wintypes as w
@@ -78,6 +78,7 @@ class OwnedWindowsPopen(subprocess.Popen):
         self._job_lock = threading.Lock()
         self._job = None
         self._kernel = _kernel()
+        self._pseudoconsole = kwargs.pop("pseudoconsole", None)
         planned_container = kwargs.pop('container_id', None)
         self._job_name = ("Global\\nexus-core-" + uuid.uuid4().hex
                           if planned_container is None else planned_container)
@@ -116,10 +117,13 @@ class OwnedWindowsPopen(subprocess.Popen):
         # actual signature fails closed if a supported Python changes its ABI.
         parameters = inspect.signature(subprocess.Popen._execute_child).bind(self, *args, **kwargs).arguments
         if parameters["shell"] or parameters["pass_fds"] or parameters["startupinfo"] is not None:
-            raise ValueError("Owned harness launch requires direct stdio without extra inherited handles")
+            raise ValueError("Owned harness launch forbids extra inherited handles")
         read, write, error = (int(parameters[name]) for name in ("p2cread", "c2pwrite", "errwrite"))
-        if -1 in (read, write, error):
+        terminal = self._pseudoconsole
+        if terminal is None and -1 in (read, write, error):
             raise ValueError("Owned harness launch requires all three standard pipes")
+        if terminal is not None and (read, write, error) != (-1, -1, -1):
+            raise ValueError("Owned terminal launch cannot inherit standard pipes")
         attributes_size = SIZE_T()
         self._kernel.InitializeProcThreadAttributeList(None, 2, 0, ctypes.byref(attributes_size))
         if not attributes_size.value:
@@ -129,14 +133,20 @@ class OwnedWindowsPopen(subprocess.Popen):
         try:
             _check(self._kernel.InitializeProcThreadAttributeList(attributes, 2, 0, ctypes.byref(attributes_size)))
             initialized = True
-            handles = (w.HANDLE * 3)(read, write, error)
             jobs = (w.HANDLE * 1)(self._job)
-            _check(self._kernel.UpdateProcThreadAttribute(attributes, 0, 0x20002, handles, ctypes.sizeof(handles), None, None))
             _check(self._kernel.UpdateProcThreadAttribute(attributes, 0, 0x2000D, jobs, ctypes.sizeof(jobs), None, None))
             startup = _StartupInfoEx()
             startup.startup.cb = ctypes.sizeof(startup)
-            startup.startup.flags = 0x101  # USESTDHANDLES | USESHOWWINDOW
-            startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = read, write, error
+            if terminal is None:
+                handles = (w.HANDLE * 3)(read, write, error)
+                _check(self._kernel.UpdateProcThreadAttribute(
+                    attributes, 0, 0x20002, handles, ctypes.sizeof(handles), None, None))
+                startup.startup.flags = 0x101  # USESTDHANDLES | USESHOWWINDOW
+                startup.startup.stdin, startup.startup.stdout, startup.startup.stderr = read, write, error
+            else:
+                _check(self._kernel.UpdateProcThreadAttribute(
+                    attributes, 0, 0x20016, terminal, ctypes.sizeof(terminal), None, None))
+                startup.startup.flags = 0x100  # Leave the child standard handles for ConPTY.
             startup.attributes = ctypes.cast(attributes, ctypes.c_void_p)
             argv = parameters["args"]
             command = argv if isinstance(argv, str) else subprocess.list2cmdline(argv)
@@ -146,9 +156,12 @@ class OwnedWindowsPopen(subprocess.Popen):
                 env_block = ctypes.create_unicode_buffer("\0".join(
                     f"{key}={value}" for key, value in sorted(environment.items(), key=lambda item: item[0].upper())) + "\0\0")
             info = _ProcessInfo()
-            flags = parameters["creationflags"] | 0x00080000 | 0x00000400 | 0x08000000
+            flags = parameters["creationflags"] | 0x00080000 | 0x00000400
+            if terminal is None:
+                flags |= 0x08000000  # CREATE_NO_WINDOW applies to the stdio path.
             _check(self._kernel.CreateProcessW(parameters["executable"], ctypes.create_unicode_buffer(command),
-                None, None, True, flags, env_block, os.fsdecode(parameters["cwd"]) if parameters["cwd"] else None,
+                None, None, terminal is None, flags, env_block,
+                os.fsdecode(parameters["cwd"]) if parameters["cwd"] else None,
                 ctypes.byref(startup), ctypes.byref(info)))
             self._child_created = True
             self._handle = subprocess.Handle(info.process)
