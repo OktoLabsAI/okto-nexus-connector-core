@@ -1507,6 +1507,39 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 await verify()
                 yield editor
 
+    @asynccontextmanager
+    async def open_live_claude_terminal(self, scope: Mapping, target: NativeSessionTarget, *,
+                                        connection_id: str, connection_generation: int):
+        """Read the exact owned terminal under its current R4 lease."""
+        from .native.claude_terminal_submission import ClaudeTerminalSession
+
+        stage = "claude_terminal_read"
+        if not isinstance(target, NativeSessionTarget) or target.adapter_id != "claude_stream":
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        channel = dict(connection_id=connection_id, connection_generation=connection_generation)
+        before = await self.prove_live_native_session(scope, target, **channel)
+        binding = self._sessions.get(before.key)
+        if binding is None or not isinstance(binding.native, ClaudeTerminalSession):
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        reader = binding.native.open_terminal_reader()
+
+        async def output():
+            while True:
+                try:
+                    frame = await reader.read_output()
+                except TimeoutError:
+                    frame = b""
+                after = await self.prove_live_native_session(scope, target, **channel)
+                if after != before or self._sessions.get(before.key) is not binding:
+                    raise CoreError("STALE_GENERATION", stage)
+                if frame is None:
+                    return
+                if frame:
+                    yield frame
+
+        async with aclosing(output()) as frames:
+            yield frames
+
     async def _read_live_native_presentation(self, scope, target, channel, reader_name, *args):
         stage = "native_presentation_read"
         before = await self.prove_live_native_session(scope, target, **channel)

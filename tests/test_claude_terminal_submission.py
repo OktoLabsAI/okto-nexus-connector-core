@@ -284,9 +284,10 @@ def test_correlated_native_wire_result_settles_only_its_admitted_turn(tmp_path, 
                     while factory.native.terminal_submission.active_turn():
                         await asyncio.sleep(.01)
                 assert (await journal.get_receipt(key)).stage == ("FAILED" if failure else "SUCCEEDED")
-                events = [event async for event in journal.events(EventCursor("server", "executor", "session", "epoch"))
-                          if event.operation_id == operation.operation_id]
-                event, = events
+                events = [event async for event in journal.events(EventCursor("server", "executor", "session", "epoch"))]
+                ready, event = events
+                assert ready.category == "lifecycle" and ready.native_type == "core.claude_terminal_ready"
+                assert ready.operation_id is None and ready.payload == {}
                 assert event.operation_id == operation.operation_id and event.category == "turn_state"
                 if failure:
                     assert event.payload == {"delivery_phase": "terminal", "delivery_outcome": "failed",

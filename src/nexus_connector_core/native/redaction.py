@@ -25,6 +25,11 @@ _GENERIC_SECRET = re.compile(
     r"(?:nxs_|nxsept_)[A-Za-z0-9_-]+|\bsk-[A-Za-z0-9_-]{12,}|"
     r"\bBearer\s+[^\s\"']+", re.I)
 _GENERIC_PREFIX = re.compile(r"(?:nxs_|nxsept_|\bsk-|\bBearer\s+)", re.I)
+_GENERIC_TRAILING_PREFIX = re.compile(
+    "(?:" + "|".join(re.escape(stem[:length])
+                      for stem in ("nxs_", "nxsept_", "sk-", "Bearer")
+                      for length in range(1, len(stem) + 1)) + r")\Z", re.I,
+)
 _TOKEN_END = re.compile(r"[\s\"']")
 _MAX_PENDING = 16 * 1024
 _MAX_STREAMS = 64
@@ -77,8 +82,8 @@ class NativeSecretRedactor:
             variants.update((json.dumps(value, ensure_ascii=False)[1:-1],
                              json.dumps(value, ensure_ascii=True)[1:-1],
                              repr(value)[1:-1]))
-        self._known = (re.compile("|".join(re.escape(value) for value in
-                             sorted(variants, key=len, reverse=True)))
+        self._variants = tuple(sorted(variants, key=len, reverse=True))
+        self._known = (re.compile("|".join(map(re.escape, self._variants)))
                        if variants else None)
         self._holdback = max(8, max(map(len, variants), default=1) - 1)
         self._pending: dict[tuple[str, str | None, str | None], str] = {}
@@ -108,7 +113,23 @@ class NativeSecretRedactor:
     def _split(self, text: str, *, final: bool) -> tuple[str, str]:
         if final:
             return self.clean(text), ""
-        cut = max(0, len(text) - self._holdback)
+        return self._split_at(text, max(0, len(text) - self._holdback))
+
+    def release_text_tail(self, text: str) -> tuple[str, str]:
+        """Release idle plaintext while keeping any possible partial secret."""
+        partial = _GENERIC_TRAILING_PREFIX.search(text)
+        cut = partial.start() if partial else len(text)
+        for value in self._variants:
+            # A partial match must start within a proper prefix length of the end.
+            start = text.find(value[0], max(0, len(text) - len(value) + 1), cut)
+            while start != -1:
+                if value.startswith(text[start:]):
+                    cut = start
+                    break
+                start = text.find(value[0], start + 1, cut)
+        return self._split_at(text, cut)
+
+    def _split_at(self, text: str, cut: int) -> tuple[str, str]:
         if self._known is not None:
             for match in self._known.finditer(text):
                 if match.start() < cut < match.end():

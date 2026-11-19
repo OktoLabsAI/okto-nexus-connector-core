@@ -137,6 +137,10 @@ class ClaudeTerminalSession:
                             payload, operation_id=result.operation_id)
 
     async def events(self):
+        if self._closed or await asyncio.to_thread(self._terminal.poll) is not None:
+            return
+        yield RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
+                           self._stream_epoch, 0, "lifecycle", "core.claude_terminal_ready", {})
         while not self._closed and await asyncio.to_thread(self._terminal.poll) is None:
             result = await asyncio.to_thread(self._gate.take_finished_result, self._observe_finished)
             if result is not None:
@@ -145,6 +149,11 @@ class ClaudeTerminalSession:
 
     def owned_process_birth(self):
         return self._terminal.birth
+
+    def open_terminal_reader(self):
+        from .claude_terminal_reader import ClaudeTerminalReader
+
+        return ClaudeTerminalReader(self._terminal, self._redactor)
 
     async def send(self, _verb, _payload, _operation_id, *, expected_turn_id=None):
         raise EffectNotSent("This action is not available on the owned Claude terminal.")
