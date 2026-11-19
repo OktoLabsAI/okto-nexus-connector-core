@@ -66,6 +66,41 @@ def test_pi_node_cli_default_version_command_probes_package():
     assert direct._version_command == ["pi", "--version"]
 
 
+def test_hosted_pi_capacity_requires_an_exact_idle_and_settled_session():
+    connector = PiRpcConnector(command=("pi", "--mode", "rpc"))
+    session = HarnessSession("owned", "pi", "agent", STATUS_RUNNING, connector.capabilities, "start")
+    connector._session_id = session.session_id
+    connector._compatibility_report = {"native_version": "0.87.1"}
+    transport = Mock(spec_set=["_proc", "_hosted_rpc_ready", "is_alive", "request", "_response_ids_required"])
+    connector._transport = transport
+    transport._proc.poll.return_value = None
+    transport._hosted_rpc_ready = True
+    transport.is_alive.return_value = True
+    transport._response_ids_required = True
+    idle = {"sessionId": "owned", "isStreaming": False, "isCompacting": False, "pendingMessageCount": 0}
+    process = {"stop_observed": False, "exit_code": None}
+
+    transport.request.return_value = {"success": True, "data": idle}
+    assert connector.observe_lifecycle(session) == process | {"turn_state": "IDLE"}
+    connector._awaiting_settle_generation = 1
+    assert connector.observe_lifecycle(session) == process | {"turn_state": "BUSY"}
+    connector._awaiting_settle_generation = None
+
+    for busy in ({"isStreaming": True}, {"isCompacting": True}, {"pendingMessageCount": 1}):
+        transport.request.return_value = {"success": True, "data": idle | busy}
+        assert connector.observe_lifecycle(session) == process | {"turn_state": "BUSY"}
+
+    transport.request.return_value = {"success": True, "data": idle | {"sessionId": "sibling"}}
+    assert connector.observe_lifecycle(session) == process
+    transport.request.reset_mock()
+    transport._hosted_rpc_ready = False
+    assert connector.observe_lifecycle(session) == process
+    transport._hosted_rpc_ready = True
+    transport._proc.poll.return_value = 0
+    assert connector.observe_lifecycle(session) == {"stop_observed": True, "exit_code": 0}
+    transport.request.assert_not_called()
+
+
 def test_hosted_pi_rejects_a_stock_peer_that_cannot_prove_the_owner(tmp_path):
     peer = Path(__file__).parent / "fixtures" / "pi_rpc_ids_peer.py"
     connector = PiRpcConnector(

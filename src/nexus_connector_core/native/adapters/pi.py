@@ -1013,7 +1013,22 @@ class PiRpcConnector:
             transport._proc.kill()
 
     def observe_lifecycle(self, session):
-        return observe_owned_process(self._transport._proc if self._transport else None)
+        transport = self._transport
+        lifecycle = observe_owned_process(transport._proc if transport else None)
+        if lifecycle["exit_code"] is not None or not transport._hosted_rpc_ready:
+            return lifecycle
+        try:
+            state = self.read_owned_pi_state(session)
+        except NativeAdapterError:
+            return lifecycle
+        with self._session_lock:
+            if self._ended or self._transport is not transport:
+                return lifecycle
+            # AgentRuntime can report idle before Core observes agent_settled.
+            # Keep capacity fenced until both owners agree the turn is idle.
+            busy = (self._awaiting_settle_generation is not None or state["is_streaming"]
+                    or state["is_compacting"] or state["pending_message_count"] > 0)
+        return lifecycle | {"turn_state": "BUSY" if busy else "IDLE"}
 
     # ------------------------------------------------------------------ #
     # Command translation
