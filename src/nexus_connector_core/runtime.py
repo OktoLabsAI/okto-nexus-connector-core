@@ -784,7 +784,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         claude_target = operation.expected_claude_operation_id
         if claude_target is not None:
             self._external_operation_id(claude_target)
-            if (operation.verb != "steer" or operation.expected_turn_id is not None
+            if (operation.verb not in ("steer", "interrupt") or operation.expected_turn_id is not None
                     or run_id is not None or claude_target == operation.operation_id):
                 raise CoreError("VALIDATION_ERROR", "control")
         if run_id is not None and (
@@ -800,7 +800,9 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             native = {}
             if run_id is not None:
                 native["expected_pi_run_id"] = run_id
-                payload.update(native)
+            if claude_target is not None:
+                native["expected_claude_operation_id"] = claude_target
+            payload.update(native)
             semantic = Operation(operation.operation_id, operation.session_id, "turn.interrupt",
                                  payload, operation.expected_turn_id)
             return await self._send(semantic, context, "interrupt", native)
@@ -1050,6 +1052,9 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 raise CoreError("CAPABILITY_UNSUPPORTED", "control_target")
             if "expected_claude_operation_id" in payload and binding.adapter_id != "claude_stream":
                 raise CoreError("CAPABILITY_UNSUPPORTED", "control_target")
+            if (verb == "interrupt" and "expected_claude_operation_id" in payload
+                    and not callable(getattr(binding.native, "interrupt", None))):
+                raise CoreError("CAPABILITY_UNSUPPORTED", "control_target", retry_safe=True)
             if semantic.action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
 
@@ -1085,11 +1090,17 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 terminal_submission = getattr(binding.native, "terminal_submission", None)
                 if terminal_submission is not None:
                     from .native.claude_terminal_submission import ClaudeTerminalSubmission
-                    if (verb != "send_turn" or type(terminal_submission) is not ClaudeTerminalSubmission
+                    if (type(terminal_submission) is not ClaudeTerminalSubmission
                             or binding.adapter_id != "claude_stream"):
                         raise EffectNotSent("This session cannot submit through a Claude terminal.")
-                    await terminal_submission.submit(semantic.operation_id, payload["text"],
-                        lambda: self._verify_terminal_submission(binding, semantic, context))
+                    verify = lambda: self._verify_terminal_submission(binding, semantic, context)
+                    if verb == "send_turn":
+                        await terminal_submission.submit(semantic.operation_id, payload["text"], verify)
+                    elif verb == "interrupt":
+                        await binding.native.interrupt(semantic.operation_id, payload.get("expected_claude_operation_id"),
+                            verify=verify, fence=lambda: binding.effect_fence.check("interrupt"))
+                    else:
+                        raise EffectNotSent("This action is not available through the Claude terminal.")
                 else:
                     await binding.native.send(
                         verb, payload, semantic.operation_id,
@@ -3220,11 +3231,12 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         """A native hook can proceed only while the exact durable send is in flight."""
         key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
         receipt = await self._journal.get_receipt(key)
+        interrupt = operation.action == "turn.interrupt"
         try:
             self._check_drain_admission(operation.action)
             self._check_r4_context(context, operation.action, operation.session_id)
-            current = self._session(operation.session_id, context, require_live_lease=True)
-            binding.effect_fence.check("send_turn")
+            current = self._session(operation.session_id, context, require_live_lease=not interrupt)
+            binding.effect_fence.check("interrupt" if interrupt else "send_turn")
         except (CoreError, EffectNotSent):
             return False
         return (current is binding and receipt is not None

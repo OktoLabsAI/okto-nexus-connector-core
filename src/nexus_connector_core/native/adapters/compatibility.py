@@ -121,6 +121,11 @@ QUALIFIED_CONTROL_BUILD_IDENTITIES = set(QUALIFIED_BUILD_IDENTITIES)
 QUALIFIED_BUILDS.add(("claude_code", "2.1.288", "win32", "x86_64",
     "sha256:84304f7d4b0cd0ebcbe8318695a260151b48991a6659c3366fdd5da290c0ab91"))
 
+# SI-026: the exact Windows binary opened and completed fixture model turns
+# through both managed launch paths. Keep raw stream controls separately gated.
+QUALIFIED_BUILDS.add(("claude_code", "2.1.328", "win32", "x86_64",
+    "sha256:551d573567b46ce78aba1b20beb20ac2494f5f8adffd1b41dfd269a96e1d9839"))
+
 
 def qualified_capabilities(kind, substrate, report):
     if substrate == "attach":

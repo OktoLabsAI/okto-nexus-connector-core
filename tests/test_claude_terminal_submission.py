@@ -6,6 +6,7 @@ import json
 import time
 from contextlib import asynccontextmanager
 from dataclasses import replace
+from types import SimpleNamespace
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -101,6 +102,47 @@ class _Factory:
 
     async def observe(self):
         return ("STOPPED" if self.stopped else "RUNNING", "IDLE")
+
+
+def test_terminal_interrupt_rechecks_generation_at_write_and_never_repeats_escape():
+    async def run():
+        state = SimpleNamespace(generation=None, bytes=[], lose_ack=False)
+
+        class Terminal:
+            def write(self, data, *, before_write):
+                before_write()
+                state.bytes.append(data)
+                if state.lose_ack:
+                    raise OSError("A byte may have been accepted before the error.")
+
+        native = ClaudeTerminalSession(Terminal(), SimpleNamespace(read_generation=lambda _observe: state.generation),
+            native_id="owned-terminal", session_id="session", stream_epoch="stream", context=object(),
+            redactor=NativeSecretRedactor(), observe_finished=lambda *_: None,
+            observe_generation=lambda *_: None, allow_interrupt=lambda: True)
+        native.terminal_submission._active_operation = "original"
+
+        async def verified():
+            return True
+
+        async def interrupt(operation):
+            await native.interrupt(operation, "original", verify=verified, fence=lambda: None)
+
+        with pytest.raises(EffectNotSent, match="changed before"):
+            await interrupt("not-yet-generating")
+        state.generation = ("replacement", object())
+        with pytest.raises(EffectNotSent, match="changed before"):
+            await interrupt("target-changed")
+        assert state.bytes == []
+        state.generation = ("original", object())
+        state.lose_ack = True
+        with pytest.raises(CoreError, match="OUTCOME_UNKNOWN") as unknown:
+            await interrupt("possible-effect")
+        assert unknown.value.possible_effect
+        with pytest.raises(EffectNotSent, match="no longer accepts"):
+            await interrupt("second-intent")
+        assert state.bytes == [b"\x1b"]
+
+    asyncio.run(run())
 
 
 def test_saved_claude_open_is_bound_to_one_exact_native_context(tmp_path):

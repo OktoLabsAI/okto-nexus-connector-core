@@ -15,6 +15,7 @@ from ..models import CoreError, EffectRejected
 from .claude_saved_history import ClaudeSavedHistory, claude_history_path, observe_claude_saved_history
 from .claude_terminal_generation import ClaudeGenerationTrace, observe_claude_generation
 from .claude_terminal_owner import (
+    has_default_claude_interrupt_key,
     observe_claude_finished_turn,
     observe_claude_interrupted_turn,
     observe_claude_terminal_owner,
@@ -142,6 +143,8 @@ async def open_saved_claude_terminal(
             return OwnedWindowsTerminal(argv, cwd=prepared.cwd, env=child_env,
                                        container_id=identity.container_id, birth_observer=record_birth)
 
+        default_keys = partial(has_default_claude_interrupt_key, history)
+        allow_interrupt = default_keys if await asyncio.to_thread(default_keys) else None
         terminal = await process_launch.produce(validate_authority=revalidate, start=start)
         birth = await asyncio.to_thread(lambda: terminal.birth)
         deadline = time.monotonic() + _START_TIMEOUT
@@ -161,6 +164,7 @@ async def open_saved_claude_terminal(
                     observe_finished=partial(observe_claude_finished_turn, terminal, history, birth),
                     observe_interrupted=partial(observe_claude_interrupted_turn, terminal, history, birth),
                     observe_generation=generation, require_current=grant.require_current,
+                    allow_interrupt=allow_interrupt,
                     resources=(*resources, trace) if trace is not None else resources)
             await asyncio.sleep(.1)
         raise EffectRejected("The Claude terminal did not confirm the exact saved context.",

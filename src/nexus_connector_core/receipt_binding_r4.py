@@ -71,7 +71,7 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
             key = 'text' if action == 'turn.steer' else 'reason'
             if claude_target is None and valid_pi_run_id(run_id):
                 target = {'expected_pi_run_id': run_id}
-            elif claude_target is not None and run_id is None and action == 'turn.steer' and claude_target != frame['operation_id']:
+            elif claude_target is not None and run_id is None and claude_target != frame['operation_id']:
                 target = {'expected_claude_operation_id': validate_external_id(claude_target, stage='r4_receipt_binding')}
             else:
                 raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')

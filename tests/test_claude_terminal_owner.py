@@ -10,6 +10,7 @@ import pytest
 from nexus_connector_core import ProcessBirthEvidence
 from nexus_connector_core.native.claude_saved_history import ClaudeSavedHistory, claude_history_path
 from nexus_connector_core.native.claude_terminal_owner import (
+    has_default_claude_interrupt_key,
     observe_claude_finished_turn,
     observe_claude_interrupted_turn,
     observe_claude_terminal_idle_since,
@@ -144,3 +145,17 @@ def test_interrupt_requires_the_latest_native_abort_and_its_exact_admitted_promp
     publish(prompt, partial, marker)
     registry.terminal.poll.side_effect = [None, None, None, 0]
     assert read() is None
+
+
+def test_escape_requires_the_default_native_editor_and_keybindings(registry):
+    home = registry.location.parent.parent
+    state = home / ".claude.json"
+    assert not has_default_claude_interrupt_key(registry.history)
+    state.write_text("{}", encoding="utf-8")
+    assert has_default_claude_interrupt_key(registry.history)
+    keys = home / "keybindings.json"
+    keys.write_text('{"bindings":[]}', encoding="utf-8")
+    assert not has_default_claude_interrupt_key(registry.history)
+    keys.unlink()
+    state.write_text('{"editorMode":"vim"}', encoding="utf-8")
+    assert not has_default_claude_interrupt_key(registry.history)

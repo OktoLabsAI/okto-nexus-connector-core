@@ -23,6 +23,9 @@ class ClaudeTerminalSubmission:
     def active_turn(self):
         return self._active_operation is not None
 
+    def owns_turn(self, operation_id):
+        return operation_id == self._active_operation
+
     def confirm_terminal(self, operation_id):
         """Release this slot only when the exact terminal event is durable."""
         if operation_id == self._active_operation:
@@ -106,7 +109,8 @@ class ClaudeTerminalSession:
     """Core's native session port for an exact, already verified Claude terminal."""
 
     def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished,
-                 observe_interrupted=None, observe_generation=None, require_current=None, resources=()):
+                 observe_interrupted=None, observe_generation=None, require_current=None,
+                 allow_interrupt=None, resources=()):
         if not isinstance(redactor, NativeSecretRedactor):
             raise TypeError("An owned Claude terminal requires native secret redaction.")
         if not callable(observe_finished):
@@ -121,6 +125,9 @@ class ClaudeTerminalSession:
         self._observe_finished = observe_finished
         self._observe_interrupted = observe_interrupted
         self._observe_generation = observe_generation
+        self._require_current = require_current
+        self._allow_interrupt = allow_interrupt
+        self._interrupt_target = None
         self._resources = tuple(resources)
         self._close_lock = asyncio.Lock()
         self._closed = False
@@ -159,9 +166,12 @@ class ClaudeTerminalSession:
                                                      skip_operation=reported_generation)
                 if generation is not None:
                     reported_generation, _ = generation
+                    payload = {"schema_version": 1}
+                    if self._allow_interrupt is not None and await asyncio.to_thread(self._allow_interrupt):
+                        payload["interruptible"] = True
                     yield RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
                                        self._stream_epoch, 0, "tool_activity", "core.claude_terminal_generating",
-                                       {"schema_version": 1}, operation_id=reported_generation)
+                                       payload, operation_id=reported_generation)
             await asyncio.sleep(0.1)
 
     def owned_process_birth(self):
@@ -174,6 +184,34 @@ class ClaudeTerminalSession:
 
     async def send(self, _verb, _payload, _operation_id, *, expected_turn_id=None):
         raise EffectNotSent("This action is not available on the owned Claude terminal.")
+
+    async def interrupt(self, operation_id, target, *, verify, fence):
+        """Send one Escape to the exact live generating prompt."""
+        if (self._observe_generation is None or self._allow_interrupt is None or not target
+                or not self.terminal_submission.owns_turn(target) or not await verify()):
+            raise EffectNotSent("The reviewed Claude turn is unavailable.", code="STALE_TURN")
+
+        def at_write():
+            if self._closed or self._interrupt_target == target:
+                raise EffectNotSent("The reviewed Claude turn no longer accepts an interrupt.", code="STALE_TURN")
+            if self._require_current is not None:
+                self._require_current()
+            if not self._allow_interrupt():
+                raise EffectNotSent("The Claude terminal key configuration changed.", code="CAPABILITY_UNSUPPORTED")
+            evidence = self._gate.read_generation(self._observe_generation)
+            if (evidence is None or evidence[0] != target
+                    or not self.terminal_submission.owns_turn(target)):
+                raise EffectNotSent("The reviewed Claude turn changed before the interrupt.", code="STALE_TURN")
+            fence()
+            self._interrupt_target = target
+
+        try:
+            await asyncio.to_thread(self._terminal.write, b"\x1b", before_write=at_write)
+        except (CoreError, OSError) as error:
+            if self._interrupt_target == target and not isinstance(error, EffectNotSent):
+                raise CoreError("OUTCOME_UNKNOWN", "claude_terminal_interrupt",
+                                possible_effect=True, operation_id=operation_id) from error
+            raise
 
     async def observe(self):
         if await asyncio.to_thread(self._terminal.poll) is not None:

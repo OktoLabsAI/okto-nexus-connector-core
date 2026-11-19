@@ -174,12 +174,14 @@ class OwnedWindowsTerminal:
         """Return the next frame, None at EOF, or raise on timeout or an expired cursor."""
         return self._output.read(after_sequence, timeout)
 
-    def write(self, data):
+    def write(self, data, *, before_write=None):
         if type(data) is not bytes or not 1 <= len(data) <= _INPUT_BYTES:
             raise ValueError("Invalid terminal input.")
         with self._write_lock:
             if self._closing.is_set() or self.poll() is not None:
                 raise CoreError("NATIVE_UNAVAILABLE", _STAGE)
+            if before_write is not None:
+                before_write()
             remaining = memoryview(data)
             while remaining:
                 size = os.write(self._input, remaining)

@@ -95,6 +95,34 @@ def _registry_version(registry, home, workspace, history):
     return file_version(plain_path(registry, directory=False))
 
 
+def has_default_claude_interrupt_key(history):
+    """An Escape effect is qualified only with the default editor and shortcuts."""
+    home = Path(history.state_home)
+    try:
+        (home / "keybindings.json").lstat()
+        return False
+    except FileNotFoundError:
+        pass
+    except OSError:
+        return False
+    path = home / ".claude.json"
+    try:
+        version = file_version(plain_path(path, directory=False))
+        if not 0 < version[2] <= 2 * 1024 * 1024:
+            return False
+        with path.open("rb") as stream:
+            opened = file_version(os.fstat(stream.fileno()))
+            if opened[:4] != version[:4]:
+                return False
+            document = strict_json(stream.read(version[2] + 1).decode("utf-8"))
+            if file_version(os.fstat(stream.fileno())) != opened:
+                return False
+        return (file_version(plain_path(path, directory=False)) == version
+                and type(document) is dict and document.get("editorMode", "normal") == "normal")
+    except (OSError, ValueError, TypeError, RecursionError):
+        return False
+
+
 def observe_claude_finished_turn(terminal, history, birth, output_sha256):
     """Corroborate success with a flushed turn end and matching transcript text."""
     idle_since = observe_claude_terminal_idle_since(terminal, history, birth)
