@@ -111,6 +111,7 @@ from .capacity_codec import (
     CAPACITY_FRAME_TYPES, CAPACITY_REQUEST_TYPES, encode_capacity_frame, decode_capacity_frame,
 )
 from .composition import create_runtime
+from .native.claude_terminal_resume import ClaudeTerminalResumeGrant
 from .catalog import (
     RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog, get_runtime_connection_contract,
     CATALOG_FORMAT_VERSION,
@@ -199,7 +200,8 @@ __all__ = [
     "OperationReceipt", "OperationKey", "SessionKey", "ClaimedSession", "SessionClaimPage", "SessionLeaseState", "OwnedSlotReservation", "OwnedSlotState", "r4_resource_release_digest", "project_r4_resource_release", "OwnedSlotPage", "ProcessBirthEvidence", "ProcessBirthRecord", "ProcessBirthObservation", "RuntimeEvent", "EventCursor", "StorageStatus", "RuntimeSnapshot", "intent_hash", "submit_frame_intent_hash",
     "InstallationCandidate", "LaunchIntent", "PreparedLaunch",
     "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
-    "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ReconcileRequest",
+    "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ClaudeTerminalResumeGrant",
+    "ReconcileRequest",
     "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
     "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",
     "RuntimeDescriptor", "RuntimeCatalog", "get_runtime_catalog", "get_runtime_connection_contract", "CATALOG_FORMAT_VERSION",

@@ -24,6 +24,10 @@ from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
 from .adapters.compatibility import qualified_build, can_probe_protocol
 from .claude_history_identity import CLAUDE_HISTORY_IDENTITY, project_claude_history
 from .claude_saved_history import ClaudeSavedHistory
+from .claude_terminal_resume import (
+    ClaudeTerminalResumeGrant, open_saved_claude_terminal, require_claude_resume_grant, require_reviewed_claude_terminal,
+)
+from .claude_terminal_submission import ClaudeTerminalSession
 from .pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_operation
 
 #: Reserved capacity for containment/observation calls (C2/R02): physical
@@ -865,6 +869,8 @@ class CopiedAdapterFactory:
                  codex_client_info: Mapping[str, str] | None = None,
                  codex_resume: Callable[[PreparedLaunch, str, ExecutionContext],
                                         Awaitable[CodexResumeGrant | None]] | None = None,
+                 claude_resume: Callable[[PreparedLaunch, str, ExecutionContext],
+                                         Awaitable[ClaudeTerminalResumeGrant | None]] | None = None,
                  native_approvals_enabled: bool = False,
                  native_approvals_from_lease: bool = False,
                  clock: Callable[[], float] | None = None):
@@ -878,6 +884,7 @@ class CopiedAdapterFactory:
         self._codex_client_info = (dict(codex_client_info)
                                    if codex_client_info is not None else None)
         self._codex_resume = codex_resume
+        self._claude_resume = claude_resume
         self._native_approvals_enabled = native_approvals_enabled
         self._native_approvals_from_lease = native_approvals_from_lease
         # C3/S01: the spawn gate ALWAYS has a clock - None never means
@@ -913,13 +920,15 @@ class CopiedAdapterFactory:
                    process_birth_recorder: Callable[[ProcessBirthEvidence], Awaitable[None]] | None = None,
                    process_launch=None,
                    resume_thread_id: str | None = None,
-                   ) -> CopiedAdapterSession:
+                   resume_claude_session_id: str | None = None,
+                   ) -> CopiedAdapterSession | ClaudeTerminalSession:
         resources = []
         try:
             return await self._open(prepared, session_id, context, stream_epoch=stream_epoch,
                                     opening_guard=opening_guard, resources=resources,
                                     process_birth_recorder=process_birth_recorder,
-                                    process_launch=process_launch, resume_thread_id=resume_thread_id)
+                                    process_launch=process_launch, resume_thread_id=resume_thread_id,
+                                    resume_claude_session_id=resume_claude_session_id)
         except BaseException:
             for resource in resources:
                 resource.close()
@@ -927,13 +936,20 @@ class CopiedAdapterFactory:
 
     async def _open(self, prepared: PreparedLaunch, session_id: str,
                     context: ExecutionContext, *, stream_epoch: str, opening_guard, resources,
-                    process_birth_recorder=None, process_launch=None, resume_thread_id=None):
+                    process_birth_recorder=None, process_launch=None, resume_thread_id=None, resume_claude_session_id=None):
         spec = adapter_spec(prepared.intent.adapter_id)
         registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
             raise CoreError("CAPABILITY_UNSUPPORTED", "open", retry_safe=True)
         if resume_thread_id is not None and (spec.native_kind != "codex" or registered is not None):
             raise CoreError("CAPABILITY_UNSUPPORTED", "codex_resume", retry_safe=True)
+        if resume_claude_session_id is not None:
+            if (spec.native_kind != "claude_code" or registered is not None or self._claude_resume is None
+                    or self._native_approvals_enabled or (self._native_approvals_from_lease
+                        and context.r4_authority is not None
+                        and {"approval.decide", "input.provide"}.issubset(context.allowed_actions))):
+                raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
+            require_reviewed_claude_terminal(prepared, process_launch, process_birth_recorder, opening_guard)
         # PC11: refuse productive work before secrets/spawn when the host's
         # containment backend cannot honor its contract. Never a silent
         # fallback to bare kill(pid).
@@ -1014,6 +1030,12 @@ class CopiedAdapterFactory:
         content_snapshot = await asyncio.to_thread(_launch_signature)
         kind = spec.native_kind
         resume_grant = None
+        claude_grant = None
+        if resume_claude_session_id is not None:
+            claude_grant = await self._claude_resume(prepared, session_id, context)
+            require_claude_resume_grant(claude_grant, resume_claude_session_id, prepared, session_id, context)
+            await asyncio.to_thread(claude_grant.require_current)
+            await _validate_frontier("claude_resume")
         if kind == "codex" and registered is None:
             resume_grant = (await self._codex_resume(prepared, session_id, context)
                             if self._codex_resume is not None else None)
@@ -1115,6 +1137,12 @@ class CopiedAdapterFactory:
             elif "NEXUS" in name.upper():
                 raise CoreError("BINDING_NOT_AUTHORIZED", "environment",
                                 retry_safe=True)
+        if claude_grant is not None:
+            return await open_saved_claude_terminal(
+                prepared, command, env, session_id, context, stream_epoch, grant=claude_grant,
+                process_launch=process_launch, process_birth_recorder=process_birth_recorder,
+                revalidate_launch=_revalidate_launch, resources=resources,
+                verify_content=lambda: _revalidate_content('claude_resume', content_snapshot))
         native_action = None
         if registered is not None:
             connector = load_adapter(spec.adapter_id)(command=command, cwd=prepared.cwd, env=env)

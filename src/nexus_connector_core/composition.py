@@ -41,6 +41,7 @@ def create_runtime(
     cleanup_budget_seconds: float = 5.0,
     codex_client_info: Optional[Mapping[str, str]] = None,
     codex_resume=None,
+    claude_resume=None,
     pi_native_action=None,
     pi_hosted_rpc: bool = False,
     native_approvals_enabled: bool = False,
@@ -72,6 +73,9 @@ def create_runtime(
         Trusted-host callbacks: validated Codex client identity, the
         resume-grant seam and the scoped Pi native-action launch.
         An open with an explicit resume thread requires a matching grant.
+    claude_resume:
+        Trusted-host callback for an exact retired Claude context and reviewed
+        profile. An explicit saved Claude opening requires a matching grant.
     pi_hosted_rpc:
         Trusted opt-in to the reviewed Pi CLI/renderer owner handoff. An
         incompatible selected Pi launch is refused before native execution.
@@ -100,7 +104,7 @@ def create_runtime(
         raise TypeError("native_approvals_from_lease must be bool")
     if type(pi_hosted_rpc) is not bool or (pi_hosted_rpc and native_factory is not None):
         raise TypeError("pi_hosted_rpc requires a boolean and the owned adapter factory")
-    for callback, name in ((codex_resume, "codex_resume"),
+    for callback, name in ((codex_resume, "codex_resume"), (claude_resume, "claude_resume"),
                            (pi_native_action, "pi_native_action")):
         if callback is not None and not callable(callback):
             raise TypeError(f"{name} must be callable when provided")
@@ -117,6 +121,7 @@ def create_runtime(
             pi_hosted_rpc=pi_hosted_rpc,
             codex_client_info=codex_client_info,
             codex_resume=codex_resume,
+            claude_resume=claude_resume,
             native_approvals_enabled=native_approvals_enabled,
             native_approvals_from_lease=native_approvals_from_lease,
             clock=effective_clock.monotonic)

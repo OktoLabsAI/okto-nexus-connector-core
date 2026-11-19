@@ -13,9 +13,10 @@ _STAGE = "claude_terminal_submission"
 
 
 class ClaudeTerminalSubmission:
-    def __init__(self, terminal, prompt_gate):
+    def __init__(self, terminal, prompt_gate, *, require_current=None):
         self._terminal = terminal
         self._gate = prompt_gate
+        self._require_current = require_current
         self._active_operation = None
 
     def active_turn(self):
@@ -32,7 +33,12 @@ class ClaudeTerminalSubmission:
         paste = _terminal_prompt(text)
         if paste is None:
             raise EffectNotSent("Only bounded plain text can be sent as a prompt.", code="VALIDATION_ERROR")
-        if not await verify():
+        async def verify_profile_and_authority():
+            if self._require_current is not None:
+                await asyncio.to_thread(self._require_current)
+            return await verify()
+
+        if not await verify_profile_and_authority():
             raise EffectNotSent("The durable Claude submission or its authority changed.", code="BINDING_NOT_AUTHORIZED")
 
         loop = asyncio.get_running_loop()
@@ -42,7 +48,7 @@ class ClaudeTerminalSubmission:
         def authorize_hook():
             if cancelled.is_set():
                 return False
-            future = asyncio.run_coroutine_threadsafe(verify(), loop)
+            future = asyncio.run_coroutine_threadsafe(verify_profile_and_authority(), loop)
             try:
                 allowed = future.result(timeout=min(2.0, max(0, deadline - time.monotonic()))) is True
                 return allowed and not cancelled.is_set()
@@ -95,7 +101,8 @@ def _terminal_prompt(text):
 class ClaudeTerminalSession:
     """Core's native session port for an exact, already verified Claude terminal."""
 
-    def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished):
+    def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished,
+                 require_current=None, resources=()):
         if not isinstance(redactor, NativeSecretRedactor):
             raise TypeError("An owned Claude terminal requires native secret redaction.")
         if not callable(observe_finished):
@@ -108,9 +115,10 @@ class ClaudeTerminalSession:
         self._context = context
         self._redactor = redactor
         self._observe_finished = observe_finished
+        self._resources = tuple(resources)
         self._close_lock = asyncio.Lock()
         self._closed = False
-        self.terminal_submission = ClaudeTerminalSubmission(terminal, gate)
+        self.terminal_submission = ClaudeTerminalSubmission(terminal, gate, require_current=require_current)
 
     def _completion_event(self, result):
         payload = {"delivery_phase": "terminal",
@@ -149,6 +157,8 @@ class ClaudeTerminalSession:
             prior_exit = await asyncio.to_thread(self._terminal.poll)
             await asyncio.to_thread(self._terminal.close)
             await asyncio.to_thread(self._gate.__exit__, None, None, None)
+            for resource in self._resources:
+                await asyncio.to_thread(resource.close)
             self._closed = True
             return "graceful" if prior_exit == 0 else "forced"
 

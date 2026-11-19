@@ -23,6 +23,8 @@ from .claude_history_identity import claude_session_uuid
 _ENV_KEY = "OKTO_CLAUDE_PROMPT_HOOK_TOKEN"
 _PATH = "/prompt"
 _COMPLETION_PATH = "/completion"
+_START_PATH = "/start"
+_START_URL = "OKTO_CLAUDE_TERMINAL_START_URL"
 _MAX_PROMPT_BYTES = 64 * 1024
 _MAX_REQUEST_BYTES = 448 * 1024
 # One MiB of result text can expand to six times that size in JSON.
@@ -86,7 +88,7 @@ class ClaudeTerminalPromptGate:
     permit spent. Reconciliation belongs to the host journal.
     """
 
-    def __init__(self, session_uuid, cwd, permission_mode, authorize, *, observe_results=False):
+    def __init__(self, session_uuid, cwd, permission_mode, authorize, *, observe_results=False, startup=None):
         if (claude_session_uuid(session_uuid) is None or type(cwd) is not str or not Path(cwd).is_absolute()
                 or type(permission_mode) is not str or not permission_mode or not callable(authorize)
                 or type(observe_results) is not bool):
@@ -105,6 +107,8 @@ class ClaudeTerminalPromptGate:
         self._prompt_ids = set()
         self._closed = False
         self._server = None
+        self._startup = startup
+        self.startup_confirmed = threading.Event()
 
     def __enter__(self):
         gate = self
@@ -173,7 +177,24 @@ class ClaudeTerminalPromptGate:
         if self._observe_results:
             for name in ("Stop", "StopFailure"):
                 hooks[name] = [{"hooks": [dict(hook, url=root + _COMPLETION_PATH)]}]
-        return {"hooks": hooks}, {_ENV_KEY: self._secret}
+        environment = {_ENV_KEY: self._secret}
+        if self._startup is not None:
+            powershell, _ = self._startup
+            # Fixed executable and script. Neither the history path nor a
+            # credential enters the command or the command's argument list.
+            script = (
+                "$ErrorActionPreference='Stop'; "
+                "$payload=[Console]::In.ReadToEnd(); "
+                f"$header=@{{Authorization=('Bearer '+$env:{_ENV_KEY})}}; "
+                f"Invoke-WebRequest -UseBasicParsing -Method Post -Uri $env:{_START_URL} "
+                "-Headers $header -ContentType 'application/json' -Body $payload -TimeoutSec 3 | Out-Null"
+            )
+            hooks["SessionStart"] = [{"matcher": "resume", "hooks": [{
+                "type": "command", "command": powershell,
+                "args": ["-NoProfile", "-NonInteractive", "-Command", script], "timeout": 5,
+            }]}]
+            environment[_START_URL] = root + _START_PATH
+        return {"hooks": hooks}, environment
 
     def arm(self, operation_id, text, *, ttl=10, check=None):
         validate_external_id(operation_id, stage=_STAGE)
@@ -183,7 +204,8 @@ class ClaudeTerminalPromptGate:
             raise CoreError("VALIDATION_ERROR", _STAGE)
         with self._lock:
             now = time.monotonic()
-            if (self._server is None or operation_id in self._used or self._pending_result is not None
+            if (self._server is None or (self._startup is not None and not self.startup_confirmed.is_set())
+                    or operation_id in self._used or self._pending_result is not None
                     or (self._permit is not None and self._permit.deadline > now)):
                 raise CoreError("SESSION_CONFLICT", _STAGE)
             self._used.add(operation_id)
@@ -200,7 +222,8 @@ class ClaudeTerminalPromptGate:
 
     def _request(self, handler):
         completion = self._observe_results and handler.path == _COMPLETION_PATH
-        if handler.path != _PATH and not completion:
+        startup = self._startup is not None and handler.path == _START_PATH
+        if handler.path != _PATH and not completion and not startup:
             return 404, {}, None
         token = handler.headers.get_all("Authorization", [])
         if (len(token) != 1 or not token[0].isascii()
@@ -221,6 +244,15 @@ class ClaudeTerminalPromptGate:
             return 400, {}, None
         if completion:
             return self._receive_completion(payload), {}, None
+        if startup:
+            _, path = self._startup
+            if (payload.get("hook_event_name") == "SessionStart" and payload.get("source") == "resume"
+                    and payload.get("session_id") == self._session_uuid
+                    and type(payload.get("cwd")) is str and Path(payload["cwd"]) == self._cwd
+                    and type(payload.get("transcript_path")) is str and Path(payload["transcript_path"]) == path):
+                self.startup_confirmed.set()
+                return 200, {}, None
+            return 409, {}, None
         if (payload.get("hook_event_name") != "UserPromptSubmit"
                 or payload.get("session_id") != self._session_uuid
                 or payload.get("permission_mode") != self._permission_mode

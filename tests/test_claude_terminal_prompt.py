@@ -73,3 +73,26 @@ def test_unavailable_issuer_does_not_leave_a_replayable_prompt(tmp_path):
         assert _call(hook["url"], bearer, body)[1]["decision"] == "block"
         with pytest.raises(CoreError, match="SESSION_CONFLICT"):
             gate.arm("server-turn-uncertain", body["prompt"])
+
+
+def test_prompt_arming_waits_for_the_exact_resumed_transcript(tmp_path):
+    session_uuid = str(uuid4())
+    transcript = tmp_path / f"{session_uuid}.jsonl"
+    with ClaudeTerminalPromptGate(session_uuid, str(tmp_path), "plan", lambda _: True,
+                                  startup=("powershell.exe", transcript)) as gate:
+        settings, env = gate.launch_settings()
+        hook, = settings["hooks"]["UserPromptSubmit"][0]["hooks"]
+        token = env[hook["allowedEnvVars"][0]]
+        url = env["OKTO_CLAUDE_TERMINAL_START_URL"]
+        body = {"hook_event_name": "SessionStart", "source": "resume", "session_id": session_uuid,
+                "cwd": str(tmp_path), "transcript_path": str(transcript)}
+        assert _call(url, "wrong-token", body)[0] == 403
+        for changed in ({"source": "fork"}, {"session_id": str(uuid4())},
+                        {"cwd": str(tmp_path.parent)}, {"transcript_path": str(tmp_path / "other.jsonl")}):
+            assert _call(url, token, body | changed)[0] == 409
+        assert not gate.startup_confirmed.is_set()
+        with pytest.raises(CoreError, match="SESSION_CONFLICT"):
+            gate.arm("blocked-until-confirmation", "Approved input.")
+        assert _call(url, token, body) == (200, {})
+        assert gate.startup_confirmed.is_set()
+        assert gate.arm("approved-after-confirmation", "Approved input.")
