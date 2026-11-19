@@ -35,6 +35,11 @@ def observe_claude_terminal_idle_since(
     terminal, history: ClaudeSavedHistory, birth: ProcessBirthEvidence,
 ) -> int | None:
     """Return the native idle transition timestamp on the current owned process."""
+    return observe_claude_terminal_status(terminal, history, birth, "idle")
+
+
+def observe_claude_terminal_status(terminal, history, birth, status):
+    """Verify a specific status in the live process's native registry record."""
     if (birth.platform != "win32" or birth.containment != "windows_job"
             or type(birth.pid) is not int or birth.pid <= 0
             or not re.fullmatch(r"filetime:[a-f0-9]{16}", birth.birth_token)
@@ -62,7 +67,7 @@ def observe_claude_terminal_idle_since(
         if type(record) is not dict:
             return None
         cwd = record.get("cwd")
-        idle_since = record.get("statusUpdatedAt")
+        changed_at = record.get("statusUpdatedAt")
         if (
             type(record.get("pid")) is int and record["pid"] == birth.pid
             and record.get("procStart") == str(int(birth.birth_token.removeprefix("filetime:"), 16))
@@ -70,12 +75,12 @@ def observe_claude_terminal_idle_since(
             and type(cwd) is str and Path(cwd) == workspace
             and record.get("version") == _REVIEWED_VERSION
             and record.get("kind") == "interactive" and record.get("entrypoint") == "cli"
-            and record.get("status") == "idle"
-            and type(idle_since) is int and idle_since > 0
+            and record.get("status") == status
+            and type(changed_at) is int and changed_at > 0
             and _registry_version(registry, home, workspace, history) == original
             and terminal.birth == birth and terminal.poll() is None
         ):
-            return idle_since
+            return changed_at
     except (OSError, ValueError, TypeError, RecursionError):
         return None
     return None

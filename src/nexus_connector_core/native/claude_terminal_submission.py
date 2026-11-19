@@ -106,7 +106,7 @@ class ClaudeTerminalSession:
     """Core's native session port for an exact, already verified Claude terminal."""
 
     def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished,
-                 observe_interrupted=None, require_current=None, resources=()):
+                 observe_interrupted=None, observe_generation=None, require_current=None, resources=()):
         if not isinstance(redactor, NativeSecretRedactor):
             raise TypeError("An owned Claude terminal requires native secret redaction.")
         if not callable(observe_finished):
@@ -120,6 +120,7 @@ class ClaudeTerminalSession:
         self._redactor = redactor
         self._observe_finished = observe_finished
         self._observe_interrupted = observe_interrupted
+        self._observe_generation = observe_generation
         self._resources = tuple(resources)
         self._close_lock = asyncio.Lock()
         self._closed = False
@@ -147,11 +148,20 @@ class ClaudeTerminalSession:
             return
         yield RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
                            self._stream_epoch, 0, "lifecycle", "core.claude_terminal_ready", {})
+        reported_generation = None
         while not self._closed and await asyncio.to_thread(self._terminal.poll) is None:
             result = await asyncio.to_thread(self._gate.take_finished_result, self._observe_finished,
                                              self._observe_interrupted)
             if result is not None:
                 yield self._completion_event(result)
+            elif self._observe_generation is not None:
+                generation = await asyncio.to_thread(self._gate.read_generation, self._observe_generation,
+                                                     skip_operation=reported_generation)
+                if generation is not None:
+                    reported_generation, _ = generation
+                    yield RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
+                                       self._stream_epoch, 0, "tool_activity", "core.claude_terminal_generating",
+                                       {"schema_version": 1}, operation_id=reported_generation)
             await asyncio.sleep(0.1)
 
     def owned_process_birth(self):

@@ -352,6 +352,18 @@ class ClaudeTerminalPromptGate:
             self._pending_result = None
             return result
 
+    def read_generation(self, observe, *, skip_operation=None):
+        """Bind current native generation to the authenticated pending prompt."""
+        with self._lock:
+            pending = self._pending_result
+            if pending is None or self._candidate is not None or pending.permit.operation_id == skip_operation:
+                return None
+        evidence = observe(pending.prompt_id, pending.permit.digest, pending.admitted_ms)
+        with self._lock:
+            if evidence is None or pending is not self._pending_result or self._candidate is not None:
+                return None
+            return pending.permit.operation_id, evidence
+
 
 def _valid_prompt_id(value):
     return type(value) is str and 1 <= len(value) <= 160 and value.isascii() and value.isprintable()

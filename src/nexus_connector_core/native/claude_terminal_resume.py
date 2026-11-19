@@ -13,6 +13,7 @@ from secrets import token_hex
 
 from ..models import CoreError, EffectRejected
 from .claude_saved_history import ClaudeSavedHistory, claude_history_path, observe_claude_saved_history
+from .claude_terminal_generation import ClaudeGenerationTrace, observe_claude_generation
 from .claude_terminal_owner import (
     observe_claude_finished_turn,
     observe_claude_interrupted_turn,
@@ -104,6 +105,7 @@ async def open_saved_claude_terminal(
     revalidate = partial(revalidate_launch, _STAGE)
     await asyncio.to_thread(gate.__enter__)
     terminal = None
+    trace = None
     loop = asyncio.get_running_loop()
     try:
         settings, hook_env = gate.launch_settings()
@@ -113,6 +115,12 @@ async def open_saved_claude_terminal(
         redactor = NativeSecretRedactor(credential_values(child_env))
         argv = (command[0], "--resume", history.session_uuid, *command[1 + len(_STREAM_FRONT):],
                 "--settings", json.dumps(settings, separators=(",", ":")))
+        try:
+            trace = await asyncio.to_thread(ClaudeGenerationTrace)
+        except (CoreError, OSError):
+            pass  # The terminal still supports read attachment and canonical prompts.
+        if trace is not None:
+            argv += trace.arguments()
 
         def record_birth(evidence):
             pending = process_birth_recorder(evidence)
@@ -146,12 +154,14 @@ async def open_saved_claude_terminal(
                 await asyncio.to_thread(grant.require_current)
                 await asyncio.to_thread(verify_content)
                 revalidate()
+                generation = partial(observe_claude_generation, terminal, history, birth, trace) if trace else None
                 return ClaudeTerminalSession(
                     terminal, gate, native_id="claude_" + token_hex(16), session_id=session_id,
                     stream_epoch=stream_epoch, context=context, redactor=redactor,
                     observe_finished=partial(observe_claude_finished_turn, terminal, history, birth),
                     observe_interrupted=partial(observe_claude_interrupted_turn, terminal, history, birth),
-                    require_current=grant.require_current, resources=resources)
+                    observe_generation=generation, require_current=grant.require_current,
+                    resources=(*resources, trace) if trace is not None else resources)
             await asyncio.sleep(.1)
         raise EffectRejected("The Claude terminal did not confirm the exact saved context.",
                              failure_code="NATIVE_STARTUP_FAILED")
@@ -160,7 +170,11 @@ async def open_saved_claude_terminal(
             if terminal is not None:
                 await asyncio.to_thread(terminal.close)
         finally:
-            await asyncio.to_thread(gate.__exit__, None, None, None)
+            try:
+                await asyncio.to_thread(gate.__exit__, None, None, None)
+            finally:
+                if trace is not None:
+                    await asyncio.to_thread(trace.close)
         if terminal is not None and isinstance(error, CoreError) and not error.possible_effect:
             raise CoreError(error.code, _STAGE, possible_effect=True) from error
         raise
