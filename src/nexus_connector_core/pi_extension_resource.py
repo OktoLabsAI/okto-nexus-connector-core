@@ -24,8 +24,9 @@ def pi_hosted_rpc_path() -> Path:
 
 def qualify_pi_hosted_rpc(command: tuple[str, ...], candidate: InstallationCandidate) -> Path:
     """Only the selected Windows Node/Pi package pair may use the hosted path."""
-    if (sys.platform != "win32" or candidate.version != "0.87.1" or candidate.architecture != "x86_64"
-            or not candidate.build_identity or not candidate.launch_script
+    if (not reviewed_pi_renderer_build(candidate.version, sys.platform, candidate.architecture,
+                                       candidate.build_identity)
+            or not candidate.launch_script
             or tuple(command[:4]) != (candidate.executable, candidate.launch_script, "--mode", "rpc")):
         raise CoreError("CAPABILITY_UNSUPPORTED", "pi_hosted_rpc", retry_safe=True)
     try:

@@ -121,7 +121,8 @@ def test_hosted_pi_rejects_a_stock_peer_that_cannot_prove_the_owner(tmp_path):
 def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch):
     candidate = InstallationCandidate("pi_rpc", "node.exe", "pair", "explicit", "selected",
                                       version="0.87.1", architecture="x86_64",
-                                      launch_script="selected-pi-entry.js", build_identity="closure")
+                                      launch_script="selected-pi-entry.js",
+                                      build_identity=pi_extension_resource._HOSTED_PI_BUILD)
     argv = (candidate.executable, candidate.launch_script, "--mode", "rpc")
     monkeypatch.setattr(pi_extension_resource, "sys", SimpleNamespace(platform="win32"))
     observed = Mock(return_value=pi_extension_resource._HOSTED_NODE_BUILD)
@@ -129,13 +130,17 @@ def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch):
     qualify = pi_extension_resource.qualify_pi_hosted_rpc
     assert qualify(argv, candidate).name == "hosted_rpc.js"
     observed.assert_called_once_with(Path(candidate.executable))
+    observed.reset_mock()
     for command, selected in ((argv, replace(candidate, launch_script="other.js")),
                               (argv, replace(candidate, build_identity=None)),
+                              (argv, replace(candidate, build_identity="sha256:" + "a" * 64)),
                               (argv, replace(candidate, version="0.87.2")),
                               (argv[:2] + ("--mode", "json"), candidate)):
         with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED") as refused:
             qualify(command, selected)
         assert refused.value.retry_safe
+        assert not refused.value.possible_effect
+    observed.assert_not_called()
     observed.return_value = "sha256:different"
     with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
         qualify(argv, candidate)
