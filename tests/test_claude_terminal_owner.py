@@ -11,6 +11,7 @@ from nexus_connector_core import ProcessBirthEvidence
 from nexus_connector_core.native.claude_saved_history import ClaudeSavedHistory, claude_history_path
 from nexus_connector_core.native.claude_terminal_owner import (
     observe_claude_finished_turn,
+    observe_claude_interrupted_turn,
     observe_claude_terminal_idle_since,
     observe_claude_terminal_owner,
 )
@@ -101,3 +102,45 @@ def test_finished_success_needs_an_exact_latest_flushed_turn(registry):
     append(assistant | {"isApiErrorMessage": True})
     assert read() is None
     assert read(None) == 1771556000000
+
+
+def test_interrupt_requires_the_latest_native_abort_and_its_exact_admitted_prompt(registry):
+    history = registry.history
+    transcript = claude_history_path(history.state_home, history.session_uuid, history.workspace)
+    transcript.parent.mkdir(parents=True)
+    prefix = b'{"type":"saved-fixture"}\n'
+    transcript.write_bytes(prefix)
+    history = replace(history, file_identity=file_identity(transcript.stat()), byte_size=len(prefix))
+    scope = {"cwd": history.workspace, "sessionId": history.session_uuid, "isSidechain": False,
+             "version": "2.1.328", "entrypoint": "cli"}
+    prompt_id = str(uuid4())
+    prompt = scope | {"type": "user", "promptId": prompt_id, "permissionMode": "plan", "promptSource": "typed",
+                      "message": {"role": "user", "content": "Original prompt"}}
+    partial = scope | {"type": "assistant", "uuid": str(uuid4()), "isAbortedMidStream": True,
+                       "message": {"role": "assistant", "id": "msg_original"}}
+    marker = scope | {"type": "user", "promptId": prompt_id, "interruptedMessageId": "msg_original",
+                      "parentUuid": partial["uuid"], "timestamp": "2026-02-20T03:33:20.001Z",
+                      "message": {"role": "user", "content": [{"type": "text", "text": "[Request interrupted by user]"}]}}
+    expected = hashlib.sha256(b"Original prompt").digest()
+
+    def publish(*records):
+        transcript.write_bytes(prefix + b"".join(json.dumps(record).encode() + b"\n" for record in records))
+
+    def read(digest=expected, admitted=1771555999000):
+        return observe_claude_interrupted_turn(registry.terminal, history, registry.birth, prompt_id, digest, admitted)
+
+    publish(prompt, partial, marker)
+    assert read() == 1771556000000
+    assert read(hashlib.sha256(b"Different prompt").digest()) is None
+    assert read(admitted=1771556000000) is None
+    publish(prompt, partial, marker, prompt | {"promptId": str(uuid4())})
+    assert read() is None
+    publish(prompt, partial | {"isAbortedMidStream": False}, marker)
+    assert read() is None
+    publish(prompt, partial, marker | {"interruptedMessageId": "msg_other"})
+    assert read() is None
+    publish(prompt, partial, marker | {"promptId": str(uuid4())})
+    assert read() is None
+    publish(prompt, partial, marker)
+    registry.terminal.poll.side_effect = [None, None, None, 0]
+    assert read() is None

@@ -102,32 +102,97 @@ def observe_claude_finished_turn(terminal, history, birth, output_sha256):
     return min(idle_since, completed_at)
 
 
+def observe_claude_interrupted_turn(terminal, history, birth, prompt_id, prompt_digest, admitted_ms):
+    """Corroborate a native cancellation of the exact authorized prompt."""
+    idle_since = observe_claude_terminal_idle_since(terminal, history, birth)
+    if idle_since is None or idle_since <= admitted_ms:
+        return None
+    try:
+        lines = _transcript_tail(history)
+        ended = _read_interrupted_turn(lines, history, prompt_id, prompt_digest) if lines is not None else None
+    except (OSError, ValueError, TypeError, RecursionError, OverflowError):
+        return None
+    if (ended is None or ended <= admitted_ms
+            or observe_claude_terminal_idle_since(terminal, history, birth) != idle_since):
+        return None
+    return min(ended, idle_since)
+
+
 def _matching_turn_end(history, output_sha256):
+    try:
+        lines = _transcript_tail(history)
+        return _read_turn_end(lines, history, output_sha256) if lines is not None else None
+    except (OSError, ValueError, TypeError, RecursionError, OverflowError):
+        return None
+
+
+def _transcript_tail(history):
     path = claude_history_path(history.state_home, history.session_uuid, history.workspace)
     if path is None:
         return None
-    try:
-        for parent in path.parents:
-            plain_path(parent, directory=True)
-        original = file_version(plain_path(path, directory=False))
-        if original[:2] != history.file_identity or original[2] <= history.byte_size:
-            return None
-        start = max(history.byte_size, original[2] - _MAX_TRANSCRIPT_TAIL)
-        with path.open("rb") as stream:
-            opened = file_version(os.fstat(stream.fileno()))
-            if opened[:4] != original[:4]:
-                return None
-            stream.seek(start)
-            tail = stream.read(_MAX_TRANSCRIPT_TAIL + 1)
-            if (len(tail) != original[2] - start or not tail.endswith(b"\n")
-                    or file_version(os.fstat(stream.fileno())) != opened):
-                return None
-        if file_version(plain_path(path, directory=False)) != original:
-            return None
-        lines = tail.split(b"\n")
-        return _read_turn_end(reversed(lines[1 if start > history.byte_size else 0:-1]), history, output_sha256)
-    except (OSError, ValueError, TypeError, RecursionError, OverflowError):
+    for parent in path.parents:
+        plain_path(parent, directory=True)
+    original = file_version(plain_path(path, directory=False))
+    if original[:2] != history.file_identity or original[2] <= history.byte_size:
         return None
+    start = max(history.byte_size, original[2] - _MAX_TRANSCRIPT_TAIL)
+    with path.open("rb") as stream:
+        opened = file_version(os.fstat(stream.fileno()))
+        if opened[:4] != original[:4]:
+            return None
+        stream.seek(start)
+        tail = stream.read(_MAX_TRANSCRIPT_TAIL + 1)
+        if (len(tail) != original[2] - start or not tail.endswith(b"\n")
+                or file_version(os.fstat(stream.fileno())) != opened):
+            return None
+    if file_version(plain_path(path, directory=False)) != original:
+        return None
+    lines = tail.split(b"\n")
+    return reversed(lines[1 if start > history.byte_size else 0:-1])
+
+
+def _read_interrupted_turn(lines, history, prompt_id, prompt_digest):
+    marker = None
+    observed_abort = False
+    for line in lines:
+        record = strict_json(line.decode("utf-8"))
+        if type(record) is not dict:
+            return None
+        kind = record.get("type")
+        if record.get("isSidechain") is not False or kind not in {"user", "assistant"}:
+            continue
+        cwd = record.get("cwd")
+        if (record.get("sessionId") != history.session_uuid or type(cwd) is not str
+                or Path(cwd) != Path(history.workspace) or record.get("version") != _REVIEWED_VERSION
+                or record.get("entrypoint") != "cli"):
+            return None
+        message = record.get("message")
+        if type(message) is not dict or message.get("role") != kind:
+            return None
+        if marker is None:
+            if (kind != "user" or record.get("promptId") != prompt_id
+                    or record.get("isMeta") is True
+                    or type(record.get("interruptedMessageId")) is not str or not record["interruptedMessageId"]
+                    or message.get("content") != [{"type": "text", "text": "[Request interrupted by user]"}]):
+                return None
+            marker = record
+        elif not observed_abort:
+            if (kind != "assistant" or record.get("isAbortedMidStream") is not True
+                    or claude_session_uuid(record.get("uuid")) is None
+                    or record["uuid"] != marker.get("parentUuid")
+                    or message.get("id") != marker["interruptedMessageId"]):
+                return None
+            observed_abort = True
+        elif kind == "user":
+            text = message.get("content")
+            timestamp = marker.get("timestamp")
+            if (record.get("promptId") != prompt_id or record.get("isMeta") is True
+                    or record.get("permissionMode") != "plan" or record.get("promptSource") != "typed"
+                    or type(text) is not str or hashlib.sha256(text.encode("utf-8")).digest() != prompt_digest
+                    or type(timestamp) is not str or not timestamp.endswith("Z")):
+                return None
+            return (datetime.fromisoformat(timestamp) - _EPOCH) // _MILLISECOND
+    return None
 
 
 def _read_turn_end(lines, history, output_sha256):

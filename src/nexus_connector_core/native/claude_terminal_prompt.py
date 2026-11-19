@@ -52,6 +52,7 @@ class ClaudeTerminalResult:
     operation_id: str
     output_text: str | None
     failure_code: str | None
+    interrupted: bool = False
 
 
 @dataclass(frozen=True, slots=True)
@@ -326,22 +327,30 @@ class ClaudeTerminalPromptGate:
             self._candidate = _CompletionCandidate(result, earliest_idle_ms, output_sha256)
             return 200
 
-    def take_finished_result(self, observe_finished):
+    def take_finished_result(self, observe_finished, observe_interrupted=None):
         """Consume the latest correlated result with an exact native completion observation."""
         with self._lock:
             candidate = self._candidate
-        if candidate is None:
+            pending = self._pending_result
+        if pending is None:
             return None
-        idle_since = observe_finished(candidate.output_sha256)
-        if (type(idle_since) is not int
-                or not candidate.earliest_idle_ms < idle_since <= time.time_ns() // 1_000_000):
+        result = None
+        if candidate is not None:
+            idle_since = observe_finished(candidate.output_sha256)
+            if type(idle_since) is int and candidate.earliest_idle_ms < idle_since <= time.time_ns() // 1_000_000:
+                result = candidate.result
+        if result is None and observe_interrupted is not None:
+            ended = observe_interrupted(pending.prompt_id, pending.permit.digest, pending.admitted_ms)
+            if type(ended) is int and pending.admitted_ms < ended <= time.time_ns() // 1_000_000:
+                result = ClaudeTerminalResult(pending.permit.operation_id, None, None, interrupted=True)
+        if result is None:
             return None
         with self._lock:
-            if candidate is not self._candidate:
+            if pending is not self._pending_result or candidate is not self._candidate:
                 return None
             self._candidate = None
             self._pending_result = None
-            return candidate.result
+            return result
 
 
 def _valid_prompt_id(value):

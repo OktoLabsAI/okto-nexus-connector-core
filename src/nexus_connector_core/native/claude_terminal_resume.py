@@ -13,7 +13,11 @@ from secrets import token_hex
 
 from ..models import CoreError, EffectRejected
 from .claude_saved_history import ClaudeSavedHistory, claude_history_path, observe_claude_saved_history
-from .claude_terminal_owner import observe_claude_finished_turn, observe_claude_terminal_owner
+from .claude_terminal_owner import (
+    observe_claude_finished_turn,
+    observe_claude_interrupted_turn,
+    observe_claude_terminal_owner,
+)
 from .claude_terminal_prompt import ClaudeTerminalPromptGate
 from .claude_terminal_submission import ClaudeTerminalSession
 from .redaction import NativeSecretRedactor, credential_values
@@ -146,6 +150,7 @@ async def open_saved_claude_terminal(
                     terminal, gate, native_id="claude_" + token_hex(16), session_id=session_id,
                     stream_epoch=stream_epoch, context=context, redactor=redactor,
                     observe_finished=partial(observe_claude_finished_turn, terminal, history, birth),
+                    observe_interrupted=partial(observe_claude_interrupted_turn, terminal, history, birth),
                     require_current=grant.require_current, resources=resources)
             await asyncio.sleep(.1)
         raise EffectRejected("The Claude terminal did not confirm the exact saved context.",

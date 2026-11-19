@@ -106,7 +106,7 @@ class ClaudeTerminalSession:
     """Core's native session port for an exact, already verified Claude terminal."""
 
     def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished,
-                 require_current=None, resources=()):
+                 observe_interrupted=None, require_current=None, resources=()):
         if not isinstance(redactor, NativeSecretRedactor):
             raise TypeError("An owned Claude terminal requires native secret redaction.")
         if not callable(observe_finished):
@@ -119,21 +119,27 @@ class ClaudeTerminalSession:
         self._context = context
         self._redactor = redactor
         self._observe_finished = observe_finished
+        self._observe_interrupted = observe_interrupted
         self._resources = tuple(resources)
         self._close_lock = asyncio.Lock()
         self._closed = False
         self.terminal_submission = ClaudeTerminalSubmission(terminal, gate, require_current=require_current)
 
     def _completion_event(self, result):
-        payload = {"delivery_phase": "terminal",
-                   "delivery_outcome": "success" if result.failure_code is None else "failed"}
-        if result.failure_code is None:
-            payload["output_text"] = self._redactor.clean(result.output_text)
-        else:
+        payload = {"delivery_phase": "terminal"}
+        if result.interrupted:
+            payload["delivery_outcome"] = "interrupted"
+            kind = "core.claude_terminal_interrupted"
+        elif result.failure_code is not None:
+            payload["delivery_outcome"] = "failed"
             payload["delivery_error_code"] = result.failure_code
+            kind = "StopFailure"
+        else:
+            payload["delivery_outcome"] = "success"
+            payload["output_text"] = self._redactor.clean(result.output_text)
+            kind = "Stop"
         return RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
-                            self._stream_epoch, 0, "turn_state",
-                            "Stop" if result.failure_code is None else "StopFailure",
+                            self._stream_epoch, 0, "turn_state", kind,
                             payload, operation_id=result.operation_id)
 
     async def events(self):
@@ -142,7 +148,8 @@ class ClaudeTerminalSession:
         yield RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
                            self._stream_epoch, 0, "lifecycle", "core.claude_terminal_ready", {})
         while not self._closed and await asyncio.to_thread(self._terminal.poll) is None:
-            result = await asyncio.to_thread(self._gate.take_finished_result, self._observe_finished)
+            result = await asyncio.to_thread(self._gate.take_finished_result, self._observe_finished,
+                                             self._observe_interrupted)
             if result is not None:
                 yield self._completion_event(result)
             await asyncio.sleep(0.1)
