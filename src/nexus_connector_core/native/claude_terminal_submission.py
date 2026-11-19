@@ -13,10 +13,9 @@ _STAGE = "claude_terminal_submission"
 
 
 class ClaudeTerminalSubmission:
-    def __init__(self, terminal, prompt_gate, *, publish_result=None):
+    def __init__(self, terminal, prompt_gate):
         self._terminal = terminal
         self._gate = prompt_gate
-        self._publish_result = publish_result
         self._active_operation = None
 
     def active_turn(self):
@@ -53,8 +52,7 @@ class ClaudeTerminalSubmission:
 
         self._active_operation = operation_id
         armed = asyncio.create_task(asyncio.to_thread(self._gate.arm, operation_id, text,
-                                                      ttl=_WRITE_WINDOW, check=authorize_hook,
-                                                      publish_result=self._publish_result))
+                                                      ttl=_WRITE_WINDOW, check=authorize_hook))
         try:
             delivery = await asyncio.shield(armed)
         except CoreError as error:
@@ -97,9 +95,11 @@ def _terminal_prompt(text):
 class ClaudeTerminalSession:
     """Core's native session port for an exact, already verified Claude terminal."""
 
-    def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor):
+    def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished):
         if not isinstance(redactor, NativeSecretRedactor):
             raise TypeError("An owned Claude terminal requires native secret redaction.")
+        if not callable(observe_finished):
+            raise TypeError("An owned Claude terminal requires an exact native completion observation.")
         self.native_id = native_id
         self._terminal = terminal
         self._gate = gate
@@ -107,36 +107,29 @@ class ClaudeTerminalSession:
         self._stream_epoch = stream_epoch
         self._context = context
         self._redactor = redactor
-        self._loop = asyncio.get_running_loop()
-        self._results = asyncio.Queue(maxsize=1)
+        self._observe_finished = observe_finished
         self._close_lock = asyncio.Lock()
         self._closed = False
-        self.terminal_submission = ClaudeTerminalSubmission(terminal, gate, publish_result=self._publish_result)
+        self.terminal_submission = ClaudeTerminalSubmission(terminal, gate)
 
-    def _publish_result(self, result):
+    def _completion_event(self, result):
         payload = {"delivery_phase": "terminal",
                    "delivery_outcome": "success" if result.failure_code is None else "failed"}
         if result.failure_code is None:
             payload["output_text"] = self._redactor.clean(result.output_text)
         else:
             payload["delivery_error_code"] = result.failure_code
-        event = RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
-                             self._stream_epoch, 0, "turn_state",
-                             "Stop" if result.failure_code is None else "StopFailure",
-                             payload, operation_id=result.operation_id)
-        self._loop.call_soon_threadsafe(self._results.put_nowait, event)
+        return RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
+                            self._stream_epoch, 0, "turn_state",
+                            "Stop" if result.failure_code is None else "StopFailure",
+                            payload, operation_id=result.operation_id)
 
     async def events(self):
-        while True:
-            try:
-                async with asyncio.timeout(0.25):
-                    event = await self._results.get()
-            except TimeoutError:
-                if self._closed or await asyncio.to_thread(self._terminal.poll) is not None:
-                    if self._results.empty():
-                        return
-                continue
-            yield event
+        while not self._closed and await asyncio.to_thread(self._terminal.poll) is None:
+            result = await asyncio.to_thread(self._gate.take_finished_result, self._observe_finished)
+            if result is not None:
+                yield self._completion_event(result)
+            await asyncio.sleep(0.1)
 
     def owned_process_birth(self):
         return self._terminal.birth

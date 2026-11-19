@@ -1,6 +1,7 @@
 """Canonical Core delivery evidence for the protected terminal submit path."""
 
 import asyncio
+import hashlib
 import json
 import time
 from contextlib import asynccontextmanager
@@ -216,6 +217,8 @@ def test_correlated_native_wire_result_settles_only_its_admitted_turn(tmp_path, 
     async def run():
         native_uuid = str(uuid4())
         workspace = str(tmp_path)
+        idle_since = time.time_ns() // 1_000_000
+        confirmed_text_hash = None
         with ClaudeTerminalPromptGate(native_uuid, workspace, "plan", lambda _: True, observe_results=True) as gate:
             peer = _HookPeer(gate, workspace, native_uuid, lambda: None)
 
@@ -223,7 +226,8 @@ def test_correlated_native_wire_result_settles_only_its_admitted_turn(tmp_path, 
                 async def open(self, _prepared, session_id, context, *, stream_epoch):
                     self.native = ClaudeTerminalSession(
                         peer, gate, native_id="native", session_id=session_id, stream_epoch=stream_epoch,
-                        context=context, redactor=NativeSecretRedactor(("fixture-private-value",)))
+                        context=context, redactor=NativeSecretRedactor(("fixture-private-value",)),
+                        observe_finished=lambda digest: idle_since if digest == confirmed_text_hash else None)
                     return self.native
 
             binary = tmp_path / "claude-fixture"
@@ -252,12 +256,30 @@ def test_correlated_native_wire_result_settles_only_its_admitted_turn(tmp_path, 
                 await post(stop | {"background_tasks": [{"type": "shell"}]})
                 assert factory.native.terminal_submission.active_turn()
                 assert (await journal.get_receipt(key)).stage == "SUBMITTED"
+                await post(stop | {"last_assistant_message": "Intermediate text"})
+                await asyncio.sleep(.22)
+                assert (await journal.get_receipt(key)).stage == "SUBMITTED"
+                idle_since = None
+                with pytest.raises(CoreError, match="STALE_TURN"):
+                    await runtime.submit(TurnOperation("while-busy", "session", "Do not dispatch."), context)
                 long_output = "X" * (480 * 1024)
+                stop["stop_hook_active"] = True
                 if not failure:
                     stop["last_assistant_message"] += "\n" + long_output
+                else:
+                    # Claude may enter idle before sending StopFailure. An old
+                    # success candidate must not become terminal in this gap.
+                    idle_since = time.time_ns() // 1_000_000
+                    await asyncio.sleep(.22)
+                    assert (await journal.get_receipt(key)).stage == "SUBMITTED"
                 result = (stop | {"hook_event_name": "StopFailure", "error": "unknown"}) if failure else stop
                 await post(result)
                 await post(result)
+                if not failure:
+                    await asyncio.sleep(.22)
+                    assert (await journal.get_receipt(key)).stage == "SUBMITTED"
+                    confirmed_text_hash = hashlib.sha256(stop["last_assistant_message"].encode("utf-8")).hexdigest()
+                    idle_since = time.time_ns() // 1_000_000
                 async with asyncio.timeout(5):
                     while factory.native.terminal_submission.active_turn():
                         await asyncio.sleep(.01)

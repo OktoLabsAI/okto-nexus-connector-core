@@ -1,17 +1,22 @@
 """Verify a saved Claude conversation against the exact owned Windows terminal."""
 
+import hashlib
 import os
 import re
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from ..models import ProcessBirthEvidence
 from ..protocol import strict_json
 from .claude_history_identity import claude_session_uuid
-from .claude_saved_history import ClaudeSavedHistory
+from .claude_saved_history import ClaudeSavedHistory, claude_history_path
 from .saved_history_file import file_identity, file_version, plain_path
 
 _REVIEWED_VERSION = "2.1.328"
 _MAX_REGISTRY_BYTES = 64 * 1024
+_MAX_TRANSCRIPT_TAIL = 8 * 1024 * 1024
+_EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
+_MILLISECOND = timedelta(milliseconds=1)
 
 
 def observe_claude_terminal_owner(
@@ -23,34 +28,42 @@ def observe_claude_terminal_owner(
     This observation does not decide whether the source is retired, whether
     the effective settings are approved, or whether a launch is authorized.
     """
+    return observe_claude_terminal_idle_since(terminal, history, birth) is not None
+
+
+def observe_claude_terminal_idle_since(
+    terminal, history: ClaudeSavedHistory, birth: ProcessBirthEvidence,
+) -> int | None:
+    """Return the native idle transition timestamp on the current owned process."""
     if (birth.platform != "win32" or birth.containment != "windows_job"
             or type(birth.pid) is not int or birth.pid <= 0
             or not re.fullmatch(r"filetime:[a-f0-9]{16}", birth.birth_token)
             or claude_session_uuid(history.session_uuid) is None):
-        return False
+        return None
     home, workspace = Path(history.state_home), Path(history.workspace)
     if (not home.is_absolute() or not workspace.is_absolute()
             or ".." in home.parts or ".." in workspace.parts):
-        return False
+        return None
     registry = home / "sessions" / f"{birth.pid}.json"
     try:
         if terminal.poll() is not None or terminal.birth != birth:
-            return False
+            return None
         original = _registry_version(registry, home, workspace, history)
         if not 0 < original[2] <= _MAX_REGISTRY_BYTES:
-            return False
+            return None
         with registry.open("rb") as stream:
             opened = file_version(os.fstat(stream.fileno()))
             if opened[:4] != original[:4]:
-                return False
+                return None
             body = stream.read(_MAX_REGISTRY_BYTES + 1)
             if len(body) != original[2] or file_version(os.fstat(stream.fileno())) != opened:
-                return False
+                return None
         record = strict_json(body.decode("utf-8"))
         if type(record) is not dict:
-            return False
+            return None
         cwd = record.get("cwd")
-        return (
+        idle_since = record.get("statusUpdatedAt")
+        if (
             type(record.get("pid")) is int and record["pid"] == birth.pid
             and record.get("procStart") == str(int(birth.birth_token.removeprefix("filetime:"), 16))
             and record.get("sessionId") == history.session_uuid
@@ -58,11 +71,14 @@ def observe_claude_terminal_owner(
             and record.get("version") == _REVIEWED_VERSION
             and record.get("kind") == "interactive" and record.get("entrypoint") == "cli"
             and record.get("status") == "idle"
+            and type(idle_since) is int and idle_since > 0
             and _registry_version(registry, home, workspace, history) == original
             and terminal.birth == birth and terminal.poll() is None
-        )
+        ):
+            return idle_since
     except (OSError, ValueError, TypeError, RecursionError):
-        return False
+        return None
+    return None
 
 
 def _registry_version(registry, home, workspace, history):
@@ -72,3 +88,81 @@ def _registry_version(registry, home, workspace, history):
             or file_identity(plain_path(workspace, directory=True)) != history.workspace_identity):
         raise ValueError("The saved Claude state or workspace directory changed.")
     return file_version(plain_path(registry, directory=False))
+
+
+def observe_claude_finished_turn(terminal, history, birth, output_sha256):
+    """Corroborate success with a flushed turn end and matching transcript text."""
+    idle_since = observe_claude_terminal_idle_since(terminal, history, birth)
+    if idle_since is None or output_sha256 is None:
+        return idle_since
+    completed_at = _matching_turn_end(history, output_sha256)
+    if (completed_at is None
+            or observe_claude_terminal_idle_since(terminal, history, birth) != idle_since):
+        return None
+    return min(idle_since, completed_at)
+
+
+def _matching_turn_end(history, output_sha256):
+    path = claude_history_path(history.state_home, history.session_uuid, history.workspace)
+    if path is None:
+        return None
+    try:
+        for parent in path.parents:
+            plain_path(parent, directory=True)
+        original = file_version(plain_path(path, directory=False))
+        if original[:2] != history.file_identity or original[2] <= history.byte_size:
+            return None
+        start = max(history.byte_size, original[2] - _MAX_TRANSCRIPT_TAIL)
+        with path.open("rb") as stream:
+            opened = file_version(os.fstat(stream.fileno()))
+            if opened[:4] != original[:4]:
+                return None
+            stream.seek(start)
+            tail = stream.read(_MAX_TRANSCRIPT_TAIL + 1)
+            if (len(tail) != original[2] - start or not tail.endswith(b"\n")
+                    or file_version(os.fstat(stream.fileno())) != opened):
+                return None
+        if file_version(plain_path(path, directory=False)) != original:
+            return None
+        lines = tail.split(b"\n")
+        return _read_turn_end(reversed(lines[1 if start > history.byte_size else 0:-1]), history, output_sha256)
+    except (OSError, ValueError, TypeError, RecursionError, OverflowError):
+        return None
+
+
+def _read_turn_end(lines, history, output_sha256):
+    completed_at = None
+    for line in lines:
+        record = strict_json(line.decode("utf-8"))
+        if type(record) is not dict:
+            return None
+        kind = record.get("type")
+        if record.get("isSidechain") is not False or kind not in {"system", "user", "assistant"}:
+            continue
+        if kind == "system" and record.get("subtype") != "turn_duration":
+            continue
+        cwd = record.get("cwd")
+        if (record.get("sessionId") != history.session_uuid or type(cwd) is not str
+                or Path(cwd) != Path(history.workspace)):
+            return None
+        if completed_at is None:
+            if kind != "system" or record.get("isMeta") is not False:
+                return None
+            timestamp = record.get("timestamp")
+            if type(timestamp) is not str or not timestamp.endswith("Z"):
+                return None
+            completed_at = (datetime.fromisoformat(timestamp) - _EPOCH) // _MILLISECOND
+            continue
+        if kind != "assistant" or record.get("isApiErrorMessage") is True:
+            return None
+        message = record.get("message")
+        content = message.get("content") if type(message) is dict and message.get("role") == "assistant" else None
+        if type(content) is not list or any(type(block) is not dict for block in content):
+            return None
+        texts = [block.get("text") for block in content if block.get("type") == "text"]
+        if not texts or any(type(value) is not str for value in texts):
+            return None
+        if hashlib.sha256("\n".join(texts).encode("utf-8")).hexdigest() == output_sha256:
+            return completed_at
+        return None
+    return None

@@ -40,19 +40,10 @@ def observe_claude_saved_history(state_home: str, session_uuid: str, cwd: str, *
     Any new dialogue, different inode, or changed prefix invalidates retirement.
     The caller must independently establish canonical close and process release.
     """
-    if claude_session_uuid(session_uuid) is None or any(type(value) is not str or not value
-                                                      for value in (state_home, cwd)):
+    file = claude_history_path(state_home, session_uuid, cwd)
+    if file is None:
         return None
     home, workspace = Path(state_home), Path(cwd)
-    if (not home.is_absolute() or not workspace.is_absolute()
-            or ".." in home.parts or ".." in workspace.parts):
-        return None
-    # The reviewed build uses this mapping for short local ASCII paths. Avoid
-    # enumerating other projects or accepting an arbitrary transcript path.
-    if not cwd.isascii() or len(cwd) > 180:
-        return None
-    directory = re.sub(r"[^A-Za-z0-9]", "-", str(workspace))
-    file = home / "projects" / directory / f"{session_uuid}.jsonl"
     try:
         for parent in file.parents:
             plain_path(parent, directory=True)
@@ -116,3 +107,19 @@ def observe_claude_saved_history(state_home: str, session_uuid: str, cwd: str, *
                                   size, digest.hexdigest())
     except (OSError, ValueError, TypeError, RecursionError):
         return None
+
+
+def claude_history_path(state_home, session_uuid, cwd):
+    """Resolve only the reviewed native path for this exact local conversation."""
+    if claude_session_uuid(session_uuid) is None or any(type(value) is not str or not value
+                                                      for value in (state_home, cwd)):
+        return None
+    home, workspace = Path(state_home), Path(cwd)
+    if (not home.is_absolute() or not workspace.is_absolute()
+            or ".." in home.parts or ".." in workspace.parts):
+        return None
+    # Avoid enumerating other projects or accepting an arbitrary transcript path.
+    if not cwd.isascii() or len(cwd) > 180:
+        return None
+    directory = re.sub(r"[^A-Za-z0-9]", "-", str(workspace))
+    return home / "projects" / directory / f"{session_uuid}.jsonl"

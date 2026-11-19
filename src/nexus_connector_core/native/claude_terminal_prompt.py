@@ -42,7 +42,6 @@ class _Permit:
     deadline: float
     check: object
     delivery: "_PromptDelivery"
-    publish_result: object
 
 
 @dataclass(frozen=True, slots=True)
@@ -56,6 +55,14 @@ class ClaudeTerminalResult:
 class _AuthorizedPrompt:
     prompt_id: str
     permit: _Permit
+    admitted_ms: int
+
+
+@dataclass(frozen=True, slots=True)
+class _CompletionCandidate:
+    result: ClaudeTerminalResult
+    earliest_idle_ms: int
+    output_sha256: str | None
 
 
 class _PromptDelivery:
@@ -94,6 +101,7 @@ class ClaudeTerminalPromptGate:
         self._permit = None
         self._observe_results = observe_results
         self._pending_result = None
+        self._candidate = None
         self._prompt_ids = set()
         self._closed = False
         self._server = None
@@ -145,6 +153,7 @@ class ClaudeTerminalPromptGate:
             self._closed = True
             self._permit = None
             self._pending_result = None
+            self._candidate = None
             server, self._server = self._server, None
         if server is not None:
             server.shutdown()
@@ -162,18 +171,15 @@ class ClaudeTerminalPromptGate:
         root = f"http://127.0.0.1:{port}"
         hooks = {"UserPromptSubmit": [{"hooks": [dict(hook, url=root + _PATH, onFailure="block")]}]}
         if self._observe_results:
-            # Only enable on a reviewed launch where no other Stop policy can keep the turn running.
             for name in ("Stop", "StopFailure"):
                 hooks[name] = [{"hooks": [dict(hook, url=root + _COMPLETION_PATH)]}]
         return {"hooks": hooks}, {_ENV_KEY: self._secret}
 
-    def arm(self, operation_id, text, *, ttl=10, check=None, publish_result=None):
+    def arm(self, operation_id, text, *, ttl=10, check=None):
         validate_external_id(operation_id, stage=_STAGE)
         digest = _prompt_digest(text)
         if (digest is None or type(ttl) not in (int, float) or not 0 < ttl <= 30 or not math.isfinite(ttl)
-                or (check is not None and not callable(check))
-                or (self._observe_results and not callable(publish_result))
-                or (not self._observe_results and publish_result is not None)):
+                or (check is not None and not callable(check))):
             raise CoreError("VALIDATION_ERROR", _STAGE)
         with self._lock:
             now = time.monotonic()
@@ -182,7 +188,7 @@ class ClaudeTerminalPromptGate:
                 raise CoreError("SESSION_CONFLICT", _STAGE)
             self._used.add(operation_id)
             delivery = _PromptDelivery()
-            self._permit = _Permit(operation_id, digest, now + ttl, check, delivery, publish_result)
+            self._permit = _Permit(operation_id, digest, now + ttl, check, delivery)
             return delivery
 
     def discard(self, operation_id):
@@ -242,7 +248,7 @@ class ClaudeTerminalPromptGate:
             if self._observe_results:
                 self._prompt_ids.add(prompt_id)
                 # Keep correlation even if the response socket fails after a partial write.
-                self._pending_result = _AuthorizedPrompt(prompt_id, permit)
+                self._pending_result = _AuthorizedPrompt(prompt_id, permit, time.time_ns() // 1_000_000)
             return 200, {}, permit.delivery
 
     def _receive_completion(self, payload):
@@ -254,29 +260,54 @@ class ClaudeTerminalPromptGate:
                 return 200
             kind = payload.get("hook_event_name")
             if kind == "Stop":
+                self._candidate = None
                 output = payload.get("last_assistant_message")
                 if (payload.get("permission_mode") != self._permission_mode
-                        or payload.get("stop_hook_active") is not False
+                        or type(payload.get("stop_hook_active")) is not bool
                         or payload.get("background_tasks") != [] or payload.get("session_crons") != []
                         or type(output) is not str):
                     return 200
+                try:
+                    output_sha256 = hashlib.sha256(output.encode("utf-8")).hexdigest()
+                except UnicodeError:
+                    return 200
                 output = output.replace(self._secret, "[REDACTED]")
                 result = ClaudeTerminalResult(pending.permit.operation_id, output, None)
+                # Another Stop hook may continue this prompt. Require both a
+                # new idle state and the native transcript's matching end.
+                earliest_idle_ms = time.time_ns() // 1_000_000
             elif kind == "StopFailure":
+                self._candidate = None
                 if ("permission_mode" in payload and payload["permission_mode"] != self._permission_mode
                         or type(payload.get("error")) is not str or not payload["error"]):
                     return 200
                 code = ("PROVIDER_AUTH_REQUIRED" if payload["error"] == "authentication_failed"
                         else "NATIVE_OPERATION_FAILED")
                 result = ClaudeTerminalResult(pending.permit.operation_id, None, code)
+                output_sha256 = None
+                # The CLI can enter idle before delivering StopFailure.
+                earliest_idle_ms = pending.admitted_ms
             else:
                 return 200
-            try:
-                pending.permit.publish_result(result)
-            except Exception:
-                return 503
-            self._pending_result = None
+            self._candidate = _CompletionCandidate(result, earliest_idle_ms, output_sha256)
             return 200
+
+    def take_finished_result(self, observe_finished):
+        """Consume the latest correlated result with an exact native completion observation."""
+        with self._lock:
+            candidate = self._candidate
+        if candidate is None:
+            return None
+        idle_since = observe_finished(candidate.output_sha256)
+        if (type(idle_since) is not int
+                or not candidate.earliest_idle_ms < idle_since <= time.time_ns() // 1_000_000):
+            return None
+        with self._lock:
+            if candidate is not self._candidate:
+                return None
+            self._candidate = None
+            self._pending_result = None
+            return candidate.result
 
 
 def _valid_prompt_id(value):
