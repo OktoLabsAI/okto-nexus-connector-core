@@ -672,6 +672,17 @@ class CopiedAdapterSession:
             raise CoreError("SESSION_CONFLICT", "native_presentation_read")
         return await self._coalesced_presentation_read(reader, self._session)
 
+    def owned_pi_renderer(self):
+        endpoint = getattr(self._connector, "owned_pi_renderer", None)
+        if self._session.harness_kind != "pi" or not callable(endpoint):
+            return None
+        if self._close_started:
+            raise CoreError("SESSION_CONFLICT", "pi_renderer")
+        try:
+            return endpoint(self._session)
+        except NativeAdapterError:
+            raise CoreError("NATIVE_UNAVAILABLE", "pi_renderer") from None
+
     async def _coalesced_presentation_read(self, reader, *args):
         task = self._presentation_read_inflight
         if task is None or task.done():

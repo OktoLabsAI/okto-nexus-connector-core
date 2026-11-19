@@ -3,6 +3,7 @@ import { readFile, realpath } from "node:fs/promises";
 import { registerHooks } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { startHostedRenderer } from "./hosted_renderer.js";
 
 // These files define the version-specific handoff between Pi's own CLI and RPC.
 // Core also seals the selected installation's full artifact closure at launch.
@@ -13,6 +14,8 @@ const reviewed = {
   "dist/cli/setup.js": "4a2a7a0dbf82e2e5d18cec90896b36cbedce78b3d09e78d4040ac94fa3fbeba8",
   "dist/modes/index.js": "42bd65ff8aee4f60dfcfcfb9db66772219281585cdbef845df747c8846618a87",
   "dist/modes/rpc/rpc-mode.js": "bdd94e753e6d19731d9fb9ea370462d095d64f1e78bddd7651320663fa57c4ff",
+  "dist/modes/interactive/interactive-mode.js": "7dc366e8609d7d1e81fb85952e466aea9933b13e74842c2a9b9df678d267d12e",
+  "dist/modes/interactive/tui-renderer.js": "b215548e8deb8eb6b89b8e42f4d0c7fce57f728f54f22ab04a40b21971687ddb",
 };
 
 let handoff;
@@ -53,7 +56,7 @@ export async function runHostedPiRpc(cli, args, observeOwner, options) {
     `export { runOwnedRpc as runRpcMode } from ${JSON.stringify(import.meta.url)};`,
   );
   const { setupCli } = await import(url("dist/cli/setup.js"));
-  const { runRpcMode } = await import(modesUrl);
+  const { InteractiveMode, runRpcMode } = await import(modesUrl);
   let resolutions = 0;
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
@@ -72,7 +75,7 @@ export async function runHostedPiRpc(cli, args, observeOwner, options) {
   }
   if (resolutions !== 1) throw new Error("The reviewed Pi RPC handoff was not selected");
   handoff = async (runtime) => {
-    await observeOwner(runtime);
+    await observeOwner(runtime, InteractiveMode);
     return runRpcMode(runtime);
   };
   setupCli();
@@ -82,13 +85,18 @@ export async function runHostedPiRpc(cli, args, observeOwner, options) {
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) {
   const [, , cli, ...args] = process.argv;
+  const rendererKey = process.env.NEXUS_PI_RENDERER_KEY;
+  delete process.env.NEXUS_PI_RENDERER_KEY;
   // Pi redirects ordinary stdout to diagnostics before it enters RPC mode.
   // Confirm one frame on the original pipe before starting the RPC reader.
   const writeProtocol = process.stdout.write.bind(process.stdout);
-  void runHostedPiRpc(cli, args, ({ session }) => new Promise((resolve, reject) => {
-    const notice = { type: "nexus_pi_owned_rpc", revision: 1, session_id: session.sessionId };
-    writeProtocol(JSON.stringify(notice) + "\n", (error) => error ? reject(error) : resolve());
-  })).catch(() => {
+  void runHostedPiRpc(cli, args, async (owner, InteractiveMode) => {
+    const port = await startHostedRenderer(InteractiveMode, owner, rendererKey);
+    const notice = { type: "nexus_pi_owned_rpc", revision: 1, session_id: owner.session.sessionId, renderer_port: port };
+    await new Promise((resolve, reject) => {
+      writeProtocol(JSON.stringify(notice) + "\n", (error) => error ? reject(error) : resolve());
+    });
+  }).catch(() => {
     console.error("The reviewed Pi RPC owner could not start.");
     process.exitCode = 1;
   });

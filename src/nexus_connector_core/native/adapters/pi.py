@@ -102,6 +102,7 @@ from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
 
 from ..legacy_environment import child_environment
+from ..pi_renderer import PiRendererEndpoint
 from ...pi_extension_resource import PiNativeActionLaunch, pi_extension_path
 from .compatibility import pi_version_observation
 
@@ -109,6 +110,7 @@ import itertools
 import json
 import os
 import queue
+import secrets
 import subprocess
 import threading
 from collections import deque
@@ -282,6 +284,8 @@ class _PiTransport:
         self._hosted_session_id = hosted_session_id
         self._hosted_rpc_notices = 0
         self._hosted_rpc_ready = False
+        self._renderer_key = secrets.token_hex(32) if hosted_session_id is not None else None
+        self._renderer_port: int | None = None
         self._on_push_event = on_push_event
         self._on_unmatched_response = on_unmatched_response
         self._on_child_exit = on_child_exit
@@ -320,6 +324,8 @@ class _PiTransport:
     # ------------------------------------------------------------------ #
     def start(self, *, process_birth_observer: Callable[[ProcessBirthEvidence], None] | None = None) -> None:
         full_env = child_environment(self._env, native_action=self._native_action)
+        if self._renderer_key is not None:
+            full_env["NEXUS_PI_RENDERER_KEY"] = self._renderer_key
         popen_kwargs: dict[str, Any] = dict(
             cwd=self._cwd,
             env=full_env,
@@ -619,8 +625,12 @@ class _PiTransport:
             return
         if self._hosted_session_id is not None and msg.get("type") == "nexus_pi_owned_rpc":
             self._hosted_rpc_notices += 1
+            port = msg.get("renderer_port")
             self._hosted_rpc_ready = (self._hosted_rpc_notices == 1 and type(msg.get("revision")) is int
-                and msg == {"type": "nexus_pi_owned_rpc", "revision": 1, "session_id": self._hosted_session_id})
+                and type(port) is int and 1 <= port <= 65535
+                and msg == {"type": "nexus_pi_owned_rpc", "revision": 1, "session_id": self._hosted_session_id,
+                            "renderer_port": port})
+            self._renderer_port = port if self._hosted_rpc_ready else None
             return
         if msg.get("type") == _TYPE_RESPONSE:
             verb = msg.get("command")
@@ -828,6 +838,14 @@ class PiRpcConnector:
             raise NativeAdapterError(ErrorCode.CONFLICT, "The Pi owner changed during the read.")
         return {"native_session_id": session.session_id, "is_streaming": state["isStreaming"],
                 "is_compacting": state["isCompacting"], "pending_message_count": state["pendingMessageCount"]}
+
+    def owned_pi_renderer(self, session: HarnessSession) -> PiRendererEndpoint | None:
+        self._validate_session(session)
+        transport = self._transport
+        if (transport is None or not transport.is_alive() or not transport._hosted_rpc_ready
+                or transport._renderer_port is None or transport._renderer_key is None):
+            return None
+        return PiRendererEndpoint(transport._renderer_port, session.session_id, transport._renderer_key)
 
     def start(self, *, owning_agent_id: str) -> HarnessSession:
         with self._start_lock:

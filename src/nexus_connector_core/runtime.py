@@ -11,6 +11,7 @@ import hashlib
 import json
 import math
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
+from contextlib import aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
@@ -39,6 +40,7 @@ from .protocol import canonical_json
 from .ports import Journal, Clock, OwnedSlotLedger
 from .targeting import validate_control_target
 from .lease_runtime_r4 import R4LeaseRuntime
+from .native.pi_renderer import PiRendererEndpoint
 from .close_runtime import CloseRuntimeMixin
 from .drain import CooperativeDrain, _ReleasedUnclaimedLaunchProof
 
@@ -1400,6 +1402,45 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 or type(result["pending_message_count"]) is not int or not 0 <= result["pending_message_count"] < 2**31):
             raise CoreError("SESSION_CONFLICT", stage)
         return result
+
+    @asynccontextmanager
+    async def open_live_pi_renderer(self, scope: Mapping, target: NativeSessionTarget, *,
+                                    connection_id: str, connection_generation: int, columns: int, rows: int):
+        """Attach a trusted host to one existing renderer, with no input authority."""
+        stage = "pi_renderer"
+        if not isinstance(target, NativeSessionTarget) or target.adapter_id != "pi_rpc":
+            raise CoreError("VALIDATION_ERROR", stage)
+        channel = dict(connection_id=connection_id, connection_generation=connection_generation)
+        before = await self.prove_live_native_session(scope, target, **channel)
+        binding = self._sessions.get(before.key)
+        renderer = getattr(binding.native, "owned_pi_renderer", None) if binding else None
+        endpoint = renderer() if callable(renderer) else None
+        if not isinstance(endpoint, PiRendererEndpoint) or endpoint.session_id != target.native_session_id:
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+
+        async def verify():
+            if (await self.prove_live_native_session(scope, target, **channel) != before
+                    or self._sessions.get(before.key) is not binding or renderer() != endpoint):
+                raise CoreError("STALE_GENERATION", stage)
+
+        async with endpoint.attach(columns, rows) as reader:
+            await verify()
+
+            async def output():
+                while True:
+                    try:
+                        async with asyncio.timeout(1):
+                            data = await reader.read_output()
+                    except TimeoutError:
+                        await verify()
+                        continue
+                    if data is None:
+                        return
+                    await verify()
+                    yield data
+
+            async with aclosing(output()) as frames:
+                yield frames
 
     async def _read_live_native_presentation(self, scope, target, channel, reader_name, *args):
         stage = "native_presentation_read"
