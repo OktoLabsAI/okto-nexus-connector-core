@@ -6,7 +6,7 @@ import json
 
 import pytest
 from nexus_connector_core import (
-    CoreError, ExecutionContext, InstallationCandidate, LaunchIntent, PreparedLaunch,
+    ControlOperation, CoreError, ExecutionContext, InstallationCandidate, LaunchIntent, PreparedLaunch,
     Operation, OperationKey, OperationReceipt, installation_ref, r4_submit_intent_hash,
     prepare_r4_receipt_binding, project_r4_bound_receipt, validate_r4_receipt_binding,
     project_r4_open_receipt, project_r4_turn_receipt, project_r4_steer_receipt,
@@ -98,6 +98,36 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
     damaged['source']['connection_generation'] += 1
     with pytest.raises(CoreError):
         validate_r4_receipt_binding(damaged)
+
+
+def test_pi_steer_receipt_binding_keeps_the_private_run_across_restart():
+    frame = _frame() | {'action': 'turn.steer', 'payload': {'text': 'PRIVATE_TEXT'}}
+    frame['intent_hash'] = r4_submit_intent_hash(frame)
+    context = ExecutionContext(*(frame[k] for k in ('server_id', 'executor_id', 'binding_id', 'agent_id', 'workspace_id')),
+                               1, 1, 1, 100, frozenset({'turn.steer'}))
+    run = 'prun_' + '1' * 32
+    operation = ControlOperation(frame['operation_id'], frame['session_id'], 'steer',
+                                 text=frame['payload']['text'], expected_pi_run_id=run)
+    semantic = Operation(operation.operation_id, operation.session_id, 'turn.steer',
+                         {'text': operation.text, 'expected_pi_run_id': run})
+    receipt = OperationReceipt(operation.operation_id, intent_hash(semantic, context),
+                               'SUBMITTED', True, False, operation.session_id)
+    key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
+    binding = prepare_r4_receipt_binding(frame, context, applied_operation=operation)
+    saved = json.dumps(binding)
+    assert run not in saved and operation.text not in saved
+    recovered = project_r4_bound_receipt(json.loads(saved), receipt, key=key, receipt_revision=2)
+    assert recovered['intent_hash'] == frame['intent_hash'] and recovered['stage'] == 'SUBMITTED'
+    for other in (None, replace(operation, expected_pi_run_id='prun_' + '2' * 32)):
+        alternate = prepare_r4_receipt_binding(frame, context, applied_operation=other)
+        with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
+            project_r4_bound_receipt(alternate, receipt, key=key, receipt_revision=2)
+    for changed in (replace(operation, text='Other'), replace(operation, session_id='foreign'),
+                    replace(operation, expected_turn_id='foreign')):
+        with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
+            prepare_r4_receipt_binding(frame, context, applied_operation=changed)
+    with pytest.raises(CoreError, match='VALIDATION_ERROR'):
+        prepare_r4_receipt_binding(frame, context, applied_operation=replace(operation, expected_pi_run_id='invalid'))
 
 
 @pytest.mark.parametrize('value', [None, [], {}, {'schema_version': True}, {'source': 'wrong'}])

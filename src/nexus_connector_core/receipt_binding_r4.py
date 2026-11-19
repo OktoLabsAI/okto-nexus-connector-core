@@ -7,7 +7,7 @@ Its digest detects corruption; it is not a signature from an untrusted peer.
 import hashlib
 import re
 
-from .models import CoreError, NativeApprovalOperation, OpenOperation, Operation, OperationKey, OperationReceipt, PreparedLaunch
+from .models import ControlOperation, CoreError, NativeApprovalOperation, OpenOperation, Operation, OperationKey, OperationReceipt, PreparedLaunch
 from .harness_configuration import harness_settings_dict
 from .protocol import canonical_json, intent_hash, strict_json
 from .frame_codec_r4 import decode_r4_frame, encode_r4_frame
@@ -15,6 +15,7 @@ from .installation import effective_installation_ref
 from .close_operation import close_operation_semantic, r4_close_operation
 from .open_operation import open_operation_semantic
 from .decision_bridge_r4 import native_decision_semantic, r4_native_decision_operation
+from .native.pi_steer_facts import valid_pi_run_id, valid_pi_steer_operation
 from .receipt_bridge_r4 import _checked_source
 
 
@@ -27,11 +28,13 @@ _ACTIONS = {'runtime.open', 'turn.submit', 'turn.steer', 'turn.interrupt',
 
 def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
                                stream_epoch=None, applied_operation=None, resume_thread_id=None):
-    """Validate and hash the exact local semantic, including a host's resume target."""
+    """Validate and hash the exact local semantic, including a host's private target."""
     try:
         frame = _checked_source(submit_frame, context, action=submit_frame.get('action'))
         action, payload = frame['action'], frame['payload']
         if resume_thread_id is not None and action != 'runtime.open':
+            raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
+        if applied_operation is not None and action not in ('approval.decide', 'input.provide', 'turn.steer'):
             raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
         if action == 'runtime.open':
             if (not isinstance(prepared, PreparedLaunch) or not isinstance(stream_epoch, str) or
@@ -55,6 +58,19 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
             if expected != applied_operation:
                 raise CoreError('OPERATION_CONFLICT', 'r4_receipt_binding')
             semantic = native_decision_semantic(applied_operation)
+        elif action == 'turn.steer' and applied_operation is not None:
+            if not isinstance(applied_operation, ControlOperation):
+                raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
+            run_id = applied_operation.expected_pi_run_id
+            if (frame.get('expected_turn_id') is not None or not valid_pi_run_id(run_id)
+                    or not valid_pi_steer_operation(frame['operation_id'])):
+                raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
+            expected = ControlOperation(frame['operation_id'], frame['session_id'], 'steer',
+                                        text=payload['text'], expected_pi_run_id=run_id)
+            if expected != applied_operation:
+                raise CoreError('OPERATION_CONFLICT', 'r4_receipt_binding')
+            semantic = Operation(frame['operation_id'], frame['session_id'], action,
+                                 {'text': payload['text'], 'expected_pi_run_id': run_id})
         else:
             key = 'text' if action in ('turn.submit', 'turn.steer') else 'reason'
             semantic = Operation(frame['operation_id'], frame['session_id'], action,
