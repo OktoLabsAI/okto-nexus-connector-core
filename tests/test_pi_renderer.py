@@ -39,6 +39,7 @@ class NativeTranscript {
     this.defaultEditor = {
       value: "",
       getText() { return this.value; },
+      setText(value) { this.value = value; },
       handleInput(data) {
         if (data === "\r") { this.onSubmit(this.value); this.value = ""; }
         else if (data === "\x7f") this.value = this.value.slice(0, -1);
@@ -103,8 +104,14 @@ process.stdin.resume();
                     assert type(await editor.read_event()) is bytes
                     assert await edited("insert", text="Próxima linha\nCom acentosX") == PiEditorUpdate(1, None)
                     assert await edited("backspace") == PiEditorUpdate(2, None)
-                    assert await edited("enter") == PiEditorUpdate(3, "Próxima linha\nCom acentos")
-                    assert await edited("enter") == PiEditorUpdate(4, None)
+                    assert await edited("snapshot") == PiEditorUpdate(3, "Próxima linha\nCom acentos")
+                    assert await edited("snapshot") == PiEditorUpdate(4, "Próxima linha\nCom acentos")
+                    assert await edited("enter") == PiEditorUpdate(5, "Próxima linha\nCom acentos")
+                    assert await edited("enter") == PiEditorUpdate(6, None)
+                    assert await edited("insert", text="Reviewed draft") == PiEditorUpdate(7, None)
+                    assert await edited("snapshot") == PiEditorUpdate(8, "Reviewed draft")
+                    assert await edited("clear") == PiEditorUpdate(9, None)
+                    assert await edited("enter") == PiEditorUpdate(10, None)
         finally:
             if proc.returncode is None:
                 proc.terminate()

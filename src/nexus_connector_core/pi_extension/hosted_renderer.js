@@ -9,7 +9,7 @@ const MAX_INSERT = 4 * 1024;
 const EDITOR_KEYS = new Map([
   ["insert", ""], ["enter", "\r"], ["newline", "\n"], ["backspace", "\x7f"], ["delete", "\x1b[3~"],
   ["left", "\x1b[D"], ["right", "\x1b[C"], ["up", "\x1b[A"], ["down", "\x1b[B"],
-  ["home", "\x1b[H"], ["end", "\x1b[F"],
+  ["home", "\x1b[H"], ["end", "\x1b[F"], ["snapshot", null], ["clear", null],
 ]);
 const decoder = new TextDecoder("utf-8", { fatal: true });
 const VISIBLE_EVENTS = new Set([
@@ -167,12 +167,17 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
       const before = editor.getExpandedText?.() ?? editor.getText();
       const limitReached = insert !== null && Buffer.byteLength(before) + Buffer.byteLength(insert) > MAX_CHUNK;
       this.submission = undefined;
-      if (!limitReached) {
+      if (key === "clear") {
+        editor.setText("");
+        this.renderer.requestRender();
+      } else if (!limitReached && key !== "snapshot") {
         editor.handleInput(insert === null ? EDITOR_KEYS.get(key) : "\x1b[200~" + insert + "\x1b[201~");
         this.renderer.requestRender();
       }
-      const draft = this.submission;
-      if (draft && (key !== "enter" || !validText(draft, MAX_CHUNK))) throw new Error("Invalid editor submission");
+      const draft = key === "snapshot" ? before : this.submission;
+      if (draft && (key !== "enter" && key !== "snapshot" || !validText(draft, MAX_CHUNK))) {
+        throw new Error("Invalid editor submission");
+      }
       return { type: "edited", sequence, draft: draft ? Buffer.from(draft).toString("base64") : null,
                limit_reached: limitReached };
     }

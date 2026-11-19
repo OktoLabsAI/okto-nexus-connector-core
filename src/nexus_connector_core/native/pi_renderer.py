@@ -18,7 +18,8 @@ _HEX = re.compile(r"[0-9a-f]{64}\Z", re.ASCII)
 _MAX_OUTPUT_BYTES = 12 * 1024
 _MAX_INSERT_BYTES = 4 * 1024
 _MAX_FRAME_BYTES = 16 * 1024 + 128
-_EDITOR_KEYS = frozenset({"insert", "enter", "newline", "backspace", "delete", "left", "right", "up", "down", "home", "end"})
+_EDITOR_KEYS = frozenset({"insert", "enter", "newline", "backspace", "delete", "left", "right", "up", "down", "home", "end",
+                          "snapshot", "clear"})
 STAGE = "pi_renderer"
 
 
@@ -93,7 +94,7 @@ class PiRendererEditor:
             raise CoreError("VALIDATION_ERROR", STAGE)
         self._sequence += 1
         self._waiting = self._sequence
-        self._allow_draft = key == "enter"
+        self._allow_draft = key in ("enter", "snapshot")
         request = {"type": "key", "sequence": self._sequence, "key": key, "text": text}
         try:
             self._writer.write(json.dumps(request, ensure_ascii=False).encode("utf-8") + b"\n")
