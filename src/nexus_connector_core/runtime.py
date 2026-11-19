@@ -1075,9 +1075,18 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 if binding.lease_hold and semantic.action != "turn.interrupt":
                     raise EffectNotSent("LEASE_UPDATE_PENDING")
                 effect_entered = True
-                await binding.native.send(
-                    verb, payload, semantic.operation_id,
-                    expected_turn_id=semantic.expected_turn_id)
+                terminal_submission = getattr(binding.native, "terminal_submission", None)
+                if terminal_submission is not None:
+                    from .native.claude_terminal_submission import ClaudeTerminalSubmission
+                    if (verb != "send_turn" or type(terminal_submission) is not ClaudeTerminalSubmission
+                            or binding.adapter_id != "claude_stream"):
+                        raise EffectNotSent("This session cannot submit through a Claude terminal.")
+                    await terminal_submission.submit(semantic.operation_id, payload["text"],
+                        lambda: self._verify_terminal_submission(binding, semantic, context))
+                else:
+                    await binding.native.send(
+                        verb, payload, semantic.operation_id,
+                        expected_turn_id=semantic.expected_turn_id)
                 return None
 
             try:
@@ -2008,6 +2017,11 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
 
     @staticmethod
     def _active_turn(binding: _Session) -> bool:
+        terminal_submission = getattr(binding.native, "terminal_submission", None)
+        if terminal_submission is not None:
+            from .native.claude_terminal_submission import ClaudeTerminalSubmission
+            if type(terminal_submission) is ClaudeTerminalSubmission:
+                return terminal_submission.active_turn()
         probe = getattr(binding.native, "active_turn", None)
         if probe is None:
             return False
@@ -3162,6 +3176,22 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         except Exception:
             binding.faulted = True
 
+    async def _verify_terminal_submission(self, binding, operation, context):
+        """A native hook can proceed only while the exact durable send is in flight."""
+        key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
+        receipt = await self._journal.get_receipt(key)
+        try:
+            self._check_drain_admission(operation.action)
+            self._check_r4_context(context, operation.action, operation.session_id)
+            current = self._session(operation.session_id, context, require_live_lease=True)
+            binding.effect_fence.check("send_turn")
+        except (CoreError, EffectNotSent):
+            return False
+        return (current is binding and receipt is not None
+                and receipt.intent_hash == intent_hash(operation, context)
+                and receipt.session_id == operation.session_id and receipt.stage == "SUBMISSION_STARTED"
+                and receipt.possible_effect and not receipt.retry_safe)
+
     async def _pump(self, session: SessionKey, binding: _Session) -> None:
         try:
             binding.pump_started.set()
@@ -3196,6 +3226,12 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                                 binding.pending_native_requests[json.dumps(request_id)] = encoded
                 if (event.payload.get("delivery_phase") == "terminal" and
                         event.category == "turn_state"):
+                    submitter = getattr(binding.native, "terminal_submission", None)
+                    if (binding.adapter_id == "claude_stream" and submitter is not None and event.operation_id
+                            and event.payload.get("delivery_outcome") in ("success", "failed", "interrupted")):
+                        from .native.claude_terminal_submission import ClaudeTerminalSubmission
+                        if type(submitter) is ClaudeTerminalSubmission:
+                            submitter.confirm_terminal(event.operation_id)
                     if self._capacity_enabled and event.operation_id:
                         await self._owned_slots.finish_turn_slot(
                             OperationKey(session.server_id, session.executor_id, event.operation_id),

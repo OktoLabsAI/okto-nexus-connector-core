@@ -37,6 +37,21 @@ class _Permit:
     operation_id: str
     digest: bytes
     deadline: float
+    check: object
+    delivery: "_PromptDelivery"
+
+
+class _PromptDelivery:
+    def __init__(self):
+        self._done = threading.Event()
+        self._allowed = False
+
+    def complete(self, allowed):
+        self._allowed = allowed
+        self._done.set()
+
+    def wait(self, timeout):
+        return self._done.wait(timeout) and self._allowed
 
 
 class ClaudeTerminalPromptGate:
@@ -74,13 +89,22 @@ class ClaudeTerminalPromptGate:
                 pass
 
             def do_POST(self):
-                status, body = gate._request(self)
-                self.send_response(status)
-                self.send_header("Content-Type", "application/json")
-                data = json.dumps(body, separators=(",", ":")).encode("ascii")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                status, body, delivery = gate._request(self)
+                written = False
+                try:
+                    self.send_response(status)
+                    self.send_header("Content-Type", "application/json")
+                    data = json.dumps(body, separators=(",", ":")).encode("ascii")
+                    self.send_header("Content-Length", str(len(data)))
+                    self.end_headers()
+                    self.wfile.write(data)
+                    self.wfile.flush()
+                    written = True
+                except OSError:
+                    pass
+                finally:
+                    if delivery is not None:
+                        delivery.complete(written and status == 200 and body == {})
 
         with self._lock:
             if self._server is not None or self._closed:
@@ -120,10 +144,11 @@ class ClaudeTerminalPromptGate:
             }]}]},
         }, {_ENV_KEY: self._secret}
 
-    def arm(self, operation_id, text, *, ttl=10):
+    def arm(self, operation_id, text, *, ttl=10, check=None):
         validate_external_id(operation_id, stage=_STAGE)
         digest = _prompt_digest(text)
-        if digest is None or type(ttl) not in (int, float) or not 0 < ttl <= 30 or not math.isfinite(ttl):
+        if (digest is None or type(ttl) not in (int, float) or not 0 < ttl <= 30 or not math.isfinite(ttl)
+                or (check is not None and not callable(check))):
             raise CoreError("VALIDATION_ERROR", _STAGE)
         with self._lock:
             now = time.monotonic()
@@ -131,45 +156,56 @@ class ClaudeTerminalPromptGate:
                     or (self._permit is not None and self._permit.deadline > now)):
                 raise CoreError("SESSION_CONFLICT", _STAGE)
             self._used.add(operation_id)
-            self._permit = _Permit(operation_id, digest, now + ttl)
+            delivery = _PromptDelivery()
+            self._permit = _Permit(operation_id, digest, now + ttl, check, delivery)
+            return delivery
+
+    def discard(self, operation_id):
+        """Retire an unconsumed permit when the effect waiter gives up."""
+        with self._lock:
+            if self._permit is not None and self._permit.operation_id == operation_id:
+                self._permit.delivery.complete(False)
+                self._permit = None
 
     def _request(self, handler):
         if handler.path != _PATH:
-            return 404, {}
+            return 404, {}, None
         token = handler.headers.get_all("Authorization", [])
         if (len(token) != 1 or not token[0].isascii()
                 or not secrets.compare_digest(token[0], "Bearer " + self._secret)):
-            return 403, {}
+            return 403, {}, None
         length = handler.headers.get_all("Content-Length", [])
         if (len(length) != 1 or not re.fullmatch(r"[0-9]{1,6}", length[0])
                 or not 0 < int(length[0]) <= _MAX_REQUEST_BYTES or handler.headers.get("Transfer-Encoding")
                 or handler.headers.get_content_type() != "application/json"):
-            return 400, {}
+            return 400, {}, None
         try:
             data = handler.rfile.read(int(length[0]))
             payload = strict_json(data.decode("utf-8"))
         except (OSError, ValueError, RecursionError):
-            return 400, {}
+            return 400, {}, None
         if (len(data) != int(length[0]) or type(payload) is not dict
                 or payload.get("hook_event_name") != "UserPromptSubmit"
                 or payload.get("session_id") != self._session_uuid
                 or payload.get("permission_mode") != self._permission_mode
                 or type(payload.get("cwd")) is not str or Path(payload["cwd"]) != self._cwd):
-            return 200, _DENIAL
+            return 200, _DENIAL, None
         digest = _prompt_digest(payload.get("prompt"))
         with self._lock:
             permit = self._permit
             if (self._closed or permit is None or permit.deadline <= time.monotonic()
                     or digest is None or not secrets.compare_digest(permit.digest, digest)):
-                return 200, _DENIAL
+                return 200, _DENIAL, None
             self._permit = None
             try:
                 allowed = self._authorize(permit.operation_id) is True
+                if allowed and permit.check is not None:
+                    allowed = permit.check() is True
             except Exception:
-                return 503, {}
+                return 503, {}, permit.delivery
             if not allowed or permit.deadline <= time.monotonic():
-                return 200, _DENIAL
-            return 200, {}
+                return 200, _DENIAL, permit.delivery
+            return 200, {}, permit.delivery
 
 
 def _prompt_digest(text):

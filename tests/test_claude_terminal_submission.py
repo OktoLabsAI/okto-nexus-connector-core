@@ -1,0 +1,161 @@
+"""Canonical Core delivery evidence for the protected terminal submit path."""
+
+import asyncio
+import json
+import time
+from contextlib import asynccontextmanager
+from urllib.request import Request, urlopen
+from uuid import uuid4
+
+import pytest
+
+from nexus_connector_core import (
+    CoreError, ExecutionContext, LaunchIntent, OpenOperation,
+    OperationKey, RuntimeEvent, ShutdownPolicy, TurnOperation,
+)
+from nexus_connector_core.discovery import fingerprint
+from nexus_connector_core.journal import SQLiteJournal
+from nexus_connector_core.models import EffectNotSent, InstallationCandidate
+from nexus_connector_core.native.claude_terminal_prompt import ClaudeTerminalPromptGate
+from nexus_connector_core.native.claude_terminal_submission import ClaudeTerminalSubmission
+from nexus_connector_core.runtime import LocalRuntimeCore
+
+
+class _Clock:
+    advance = 0
+
+    def monotonic(self):
+        return time.monotonic() + self.advance
+
+    def wall_time(self):
+        return time.time()
+
+
+class _HookPeer:
+    def __init__(self, gate, cwd, session_uuid, boundary):
+        settings, env = gate.launch_settings()
+        hook, = settings["hooks"]["UserPromptSubmit"][0]["hooks"]
+        self._url = hook["url"]
+        self._token = next(iter(env.values()))
+        self._scope = {"cwd": cwd, "session_id": session_uuid, "permission_mode": "plan",
+                       "hook_event_name": "UserPromptSubmit"}
+        self.boundary = boundary
+        self.writes = []
+        self.responses = []
+
+    def write(self, data):
+        assert data.startswith(b"\x1b[200~") and data.endswith(b"\x1b[201~\r")
+        text = data[6:-7].decode()
+        self.writes.append(text)
+        self.boundary()
+        request = Request(self._url, data=json.dumps(self._scope | {"prompt": text}).encode(),
+                          headers={"Authorization": "Bearer " + self._token, "Content-Type": "application/json"})
+        with urlopen(request, timeout=4) as response:
+            self.responses.append(json.load(response))
+
+
+class _Factory:
+    native_id = "native-terminal"
+
+    def __init__(self, submission):
+        self.terminal_submission = submission
+        self.queue = asyncio.Queue()
+        self.stopped = False
+
+    async def open(self, prepared, session_id, context, *, stream_epoch):
+        return self
+
+    async def send(self, verb, *_args, **_kwargs):
+        if verb == "send_turn":
+            raise AssertionError("The legacy sender must never receive an admitted terminal prompt.")
+        raise EffectNotSent("Native controls are unavailable in this fixture.")
+
+    async def events(self):
+        while (event := await self.queue.get()) is not None:
+            yield event
+
+    async def close(self):
+        self.stopped = True
+        await self.queue.put(None)
+        return "graceful"
+
+    async def observe(self):
+        return ("STOPPED" if self.stopped else "RUNNING", "IDLE")
+
+
+@pytest.mark.parametrize("case", ["accepted", "revoked_at_hook", "lost_after_reply"])
+def test_core_binds_the_terminal_hook_to_the_durable_send(tmp_path, case):
+    async def run():
+        clock = _Clock()
+        workspace = str(tmp_path)
+        session_uuid = str(uuid4())
+        journal = SQLiteJournal(tmp_path / "history.sqlite")
+        async with _runtime(journal, clock, session_uuid, workspace, tmp_path, case) as values:
+            runtime, context, native, peer = values
+            operation = TurnOperation("terminal-turn-1", "session", "An exact approved message.")
+            key = OperationKey("server", "executor", operation.operation_id)
+            if case == "accepted":
+                submitted = await runtime.submit(operation, context)
+                assert submitted.stage == "SUBMITTED" and submitted.possible_effect
+                assert await runtime.submit(operation, context) == submitted
+                assert peer.responses == [{}]
+                with pytest.raises(CoreError, match="STALE_TURN"):
+                    await runtime.submit(TurnOperation("too-soon", "session", "Different input."), context)
+                await native.queue.put(RuntimeEvent("server", "executor", "session", "epoch", 0,
+                    "turn_state", "fixture-result", {"delivery_phase": "terminal", "delivery_outcome": "success"},
+                    operation_id=operation.operation_id))
+                async with asyncio.timeout(5):
+                    while native.terminal_submission.active_turn():
+                        await asyncio.sleep(.01)
+                assert (await journal.get_receipt(key)).stage == "SUCCEEDED"
+            else:
+                with pytest.raises(CoreError, match="OUTCOME_UNKNOWN") as uncertain:
+                    await runtime.submit(operation, context)
+                assert uncertain.value.possible_effect and not uncertain.value.retry_safe
+                retained = await journal.get_receipt(key)
+                assert retained.stage == "OUTCOME_UNKNOWN" and native.terminal_submission.active_turn()
+                if case == "revoked_at_hook":
+                    assert peer.responses[0]["decision"] == "block"
+                else:
+                    assert peer.responses == [{}]
+                    assert await runtime.submit(operation, context) == retained
+            assert peer.writes == [operation.text]
+
+    asyncio.run(run())
+
+
+@asynccontextmanager
+async def _runtime(journal, clock, session_uuid, workspace, root, case):
+    with ClaudeTerminalPromptGate(session_uuid, workspace, "plan", lambda _op: True) as gate:
+        def boundary():
+            if case == "revoked_at_hook":
+                clock.advance = 120
+
+        peer = _HookPeer(gate, workspace, session_uuid, boundary)
+        if case == "lost_after_reply":
+            write = peer.write
+
+            def lose_reply(data):
+                write(data)
+                raise OSError("Simulated loss of the local terminal write result.")
+
+            peer.write = lose_reply
+        native = _Factory(ClaudeTerminalSubmission(peer, gate))
+        binary = root / "claude-fixture"
+        binary.write_bytes(b"synthetic selected binary")
+        candidate = InstallationCandidate("claude_stream", str(binary), fingerprint(binary), "explicit", "selected")
+        runtime = LocalRuntimeCore(journal, native, candidates={"claude_stream": candidate},
+                                   workspace_roots={"workspace": workspace}, clock=clock)
+        context = ExecutionContext("server", "executor", "binding", "agent", "workspace", 1, 1, 1,
+                                   clock.monotonic() + 60, frozenset({"runtime.open", "turn.submit", "runtime.close"}))
+        try:
+            prepared = await runtime.prepare(LaunchIntent("agent", "workspace", "claude_stream"), context)
+            await runtime.open(OpenOperation("open", "session", "epoch", prepared), context)
+            if case == "accepted":
+                with pytest.raises(CoreError, match="VALIDATION_ERROR") as refused:
+                    await runtime.submit(TurnOperation("terminal-command", "session", "/exit"), context)
+                assert refused.value.retry_safe and not refused.value.possible_effect and not peer.writes
+            yield runtime, context, native, peer
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
