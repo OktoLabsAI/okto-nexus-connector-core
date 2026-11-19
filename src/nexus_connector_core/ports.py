@@ -16,6 +16,7 @@ from .models import (
     TurnOperation,
 )
 from .lease_reducer_r4 import R4LeaseAttempt
+from .native.claude_saved_history import ClaudeSavedHistory
 from .process_launch import ProcessLaunchIdentity, ProcessLaunchStore
 from .capacity import CapacityRequest, CapacityAssessment, CapacityReservation, CapacityConsumption, CapacityReservationPage
 
@@ -109,6 +110,10 @@ class RuntimeCore(Protocol):
             self, scope: Mapping[str, Any], target: NativeSessionTarget, thread_id: str, *,
             connection_id: str, connection_generation: int,
     ) -> tuple[NativeSessionOwnerProof, CodexRolloutEvidence] | None: ...
+    async def read_live_claude_saved_history(
+            self, scope: Mapping[str, Any], target: NativeSessionTarget, session_uuid: str, operation_id: str, *,
+            connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, ClaudeSavedHistory] | None: ...
     async def reconcile(self, request: ReconcileRequest) -> ReconcileReport: ...
     async def close(self, operation: CloseOperation,
                     context: ExecutionContext, *,

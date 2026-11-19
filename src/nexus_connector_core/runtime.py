@@ -33,7 +33,7 @@ from .models import (
     NativeSessionTarget, NativeSessionOwnerProof,
 )
 from .profiles import prepare_launch, verify_prepared
-from .identifiers import is_codex_thread_id
+from .identifiers import is_codex_thread_id, validate_external_id
 from .open_operation import open_operation_semantic
 from .protocol import intent_hash
 from .protocol import canonical_json
@@ -41,6 +41,8 @@ from .ports import Journal, Clock, OwnedSlotLedger
 from .targeting import validate_control_target
 from .lease_runtime_r4 import R4LeaseRuntime
 from .native.pi_renderer import PiRendererEndpoint
+from .native.claude_history_identity import claude_session_uuid
+from .native.claude_saved_history import ClaudeSavedHistory
 from .close_runtime import CloseRuntimeMixin
 from .drain import CooperativeDrain, _ReleasedUnclaimedLaunchProof
 
@@ -1511,10 +1513,36 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         if (not isinstance(target, NativeSessionTarget) or target.adapter_id != "codex_app_server"
                 or not is_codex_thread_id(thread_id)):
             raise CoreError("VALIDATION_ERROR", stage)
+        observed = await self._read_live_saved_history(scope, target, "read_owned_codex_rollout", (thread_id,),
+            connection_id=connection_id, connection_generation=connection_generation)
+        if observed is not None and (type(observed[1]) is not CodexRolloutEvidence or observed[1].thread_id != thread_id):
+            raise CoreError("SESSION_CONFLICT", stage)
+        return observed
+
+    async def read_live_claude_saved_history(
+            self, scope: Mapping, target: NativeSessionTarget, session_uuid: str, operation_id: str, *,
+            connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, ClaudeSavedHistory] | None:
+        """Bind an exact terminal Claude operation and its saved file to the live owner."""
+        stage = "native_rollout_read"
+        if (not isinstance(target, NativeSessionTarget) or target.adapter_id != "claude_stream"
+                or claude_session_uuid(session_uuid) is None):
+            raise CoreError("VALIDATION_ERROR", stage)
+        validate_external_id(operation_id, stage=stage)
+        observed = await self._read_live_saved_history(scope, target, "read_owned_claude_history",
+            (session_uuid, operation_id), connection_id=connection_id, connection_generation=connection_generation)
+        if observed is not None and (
+                type(observed[1]) is not ClaudeSavedHistory or observed[1].session_uuid != session_uuid):
+            raise CoreError("SESSION_CONFLICT", stage)
+        return observed
+
+    async def _read_live_saved_history(self, scope, target, reader_name, args, *,
+                                       connection_id, connection_generation):
+        stage = "native_rollout_read"
         channel = dict(connection_id=connection_id, connection_generation=connection_generation)
         before = await self.prove_live_native_session(scope, target, **channel)
         binding = self._sessions.get(before.key)
-        reader = getattr(binding.native, "read_owned_codex_rollout", None) if binding is not None else None
+        reader = getattr(binding.native, reader_name, None) if binding is not None else None
         if not callable(reader):
             raise CoreError("CAPABILITY_UNSUPPORTED", stage)
         if binding.normal_lock.locked():
@@ -1522,15 +1550,13 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         async with binding.normal_lock:
             if self._active_turn(binding) or binding.pending_native_requests:
                 return None
-            rollout = await reader(thread_id)
+            evidence = await reader(*args)
             after = await self.prove_live_native_session(scope, target, **channel)
             if before != after or self._sessions.get(before.key) is not binding:
                 raise CoreError("STALE_GENERATION", stage)
-            if rollout is None or self._active_turn(binding) or binding.pending_native_requests:
+            if evidence is None or self._active_turn(binding) or binding.pending_native_requests:
                 return None
-            if type(rollout) is not CodexRolloutEvidence or rollout.thread_id != thread_id:
-                raise CoreError("SESSION_CONFLICT", stage)
-        return before, rollout
+        return before, evidence
 
     async def legacy_operation_receipt(
             self, server_id: str, executor_id: str,

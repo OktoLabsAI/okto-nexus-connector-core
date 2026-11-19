@@ -134,6 +134,7 @@ from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
 from ..delta_batches import coalesce_claude_delta
 from ..claude_history_identity import CLAUDE_HISTORY_IDENTITY, claude_session_uuid
+from ..claude_saved_history import ClaudeSavedHistory, observe_claude_saved_history
 
 from ..legacy_environment import child_environment
 from .compatibility import claude_version_observation
@@ -353,6 +354,8 @@ class ClaudeCodeStreamConnector:
         self._turn_in_flight = False
         self._pending_turns: deque[_PendingTurn] = deque()
         self._history_session_uuid: str | None = None
+        self._history_operation_id: str | None = None
+        self._history_state_home: str | None = None
         self._history_identity_conflict = False
         self._interrupt_request_counter = 0
         self._reviewed_interrupt: _ReviewedInterrupt | None = None
@@ -429,6 +432,7 @@ class ClaudeCodeStreamConnector:
                 errors="replace",
             )
             self._proc = proc
+            self._history_state_home = spawn_env.get("CLAUDE_CONFIG_DIR")
             record_owned_process_birth(
                 proc, getattr(self, "_process_birth_observer", None))
             session = HarnessSession(
@@ -492,6 +496,25 @@ class ClaudeCodeStreamConnector:
                     {'reason': 'protocol_incompatible', 'stage': 'initialize'})
         finally:
             self._initialize_probe = None
+
+    def read_owned_saved_history(self, session: HarnessSession, session_uuid: str,
+                                 operation_id: str) -> ClaudeSavedHistory | None:
+        """Observe a settled, corroborated conversation from this exact stream."""
+        def current():
+            return (self._session is session and self._proc is not None and self._proc.poll() is None
+                    and not self._termination_requested.is_set() and not self._closed_event.is_set()
+                    and not self._pending_turns and not self._pending_admissions
+                    and not self._history_identity_conflict and self._history_session_uuid == session_uuid
+                    and self._history_operation_id == operation_id
+                    and session.compatibility_report.get("native_version") == "2.1.328")
+
+        with self._state_lock:
+            if not current() or not self._history_state_home or not self._cwd:
+                return None
+            home, cwd = self._history_state_home, self._cwd
+        evidence = observe_claude_saved_history(home, session_uuid, cwd)
+        with self._state_lock:
+            return evidence if current() else None
 
     def send(self, session: HarnessSession, command: HarnessCommand) -> None:
         if self._proc is None or self._session is None:
@@ -1097,6 +1120,8 @@ class ClaudeCodeStreamConnector:
                 interrupted = subtype == "error_during_execution" and review.acknowledged is True
                 review.interrupted = interrupted
                 review.notify()
+            self._history_operation_id = (turn.operation_id if history_identity is not None
+                                          and not interrupted and not obj.get("is_error") else None)
             self._turn_in_flight = bool(self._pending_turns)
             self._turn_generating.clear()
         # A result can be the only text frame, or replace earlier deltas.

@@ -23,6 +23,7 @@ from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, ReplacementNotSentAfterInterrupt, RuntimeCommandNotSent)
 from .adapters.compatibility import qualified_build, can_probe_protocol
 from .claude_history_identity import CLAUDE_HISTORY_IDENTITY, project_claude_history
+from .claude_saved_history import ClaudeSavedHistory
 from .pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_operation
 
 #: Reserved capacity for containment/observation calls (C2/R02): physical
@@ -768,6 +769,15 @@ class CopiedAdapterSession:
             return await asyncio.to_thread(reader, self._session, thread_id)
         except NativeAdapterError:
             raise CoreError("NATIVE_UNAVAILABLE", stage) from None
+
+    async def read_owned_claude_history(self, session_uuid: str, operation_id: str) -> ClaudeSavedHistory | None:
+        stage = "native_rollout_read"
+        reader = getattr(self._connector, "read_owned_saved_history", None)
+        if self._session.harness_kind != "claude_code" or not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        if self._close_started:
+            raise CoreError("SESSION_CONFLICT", stage)
+        return await asyncio.to_thread(reader, self._session, session_uuid, operation_id)
 
     async def close(self) -> str:
         preset_error = None
