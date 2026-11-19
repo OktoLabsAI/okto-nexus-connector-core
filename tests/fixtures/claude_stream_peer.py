@@ -88,6 +88,11 @@ def handle_control_request(msg):
     req_id = msg.get("request_id")
     subtype = req.get("subtype")
     if subtype == "interrupt":
+        if scenario == "natural_finish_at_interrupt":
+            # The original completed before the interrupt could take effect.
+            emit({"type": "result", "subtype": "success", "session_id": session_id, "result": "natural completion"})
+            emit({"type": "control_response", "response": {"subtype": "success", "request_id": req_id, "response": {}}})
+            return True
         if scenario == "crash_early_interrupt" and not generating:
             emit({"type": "control_response", "response": {"subtype": "success", "request_id": req_id, "response": {"still_queued": []}}})
             emit({"type": "result", "subtype": "error_during_execution", "session_id": session_id, "result": ""})
@@ -137,14 +142,14 @@ while True:
 
     emit({"type": "system", "subtype": "init", "session_id": session_id})
     generating = False
-    if scenario == "slow_start":
+    if scenario in ("slow_start", "natural_finish_at_interrupt"):
         time.sleep(0.5)
     generating = True
     emit({"type": "stream_event", "event": {"type": "message_start"}})
     emit({"type": "stream_event", "event": {"type": "content_block_start"}})
 
     interrupted = False
-    if scenario == "slow_start":
+    if scenario in ("slow_start", "natural_finish_at_interrupt"):
         # A real generating WINDOW (not just a delay before it): poll stdin
         # with select for up to ~2s so a control_request sent while this
         # turn is "in flight" has a genuine chance to land mid-turn and be

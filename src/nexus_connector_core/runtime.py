@@ -772,6 +772,12 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "control")
         run_id = operation.expected_pi_run_id
+        claude_target = operation.expected_claude_operation_id
+        if claude_target is not None:
+            self._external_operation_id(claude_target)
+            if (operation.verb != "steer" or operation.expected_turn_id is not None
+                    or run_id is not None or claude_target == operation.operation_id):
+                raise CoreError("VALIDATION_ERROR", "control")
         if run_id is not None and (
                 operation.verb not in ("steer", "interrupt") or operation.expected_turn_id is not None
                 or not valid_pi_run_id(run_id) or not valid_pi_steer_operation(operation.operation_id)):
@@ -801,6 +807,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         payload = {"text": operation.text}
         if run_id is not None:
             payload["expected_pi_run_id"] = run_id
+        if claude_target is not None:
+            payload["expected_claude_operation_id"] = claude_target
         semantic = Operation(operation.operation_id, operation.session_id,
                              "turn.steer", payload, operation.expected_turn_id)
         return await self._send(semantic, context, "steer", payload)
@@ -1030,6 +1038,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 validate_control_target(binding.adapter_id, semantic.action,
                                         semantic.expected_turn_id)
             if "expected_pi_run_id" in payload and binding.adapter_id != "pi_rpc":
+                raise CoreError("CAPABILITY_UNSUPPORTED", "control_target")
+            if "expected_claude_operation_id" in payload and binding.adapter_id != "claude_stream":
                 raise CoreError("CAPABILITY_UNSUPPORTED", "control_target")
             if semantic.action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "admission")

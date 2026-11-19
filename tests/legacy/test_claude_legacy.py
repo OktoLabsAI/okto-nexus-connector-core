@@ -929,7 +929,10 @@ def test_request_interrupt_marks_the_head_pending_turn_not_the_tail():
     from collections import deque
 
     connector = _wired_connector()
-    connector._pending_turns = deque([False, False])  # two turns outstanding
+    connector._pending_turns = deque()
+    with connector._state_lock:
+        connector._append_pending_turn(None)
+        connector._append_pending_turn(None)
     connector._turn_in_flight = True
     connector._turn_generating.set()  # safe window: real interrupt path
 

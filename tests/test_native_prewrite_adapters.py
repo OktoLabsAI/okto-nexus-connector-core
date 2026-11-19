@@ -1,6 +1,8 @@
 """Adapter refusals classified as definitely before native protocol writes."""
 
 import os
+from io import StringIO
+from types import SimpleNamespace
 
 import pytest
 
@@ -9,6 +11,7 @@ from nexus_connector_core.native.adapter_types import (
     HarnessCommand,
     HarnessSession,
     NativeAdapterError,
+    RuntimeCommandNotSent,
 )
 from nexus_connector_core.native.adapters.claude_code_stream import ClaudeCodeStreamConnector
 from nexus_connector_core.native.adapters.pi import PiRpcConnector
@@ -64,10 +67,42 @@ def test_claude_stream_refuses_unstarted_and_full_queue_before_write():
         connector.send(session, command)
     assert unstarted.value.details["not_sent"] is True
 
-    connector._pending_turns.extend([False] * 32)
+    with connector._state_lock:
+        for _ in range(32):
+            connector._append_pending_turn(None)
     with pytest.raises(NativeAdapterError) as full:
         connector._check_turn_capacity()
     assert full.value.code == ErrorCode.CONFLICT
     assert full.value.details["not_sent"] is True
+
+
+def test_reviewed_claude_steer_rechecks_head_at_native_write():
+    connector = ClaudeCodeStreamConnector()
+    session = _session(connector, "claude_code")
+    connector._session = session
+    wire = StringIO()
+    connector._proc = SimpleNamespace(stdin=wire)
+    with connector._state_lock:
+        connector._append_pending_turn("original")
+        connector._turn_generating.set()
+
+    write = connector._write_json
+
+    def successor_before_write(frame, **kwargs):
+        with connector._state_lock:
+            connector._pending_turns.popleft()
+            connector._append_pending_turn("successor")
+            connector._turn_generating.set()
+        write(frame, **kwargs)
+
+    connector._write_json = successor_before_write
+    command = HarnessCommand(session.session_id, "steer",
+        {"content": "replacement", "expected_claude_operation_id": "original"},
+        operation_id="reviewed-steer", expected_operation_id="original")
+    with pytest.raises(RuntimeCommandNotSent) as failure:
+        connector.send(session, command)
+    assert failure.value.code == "STALE_TURN"
+    assert wire.getvalue() == ""
+    assert [(turn.operation_id, turn.interrupted) for turn in connector._pending_turns] == [("successor", False)]
 
 

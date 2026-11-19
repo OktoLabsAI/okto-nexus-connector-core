@@ -12,6 +12,7 @@ from .harness_configuration import harness_settings_dict
 from .protocol import canonical_json, intent_hash, strict_json
 from .frame_codec_r4 import decode_r4_frame, encode_r4_frame
 from .installation import effective_installation_ref
+from .identifiers import validate_external_id
 from .close_operation import close_operation_semantic, r4_close_operation
 from .open_operation import open_operation_semantic
 from .decision_bridge_r4 import native_decision_semantic, r4_native_decision_operation
@@ -61,17 +62,23 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
         elif action in ('turn.steer', 'turn.interrupt') and applied_operation is not None:
             if not isinstance(applied_operation, ControlOperation):
                 raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
+            claude_target = applied_operation.expected_claude_operation_id
             run_id = applied_operation.expected_pi_run_id
-            if (frame.get('expected_turn_id') is not None or not valid_pi_run_id(run_id)
-                    or not valid_pi_steer_operation(frame['operation_id'])):
+            if frame.get('expected_turn_id') is not None or not valid_pi_steer_operation(frame['operation_id']):
                 raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
             key = 'text' if action == 'turn.steer' else 'reason'
+            if claude_target is None and valid_pi_run_id(run_id):
+                target = {'expected_pi_run_id': run_id}
+            elif claude_target is not None and run_id is None and action == 'turn.steer' and claude_target != frame['operation_id']:
+                target = {'expected_claude_operation_id': validate_external_id(claude_target, stage='r4_receipt_binding')}
+            else:
+                raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
             expected = ControlOperation(frame['operation_id'], frame['session_id'], action.split('.')[1],
-                                        **{key: payload[key]}, expected_pi_run_id=run_id)
+                                        **{key: payload[key]}, **target)
             if expected != applied_operation:
                 raise CoreError('OPERATION_CONFLICT', 'r4_receipt_binding')
             semantic = Operation(frame['operation_id'], frame['session_id'], action,
-                                 {key: payload[key], 'expected_pi_run_id': run_id})
+                                 {key: payload[key], **target})
         else:
             key = 'text' if action in ('turn.submit', 'turn.steer') else 'reason'
             semantic = Operation(frame['operation_id'], frame['session_id'], action,

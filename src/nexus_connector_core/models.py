@@ -459,6 +459,7 @@ class ControlOperation:
     expected_turn_id: str | None = None
     reason: str | None = None
     expected_pi_run_id: str | None = None
+    expected_claude_operation_id: str | None = None
 
 
 @dataclass(frozen=True, slots=True)

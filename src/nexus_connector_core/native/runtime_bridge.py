@@ -278,6 +278,9 @@ class CopiedAdapterSession:
             self._last_failure_code = None
         replacement = verb == "steer" and self._session.harness_kind == "claude_code"
         replaced_operation = self._active_operation_id if replacement else None
+        expected_claude = payload.get("expected_claude_operation_id")
+        if expected_claude is not None and expected_claude != replaced_operation:
+            raise RuntimeCommandNotSent("The reviewed Claude operation changed", code="STALE_TURN")
         if replacement:
             # Claude emits results in submission order. Keep the old operation
             # active through its interrupted result, including when that result
@@ -296,6 +299,8 @@ class CopiedAdapterSession:
                 self._pi_steer_controls[operation_id] = "requested"
         if verb in {"send_turn", "steer"} and self._session.harness_kind == "claude_code":
             native_payload = {"content": native_payload["text"]}
+            if expected_claude is not None:
+                native_payload["expected_claude_operation_id"] = expected_claude
         command = HarnessCommand(self._session.session_id, verb, native_payload,
                                  operation_id=operation_id,
                                  expected_operation_id=replaced_operation,
@@ -552,6 +557,9 @@ class CopiedAdapterSession:
                 self._pi_started_for_active = True
                 run = native.payload.get("hosted_pi_run_id")
                 self._active_pi_run_id = run if valid_pi_run_id(run) else None
+            if native.harness_kind == "claude_code" and native.native_event == "nexus_claude_generating":
+                if native.origin != "nexus" or native.operation_id != self._active_operation_id:
+                    raise CoreError("EVENT_OPERATION_MISMATCH", "native_pump", possible_effect=True)
             if native.harness_kind == "pi" and native.native_event == PI_STEER_EVENT:
                 operation = native.operation_id
                 stage = native.payload.get("stage")

@@ -144,6 +144,7 @@ import subprocess
 import threading
 from collections import deque
 from collections.abc import Callable, Iterator, Mapping, Sequence
+from dataclasses import dataclass, field
 from typing import Any
 
 from ..adapter_types import utc_now_iso
@@ -213,6 +214,26 @@ _EVENTS_POLL_S = 1.0
 #: child stopped reading - a real hang, not a transient race - and this
 #: connector must say so rather than silently join the wait.
 _WRITE_LOCK_TIMEOUT_S = 10.0
+
+
+@dataclass(slots=True)
+class _PendingTurn:
+    operation_id: str | None
+    interrupted: bool = False
+
+
+@dataclass(slots=True)
+class _ReviewedInterrupt:
+    request_id: str
+    turn: _PendingTurn
+    finished: threading.Event = field(default_factory=threading.Event)
+    acknowledged: bool | None = None
+    interrupted: bool | None = None
+
+    def notify(self) -> None:
+        if (self.acknowledged is False or self.interrupted is False or
+                (self.acknowledged is True and self.interrupted is True)):
+            self.finished.set()
 
 
 class ClaudeCodeStreamConnector:
@@ -312,8 +333,7 @@ class ClaudeCodeStreamConnector:
         self._state_lock = threading.Lock()
         self._pending_admissions = 0
         # Guarded by _state_lock. ``_pending_turns`` is a FIFO of one entry
-        # per queued-but-not-yet-resulted turn (each entry: was THIS turn
-        # interrupted by us). A plain "the current turn" boolean is not
+        # per queued-but-not-yet-resulted turn. A plain "the current turn" boolean is not
         # enough here: ``steer`` can interrupt an in-flight turn and queue
         # its replacement in the SAME call, before the interrupted turn's
         # own belated ``result`` has been read off stdout by the reader
@@ -329,8 +349,9 @@ class ClaudeCodeStreamConnector:
         # the two ends must agree on which end "the turn being
         # interrupted" lives at.
         self._turn_in_flight = False
-        self._pending_turns: deque[bool] = deque()
+        self._pending_turns: deque[_PendingTurn] = deque()
         self._interrupt_request_counter = 0
+        self._reviewed_interrupt: _ReviewedInterrupt | None = None
         # Set by the stdout reader thread the moment the HEAD turn's
         # (`_pending_turns[0]`) generation is observed to have started;
         # cleared by `_send_turn`/`_steer` ONLY when the turn being queued
@@ -347,8 +368,8 @@ class ClaudeCodeStreamConnector:
         # queue has nothing to do with whether the HEAD is generating),
         # silently defeating a subsequent interrupt - see
         # test_ordinary_send_turn_while_generating_does_not_desync_the_generating_flag.
-        # threading.Event is the cross-thread-safe primitive for this
-        # single boolean flag (no separate lock needed for it).
+        # Read and update the flag with the FIFO under _state_lock so the
+        # reviewed operation cannot be matched against a different head.
         self._turn_generating = threading.Event()
 
         self._stderr_tail: list[str] = []
@@ -532,16 +553,16 @@ class ClaudeCodeStreamConnector:
         def reserve_turn() -> None:
             with self._state_lock:
                 self._check_turn_capacity()
-                self._append_pending_turn()
+                self._append_pending_turn(command.operation_id)
 
         self._write_json({"type": "user", "message": {"role": "user", "content": content}},
                          before_write=reserve_turn)
 
-    def _append_pending_turn(self) -> None:
+    def _append_pending_turn(self, operation_id: str | None) -> None:
         """Caller holds the state lock. A tail must not clear the head's state."""
         if not self._pending_turns:
             self._turn_generating.clear()
-        self._pending_turns.append(False)
+        self._pending_turns.append(_PendingTurn(operation_id))
         self._turn_in_flight = True
 
     def _steer(self, command: HarnessCommand) -> None:
@@ -573,11 +594,10 @@ class ClaudeCodeStreamConnector:
         request_id = None
         if generation is not None:
             request_id = self._request_interrupt(generation, steer=command)
-            self._emit_steer(command, request_id, "interrupt_submitted")
 
         def reserve_replacement() -> None:
             with self._state_lock:
-                self._append_pending_turn()
+                self._append_pending_turn(command.operation_id)
 
         try:
             self._write_json({"type": "user", "message": {"role": "user", "content": content}},
@@ -611,25 +631,50 @@ class ClaudeCodeStreamConnector:
         with self._state_lock:
             self._interrupt_request_counter += 1
             request_id = f"nexus-interrupt-{self._interrupt_request_counter}"
+        exact = steer is not None and steer.payload.get("expected_claude_operation_id") is not None
+        review = None
 
         def mark_interrupted_head() -> None:
+            nonlocal review
             with self._state_lock:
+                if not self._pending_turns or (steer is not None and steer.expected_operation_id is not None
+                        and self._pending_turns[0].operation_id != steer.expected_operation_id):
+                    raise RuntimeCommandNotSent("The reviewed Claude operation changed", code="STALE_TURN")
                 if self._interrupt_generation() != generation:
                     raise RuntimeCommandNotSent("Claude turn changed before the interrupt write", code="STALE_TURN")
-                self._pending_turns[0] = True
+                head = self._pending_turns[0]
+                if exact:
+                    if len(self._pending_turns) != 1 or self._reviewed_interrupt is not None:
+                        raise RuntimeCommandNotSent("Claude has another pending native turn or control", code="STALE_TURN")
+                    review = self._reviewed_interrupt = _ReviewedInterrupt(request_id, head)
+                head.interrupted = True
 
         try:
-            self._write_json(
-                {"type": "control_request", "request_id": request_id, "request": {"subtype": "interrupt"}},
-                before_write=mark_interrupted_head)
-        except NativeAdapterError as exc:
-            if steer is None or exc.details.get("not_sent") is True:
-                raise
-            # A failed write or flush may have interrupted the old turn. The
-            # replacement was never attempted and cannot own any later output.
-            self._emit_steer(steer, request_id, "interrupt_write_unknown")
-            self._emit_steer(steer, request_id, "replacement_not_sent")
-            raise ReplacementNotSentAfterInterrupt() from exc
+            try:
+                self._write_json(
+                    {"type": "control_request", "request_id": request_id, "request": {"subtype": "interrupt"}},
+                    before_write=mark_interrupted_head)
+            except NativeAdapterError as exc:
+                if steer is None or exc.details.get("not_sent") is True:
+                    raise
+                # A failed write or flush may have interrupted the old turn.
+                self._emit_steer(steer, request_id, "interrupt_write_unknown")
+                self._emit_steer(steer, request_id, "replacement_not_sent")
+                raise ReplacementNotSentAfterInterrupt() from exc
+            if steer is not None:
+                self._emit_steer(steer, request_id, "interrupt_submitted")
+            if review is not None:
+                review.finished.wait(timeout=5.0)
+                with self._state_lock:
+                    confirmed = review.acknowledged is True and review.interrupted is True
+                if not confirmed:
+                    self._emit_steer(steer, request_id, "replacement_not_sent")
+                    raise ReplacementNotSentAfterInterrupt()
+                self._emit_steer(steer, request_id, "interrupt_confirmed")
+        finally:
+            with self._state_lock:
+                if review is not None and self._reviewed_interrupt is review:
+                    self._reviewed_interrupt = None
         return request_id
 
     def _emit_steer(self, command: HarnessCommand, request_id: str, stage: str) -> None:
@@ -900,6 +945,12 @@ class ClaudeCodeStreamConnector:
                 probe[2].update(response)
                 probe[1].set()
                 return
+            if isinstance(response, dict):
+                with self._state_lock:
+                    review = self._reviewed_interrupt
+                    if review is not None and response.get("request_id") == review.request_id and review.acknowledged is None:
+                        review.acknowledged = response.get("subtype") == "success"
+                        review.notify()
             subtype = (obj.get("response") or {}).get("subtype")
             self._emit("tool_activity", f"control_response:{subtype}", obj)
         elif native_type == "control_request":
@@ -938,8 +989,7 @@ class ClaudeCodeStreamConnector:
         event = obj.get("event") or {}
         etype = event.get("type")
         if etype in ("message_start", "content_block_start"):
-            with self._state_lock:
-                self._turn_generating.set()
+            self._observe_generation()
             self._emit("tool_activity", f"stream_event:{etype}", obj)
         elif etype == "content_block_delta":
             delta = event.get("delta") or {}
@@ -957,8 +1007,7 @@ class ClaudeCodeStreamConnector:
     def _handle_assistant(self, obj: dict[str, Any]) -> None:
         # Defensive: proves generation happened even if a stream_event was
         # somehow missed, so a later interrupt is never gated open forever.
-        with self._state_lock:
-            self._turn_generating.set()
+        self._observe_generation()
         message = obj.get("message") or {}
         text = "".join(
             block.get("text", "")
@@ -966,6 +1015,16 @@ class ClaudeCodeStreamConnector:
             if isinstance(block, dict) and block.get("type") == "text"
         )
         self._emit("output_delta", "assistant", {"final": True, "text": text, "raw": obj})
+
+    def _observe_generation(self) -> None:
+        with self._state_lock:
+            if self._turn_generating.is_set():
+                return
+            self._turn_generating.set()
+            operation_id = self._pending_turns[0].operation_id if self._pending_turns else None
+        if operation_id is not None:
+            self._emit("tool_activity", "nexus_claude_generating", {"schema_version": 1},
+                       operation_id=operation_id, origin="nexus")
 
     @staticmethod
     def delivery_output(event):
@@ -1003,7 +1062,16 @@ class ClaudeCodeStreamConnector:
             # `result` always resolves whichever turn was queued first,
             # even when `steer()` has since queued a second, still-pending
             # one behind it (see `_pending_turns`'s docstring in `__init__`).
-            interrupted = self._pending_turns.popleft() if self._pending_turns else False
+            turn = self._pending_turns.popleft() if self._pending_turns else None
+            interrupted = turn.interrupted if turn is not None else False
+            review = self._reviewed_interrupt
+            if review is not None and turn is review.turn:
+                # A naturally successful result can race the interrupt write.
+                # Require the matched reply before the interrupted result.
+                # A late reply cannot turn an already published result into an interrupt.
+                interrupted = subtype == "error_during_execution" and review.acknowledged is True
+                review.interrupted = interrupted
+                review.notify()
             self._turn_in_flight = bool(self._pending_turns)
             self._turn_generating.clear()
         # A result can be the only text frame, or replace earlier deltas.

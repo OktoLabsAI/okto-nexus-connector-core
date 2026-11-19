@@ -140,7 +140,9 @@ def context():
                             frozenset({"runtime.open", "turn.submit"}))
 
 
-@pytest.mark.parametrize("fault", ["before_interrupt", "after_interrupt", "before_replacement", "after_replacement", None])
+@pytest.mark.parametrize("fault", [
+    "before_interrupt", "natural_finish", "after_interrupt", "before_replacement", "after_replacement", None,
+])
 def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
     peer = Path(__file__).parent / "fixtures" / "claude_stream_peer.py"
     binary = tmp_path / "synthetic-claude"
@@ -152,7 +154,7 @@ def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
         async def open(self, prepared, session_id, authority, *, stream_epoch):
             connector = ClaudeCodeStreamConnector(
                 binary=sys.executable, argv=("-u", str(peer)), cwd=str(tmp_path),
-                env={"FAKE_CC_SCENARIO": "slow_start"})
+                env={"FAKE_CC_SCENARIO": "natural_finish_at_interrupt" if fault == "natural_finish" else "slow_start"})
             self.connector = connector
             session = await asyncio.to_thread(connector.start, owning_agent_id=authority.agent_id)
             self.bridge = CopiedAdapterSession(connector, session, session_id=session_id,
@@ -193,8 +195,14 @@ def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
             await runtime.open(OpenOperation("open", "session", "epoch", prepared), authority)
             factory.bridge.effect_fence = EffectFence(probe=lambda: (False, False, revoked, False, False))
             await runtime.submit(TurnOperation("first", "session", "original"), authority)
-            await asyncio.wait_for(observe(lambda event: event.native_type == "stream_event:content_block_start"), 8)
-            operation = ControlOperation("steer", "session", "steer", text="replacement")
+            generating = await asyncio.wait_for(observe(lambda event: event.native_type == "nexus_claude_generating"), 8)
+            assert generating.operation_id == "first" and generating.payload["schema_version"] == 1
+            operation = ControlOperation("steer", "session", "steer", text="replacement", expected_claude_operation_id="first")
+            stale = replace(operation, operation_id="stale-steer", expected_claude_operation_id="other")
+            with pytest.raises(CoreError, match="STALE_TURN") as wrong_target:
+                await runtime.control(stale, authority)
+            assert wrong_target.value.retry_safe and not wrong_target.value.possible_effect
+            assert [frame["type"] for frame in frames] == ["user"]
             key = OperationKey("srv", "exe", "steer")
             if fault == "before_interrupt":
                 # Trip the true transport guard after the loop-side checks.
@@ -208,7 +216,7 @@ def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
                     await runtime.control(operation, authority)
                 assert refused.value.retry_safe and not refused.value.possible_effect
                 expected_stage = "FAILED"
-            elif fault in {"after_interrupt", "before_replacement"}:
+            elif fault in {"after_interrupt", "before_replacement", "natural_finish"}:
                 with pytest.raises(CoreError, match="replacement was not written") as partial:
                     await runtime.control(operation, authority)
                 assert partial.value.possible_effect and not partial.value.retry_safe
@@ -231,7 +239,8 @@ def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
 
             terminal = await asyncio.wait_for(observe(lambda event: event.operation_id == "first" and
                 event.payload.get("delivery_phase") == "terminal"), 8)
-            assert terminal.payload["delivery_outcome"] == ("success" if fault == "before_interrupt" else "interrupted")
+            original_completed = fault in {"before_interrupt", "natural_finish"}
+            assert terminal.payload["delivery_outcome"] == ("success" if original_completed else "interrupted")
             if fault == "before_interrupt":
                 assert [frame["type"] for frame in frames] == ["user"]
                 assert not factory.bridge.active_turn()
@@ -241,6 +250,7 @@ def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
                 and event.payload["response"]["request_id"] == interrupt["request_id"]), 8)
             interrupt_stage = "interrupt_write_unknown" if fault == "after_interrupt" else "interrupt_submitted"
             stage = {"after_interrupt": "replacement_not_sent", "before_replacement": "replacement_not_sent",
+                     "natural_finish": "replacement_not_sent",
                      "after_replacement": "replacement_write_unknown", None: "replacement_submitted"}[fault]
             for fact_stage in (interrupt_stage, stage):
                 fact = await asyncio.wait_for(observe(lambda event: event.native_type == "nexus_claude_steer" and
@@ -248,7 +258,12 @@ def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
                 assert fact.operation_id == operation.operation_id
                 assert fact.payload["turn_operation_id"] == "first"
                 assert fact.payload["interrupt_request_id"] == interrupt["request_id"]
-            if fault in {"after_interrupt", "before_replacement"}:
+            if fault not in {"after_interrupt", "natural_finish"}:
+                confirmed = await asyncio.wait_for(observe(lambda event: event.native_type == "nexus_claude_steer" and
+                    event.payload.get("stage") == "interrupt_confirmed"), 8)
+                assert confirmed.payload["turn_operation_id"] == "first"
+                assert confirmed.payload["interrupt_request_id"] == interrupt["request_id"]
+            if fault in {"after_interrupt", "before_replacement", "natural_finish"}:
                 assert [frame["type"] for frame in frames] == ["user", "control_request"]
                 assert not factory.bridge.active_turn()
                 expected_terminal = "OUTCOME_UNKNOWN"
@@ -260,7 +275,7 @@ def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
                 expected_terminal = "SUCCEEDED"
             report = await runtime.reconcile(ReconcileRequest("srv", "exe", ("steer", "first"), ()))
             assert {item.operation_id: item.stage for item in report.receipts} == {
-                "steer": expected_terminal, "first": "CANCELLED"}
+                "steer": expected_terminal, "first": "SUCCEEDED" if original_completed else "CANCELLED"}
             assert (await runtime.control(operation, authority)).stage == expected_terminal
             assert frames == before_replay
         finally:

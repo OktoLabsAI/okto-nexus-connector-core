@@ -100,26 +100,29 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
         validate_r4_receipt_binding(damaged)
 
 
-@pytest.mark.parametrize(('action', 'argument'), [('turn.steer', 'text'), ('turn.interrupt', 'reason')])
-def test_pi_control_receipt_binding_keeps_the_private_run_across_restart(action, argument):
+@pytest.mark.parametrize(('action', 'argument', 'target_key', 'target', 'other_target', 'invalid'), [
+    ('turn.steer', 'text', 'expected_pi_run_id', 'prun_' + '1' * 32, 'prun_' + '2' * 32, 'invalid'),
+    ('turn.interrupt', 'reason', 'expected_pi_run_id', 'prun_' + '1' * 32, 'prun_' + '2' * 32, 'invalid'),
+    ('turn.steer', 'text', 'expected_claude_operation_id', 'private-claude-original', 'some-other-turn', 'x' * 161),
+])
+def test_control_receipt_binding_keeps_the_private_run_across_restart(action, argument, target_key, target, other_target, invalid):
     frame = _frame() | {'action': action, 'payload': {argument: 'PRIVATE_TEXT'}}
     frame['intent_hash'] = r4_submit_intent_hash(frame)
     context = ExecutionContext(*(frame[k] for k in ('server_id', 'executor_id', 'binding_id', 'agent_id', 'workspace_id')),
                                1, 1, 1, 100, frozenset({action}))
-    run = 'prun_' + '1' * 32
     operation = ControlOperation(frame['operation_id'], frame['session_id'], action.split('.')[1],
-                                 **frame['payload'], expected_pi_run_id=run)
+                                 **frame['payload'], **{target_key: target})
     semantic = Operation(operation.operation_id, operation.session_id, action,
-                         frame['payload'] | {'expected_pi_run_id': run})
+                         frame['payload'] | {target_key: target})
     receipt = OperationReceipt(operation.operation_id, intent_hash(semantic, context),
                                'SUBMITTED', True, False, operation.session_id)
     key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
     binding = prepare_r4_receipt_binding(frame, context, applied_operation=operation)
     saved = json.dumps(binding)
-    assert run not in saved and 'PRIVATE_TEXT' not in saved
+    assert target not in saved and 'PRIVATE_TEXT' not in saved
     recovered = project_r4_bound_receipt(json.loads(saved), receipt, key=key, receipt_revision=2)
     assert recovered['intent_hash'] == frame['intent_hash'] and recovered['stage'] == 'SUBMITTED'
-    for other in (None, replace(operation, expected_pi_run_id='prun_' + '2' * 32)):
+    for other in (None, replace(operation, **{target_key: other_target})):
         alternate = prepare_r4_receipt_binding(frame, context, applied_operation=other)
         with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
             project_r4_bound_receipt(alternate, receipt, key=key, receipt_revision=2)
@@ -127,8 +130,8 @@ def test_pi_control_receipt_binding_keeps_the_private_run_across_restart(action,
                     replace(operation, expected_turn_id='foreign')):
         with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
             prepare_r4_receipt_binding(frame, context, applied_operation=changed)
-    with pytest.raises(CoreError, match='VALIDATION_ERROR'):
-        prepare_r4_receipt_binding(frame, context, applied_operation=replace(operation, expected_pi_run_id='invalid'))
+    with pytest.raises(CoreError, match='VALIDATION_ERROR|OPERATION_INVALID'):
+        prepare_r4_receipt_binding(frame, context, applied_operation=replace(operation, **{target_key: invalid}))
 
 
 @pytest.mark.parametrize('value', [None, [], {}, {'schema_version': True}, {'source': 'wrong'}])

@@ -53,7 +53,7 @@ def test_requesting_phase_control_rejected_before_native_write(tmp_path, verb):
                                  {"content": "replacement"} if verb == "steer" else {})
         with pytest.raises(RuntimeCommandNotSent, match="requesting"):
             connector.send(session, control)
-        assert list(connector._pending_turns) == [False]
+        assert [turn.interrupted for turn in connector._pending_turns] == [False]
         assert connector._interrupt_request_counter == 0
         assert connector._pending_admissions == 0
         events = []
