@@ -12,7 +12,7 @@ from enum import Enum
 from typing import Any, Protocol
 from uuid import uuid4
 
-from ..models import EffectNotSent
+from ..models import CoreError, EffectNotSent
 
 
 class ErrorCode(str, Enum):
@@ -44,6 +44,14 @@ class RuntimeCommandRejected(NativeAdapterError):
 
 class RuntimeCommandNotSent(EffectNotSent):
     """Native effect was rejected before a protocol write."""
+
+
+class ReplacementNotSentAfterInterrupt(CoreError):
+    """The replacement was withheld, but the interrupt may have an effect."""
+
+    def __init__(self):
+        super().__init__("OUTCOME_UNKNOWN", "native_send", possible_effect=True,
+                         message="Claude interruption may have taken effect. The replacement was not written.")
 
 
 class DispatchGuards:

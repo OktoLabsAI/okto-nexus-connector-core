@@ -143,7 +143,7 @@ import queue
 import subprocess
 import threading
 from collections import deque
-from collections.abc import Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterator, Mapping, Sequence
 from typing import Any
 
 from ..adapter_types import utc_now_iso
@@ -157,7 +157,7 @@ from ..adapter_types import (
     new_harness_session_id,
 )
 from ..adapter_types import ErrorCode, NativeAdapterError
-from ..adapter_types import RuntimeCommandNotSent
+from ..adapter_types import ReplacementNotSentAfterInterrupt, RuntimeCommandNotSent
 
 __all__ = ["ClaudeCodeStreamConnector"]
 
@@ -528,25 +528,21 @@ class ClaudeCodeStreamConnector:
     # ------------------------------------------------------------------ #
     def _send_turn(self, command: HarnessCommand) -> None:
         content = self._require_content(command)
-        with self._state_lock:
-            self._check_turn_capacity()
-            becomes_head = not self._pending_turns
-            self._turn_in_flight = True
-            self._pending_turns.append(False)
-        # `_turn_generating` tracks whether the HEAD turn (the one actually
-        # running right now, `_pending_turns[0]`) has started producing
-        # output - it is what `_interrupt()`/`_steer()` read to decide
-        # whether a real `control_request` is safe to forward. Only clear
-        # it when THIS turn becomes the new head (the queue was empty, so
-        # nothing was generating before it): an ORDINARY second `send_turn`
-        # issued while turn 1 is still generating merely appends a TAIL
-        # entry behind it and must never touch the head's own generating
-        # signal - doing so unconditionally used to silently desync it and
-        # defeat a subsequent interrupt (see
-        # test_ordinary_send_turn_while_generating_does_not_desync_the_generating_flag).
-        if becomes_head:
+
+        def reserve_turn() -> None:
+            with self._state_lock:
+                self._check_turn_capacity()
+                self._append_pending_turn()
+
+        self._write_json({"type": "user", "message": {"role": "user", "content": content}},
+                         before_write=reserve_turn)
+
+    def _append_pending_turn(self) -> None:
+        """Caller holds the state lock. A tail must not clear the head's state."""
+        if not self._pending_turns:
             self._turn_generating.clear()
-        self._write_json({"type": "user", "message": {"role": "user", "content": content}})
+        self._pending_turns.append(False)
+        self._turn_in_flight = True
 
     def _steer(self, command: HarnessCommand) -> None:
         # Reserve before interrupting: a refused replacement must not alter the
@@ -568,81 +564,81 @@ class ClaudeCodeStreamConnector:
                 {"reason": "pending_turn_capacity", "limit": 32, "not_sent": True})
 
     def _steer_reserved(self, command: HarnessCommand) -> None:
-        """Redirect the session, earning ``steer_timing=IMMEDIATE``.
-
-        Interrupts the in-flight turn (if any and if it is SAFE to - see the
-        module docstring) and immediately queues the new content as the next
-        turn. On a connector with no turn in flight this is identical to
-        :meth:`_send_turn`.
-        """
         content = self._require_content(command)
         with self._state_lock:
-            in_flight = self._turn_in_flight
-        if in_flight:
-            if not self._turn_generating.is_set():
-                raise RuntimeCommandNotSent(
-                    "Claude turn is still requesting; immediate steer is unsafe"
-                )
-            self._request_interrupt()
-        with self._state_lock:
-            # `in_flight` (captured above, BEFORE this append) tells us
-            # whether a head entry already existed: if it did, this new
-            # entry becomes a TAIL entry and must never touch
-            # `_turn_generating` (which tracks the HEAD's own generating
-            # state - see `_send_turn`'s docstring for the desync this
-            # unconditional-clear bug used to cause). If nothing was in
-            # flight, this new entry becomes the head itself, so clearing
-            # is correct.
-            becomes_head = not in_flight
-            self._turn_in_flight = True
-            # A fresh, un-interrupted entry for the NEW turn being queued
-            # here, appended at the TAIL - never touch the interrupted
-            # turn's own entry (at the HEAD, index 0) the `_request_
-            # interrupt()` call above may have just marked; that entry is
-            # still waiting for its own belated `result` and must keep its
-            # `True` flag until `_handle_result` pops it from the front (see
-            # `_pending_turns`'s docstring in `__init__`).
-            self._pending_turns.append(False)
-        if becomes_head:
-            self._turn_generating.clear()
-        self._write_json({"type": "user", "message": {"role": "user", "content": content}})
+            generation = self._interrupt_generation()
+        if generation is None and command.expected_operation_id is not None:
+            raise RuntimeCommandNotSent("Claude turn finished before reorientation", code="STALE_TURN")
+
+        request_id = None
+        if generation is not None:
+            request_id = self._request_interrupt(generation, steer=command)
+            self._emit_steer(command, request_id, "interrupt_submitted")
+
+        def reserve_replacement() -> None:
+            with self._state_lock:
+                self._append_pending_turn()
+
+        try:
+            self._write_json({"type": "user", "message": {"role": "user", "content": content}},
+                             before_write=reserve_replacement)
+        except (RuntimeCommandNotSent, NativeAdapterError) as exc:
+            if request_id is None:
+                raise
+            if isinstance(exc, RuntimeCommandNotSent) or exc.details.get("not_sent") is True:
+                self._emit_steer(command, request_id, "replacement_not_sent")
+                raise ReplacementNotSentAfterInterrupt() from exc
+            self._emit_steer(command, request_id, "replacement_write_unknown")
+            raise
+        if request_id is not None:
+            self._emit_steer(command, request_id, "replacement_submitted")
+
+    def _interrupt_generation(self) -> int | None:
+        """Caller holds the state lock. The requesting phase cannot be interrupted."""
+        if not self._turn_in_flight:
+            return None
+        if not self._turn_generating.is_set():
+            raise RuntimeCommandNotSent("Claude turn is still requesting; control is unsafe")
+        return self._approval_generation
 
     def _interrupt(self) -> None:
         with self._state_lock:
-            in_flight = self._turn_in_flight
-        if not in_flight:
-            return  # nothing to interrupt; verified safe as a no-op empirically.
-        if not self._turn_generating.is_set():
-            raise RuntimeCommandNotSent(
-                "Claude turn is still requesting; interrupt is unsafe"
-            )
-        self._request_interrupt()
+            generation = self._interrupt_generation()
+        if generation is not None:
+            self._request_interrupt(generation)
 
-    def _request_interrupt(self) -> None:
+    def _request_interrupt(self, generation: int, *, steer: HarnessCommand | None = None) -> str:
         with self._state_lock:
             self._interrupt_request_counter += 1
             request_id = f"nexus-interrupt-{self._interrupt_request_counter}"
-            # Mark the turn CURRENTLY in flight - the HEAD of the FIFO, i.e.
-            # `_pending_turns[0]` - as interrupted-by-us, so the belated
-            # `result` it produces is classified `turn_completed`, not
-            # `error`, by `_handle_result`. This must be the head, not the
-            # tail: `_handle_result` always resolves oldest-first via
-            # `popleft()` (the child processes queued turns strictly FIFO),
-            # and the entry actually being interrupted right now is
-            # whichever one is currently generating - always the oldest
-            # still-unresolved entry, never a not-yet-started one queued
-            # behind it. `steer()` calls this BEFORE appending its own new
-            # turn's entry, so index 0 here is always the in-flight turn,
-            # never the steer's own not-yet-submitted replacement (fixed
-            # 2026-09-20: previously marked `[-1]`, which silently swapped
-            # this classification with an unrelated queued turn whenever
-            # more than one turn was outstanding - see
-            # test_request_interrupt_marks_the_head_pending_turn_not_the_tail).
-            if self._pending_turns:
+
+        def mark_interrupted_head() -> None:
+            with self._state_lock:
+                if self._interrupt_generation() != generation:
+                    raise RuntimeCommandNotSent("Claude turn changed before the interrupt write", code="STALE_TURN")
                 self._pending_turns[0] = True
-        self._write_json(
-            {"type": "control_request", "request_id": request_id, "request": {"subtype": "interrupt"}}
-        )
+
+        try:
+            self._write_json(
+                {"type": "control_request", "request_id": request_id, "request": {"subtype": "interrupt"}},
+                before_write=mark_interrupted_head)
+        except NativeAdapterError as exc:
+            if steer is None or exc.details.get("not_sent") is True:
+                raise
+            # A failed write or flush may have interrupted the old turn. The
+            # replacement was never attempted and cannot own any later output.
+            self._emit_steer(steer, request_id, "interrupt_write_unknown")
+            self._emit_steer(steer, request_id, "replacement_not_sent")
+            raise ReplacementNotSentAfterInterrupt() from exc
+        return request_id
+
+    def _emit_steer(self, command: HarnessCommand, request_id: str, stage: str) -> None:
+        if command.operation_id is None or command.expected_operation_id is None:
+            return
+        self._emit("tool_activity", "nexus_claude_steer", {
+            "stage": stage, "interrupt_request_id": request_id,
+            "turn_operation_id": command.expected_operation_id,
+        }, operation_id=command.operation_id, origin="nexus")
 
     def observe_lifecycle(self, session):
         return observe_owned_process(self._proc)
@@ -693,7 +689,7 @@ class ClaudeCodeStreamConnector:
             )
         return content
 
-    def _write_json(self, obj: dict[str, Any]) -> None:
+    def _write_json(self, obj: dict[str, Any], *, before_write: Callable[[], None] | None = None) -> None:
         """Serialise and write one line to the child's stdin.
 
         The write syscall itself (``proc.stdin.write`` + ``flush``) is NOT,
@@ -720,8 +716,10 @@ class ClaudeCodeStreamConnector:
                 raise NativeAdapterError(
                     ErrorCode.CONFLICT,
                     "connector has no active stdin (not started, or already ended).",
-                    {},
+                    {"not_sent": True},
                 )
+            if before_write is not None:
+                before_write()
             try:
                 proc.stdin.write(line + "\n")
                 proc.stdin.flush()
@@ -748,7 +746,7 @@ class ClaudeCodeStreamConnector:
                 ErrorCode.INTERNAL_ERROR,
                 f"could not acquire Claude Code stdin write lock within "
                 f"{_WRITE_LOCK_TIMEOUT_S}s; another write is likely stuck.",
-                {},
+                {"not_sent": True},
             )
 
     # ------------------------------------------------------------------ #
@@ -940,7 +938,8 @@ class ClaudeCodeStreamConnector:
         event = obj.get("event") or {}
         etype = event.get("type")
         if etype in ("message_start", "content_block_start"):
-            self._turn_generating.set()
+            with self._state_lock:
+                self._turn_generating.set()
             self._emit("tool_activity", f"stream_event:{etype}", obj)
         elif etype == "content_block_delta":
             delta = event.get("delta") or {}
@@ -958,7 +957,8 @@ class ClaudeCodeStreamConnector:
     def _handle_assistant(self, obj: dict[str, Any]) -> None:
         # Defensive: proves generation happened even if a stream_event was
         # somehow missed, so a later interrupt is never gated open forever.
-        self._turn_generating.set()
+        with self._state_lock:
+            self._turn_generating.set()
         message = obj.get("message") or {}
         text = "".join(
             block.get("text", "")
@@ -1005,7 +1005,7 @@ class ClaudeCodeStreamConnector:
             # one behind it (see `_pending_turns`'s docstring in `__init__`).
             interrupted = self._pending_turns.popleft() if self._pending_turns else False
             self._turn_in_flight = bool(self._pending_turns)
-        self._turn_generating.clear()
+            self._turn_generating.clear()
         # A result can be the only text frame, or replace earlier deltas.
         # Publish its snapshot before the terminal fence so redaction and
         # operation correlation use the same path as assistant snapshots.
@@ -1101,7 +1101,8 @@ class ClaudeCodeStreamConnector:
         self._write_json({"type": "control_response", "response": {"subtype": "success",
             "request_id": request["request_id"], "response": answer}})
 
-    def _emit(self, kind: str, native_event: str, payload: dict[str, Any]) -> None:
+    def _emit(self, kind: str, native_event: str, payload: dict[str, Any], *,
+              operation_id: str | None = None, origin: str = "native") -> None:
         assert self._session is not None
         event = HarnessEvent(
             session_id=self._session.session_id,
@@ -1110,6 +1111,8 @@ class ClaudeCodeStreamConnector:
             native_event=native_event,
             occurred_at=utc_now_iso(),
             payload=payload,
+            operation_id=operation_id,
+            origin=origin,
             # The assistant message repeats the complete streamed text.
             # Preserve replacement semantics through redaction and NXL.
             output_snapshot=kind == "output_delta" and native_event in {"assistant", "result:output"},

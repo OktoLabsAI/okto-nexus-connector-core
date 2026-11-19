@@ -20,7 +20,7 @@ from ..harness_config import _token_env_name
 from ..identifiers import is_codex_thread_id
 from ..pi_extension_resource import PiNativeActionLaunch, qualify_pi_hosted_rpc
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
-                            NativeAdapterError, RuntimeCommandNotSent)
+                            NativeAdapterError, ReplacementNotSentAfterInterrupt, RuntimeCommandNotSent)
 from .adapters.compatibility import qualified_build, can_probe_protocol
 from .pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_operation
 
@@ -277,6 +277,7 @@ class CopiedAdapterSession:
             self._last_outcome = None
             self._last_failure_code = None
         replacement = verb == "steer" and self._session.harness_kind == "claude_code"
+        replaced_operation = self._active_operation_id if replacement else None
         if replacement:
             # Claude emits results in submission order. Keep the old operation
             # active through its interrupted result, including when that result
@@ -297,6 +298,7 @@ class CopiedAdapterSession:
             native_payload = {"content": native_payload["text"]}
         command = HarnessCommand(self._session.session_id, verb, native_payload,
                                  operation_id=operation_id,
+                                 expected_operation_id=replaced_operation,
                                  expected_turn_id=expected_turn_id)
         try:
             fence = getattr(self, "effect_fence", None)
@@ -325,6 +327,9 @@ class CopiedAdapterSession:
             else:
                 await asyncio.to_thread(self._connector.send,
                                         self._session, command)
+        except ReplacementNotSentAfterInterrupt:
+            self._discard_replacement(operation_id)
+            raise
         except RuntimeCommandNotSent:
             if replacement:
                 self._discard_replacement(operation_id)

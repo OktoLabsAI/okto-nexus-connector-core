@@ -25,7 +25,7 @@ from nexus_connector_core.journal import SQLiteJournal
 from nexus_connector_core.kernel import OperationKernel
 from nexus_connector_core.models import (
     ControlOperation, EventCursor, InstallationCandidate, LaunchIntent, NativeApprovalOperation, OpenOperation, Operation, OperationKey,
-    PreparedLaunch, ShutdownPolicy, TurnOperation,
+    PreparedLaunch, ReconcileRequest, ShutdownPolicy, TurnOperation,
 )
 from nexus_connector_core.native.adapter_types import (
     ErrorCode, HarnessCapabilities, HarnessEvent, HarnessSession,
@@ -35,7 +35,7 @@ from nexus_connector_core.native.adapters.pi import PiRpcConnector
 from nexus_connector_core.native.adapters.codex import CodexAppServerConnector
 from nexus_connector_core.native.adapters.codex import _ThreadState
 from nexus_connector_core.native.adapters.claude_code_stream import ClaudeCodeStreamConnector
-from nexus_connector_core.native.runtime_bridge import CopiedAdapterFactory, CopiedAdapterSession
+from nexus_connector_core.native.runtime_bridge import CopiedAdapterFactory, CopiedAdapterSession, EffectFence
 from nexus_connector_core.native.native_inputs import USER_INPUT
 from nexus_connector_core.native.process import (
     snapshot_owned_process_birth, spawn_owned_process,
@@ -138,6 +138,136 @@ def context():
     return ExecutionContext("srv", "exe", "bind", "agent", "ws", 1, 1, 1,
                             time.monotonic() + 60,
                             frozenset({"runtime.open", "turn.submit"}))
+
+
+@pytest.mark.parametrize("fault", ["before_interrupt", "after_interrupt", "before_replacement", "after_replacement", None])
+def test_claude_compound_steer_keeps_journal_and_wire_distinct(tmp_path, fault):
+    peer = Path(__file__).parent / "fixtures" / "claude_stream_peer.py"
+    binary = tmp_path / "synthetic-claude"
+    binary.write_bytes(b"synthetic")
+    frames = []
+    revoked = False
+
+    class Factory:
+        async def open(self, prepared, session_id, authority, *, stream_epoch):
+            connector = ClaudeCodeStreamConnector(
+                binary=sys.executable, argv=("-u", str(peer)), cwd=str(tmp_path),
+                env={"FAKE_CC_SCENARIO": "slow_start"})
+            self.connector = connector
+            session = await asyncio.to_thread(connector.start, owning_agent_id=authority.agent_id)
+            self.bridge = CopiedAdapterSession(connector, session, session_id=session_id,
+                stream_epoch=stream_epoch, context=authority)
+            write_json = connector._write_json
+
+            def write(frame, **kwargs):
+                nonlocal revoked
+                write_json(frame, **kwargs)
+                frames.append(frame)
+                if fault == "before_replacement" and frame["type"] == "control_request":
+                    revoked = True
+                if fault == "after_interrupt" and frame["type"] == "control_request":
+                    raise NativeAdapterError(ErrorCode.CONFLICT, "fixture lost the interrupt write outcome")
+                if fault == "after_replacement" and frame.get("message", {}).get("content") == "replacement":
+                    raise NativeAdapterError(ErrorCode.CONFLICT, "fixture lost the replacement write outcome")
+
+            connector._write_json = write
+            return self.bridge
+
+    async def run():
+        candidate = InstallationCandidate("claude_stream", str(binary), fingerprint(binary), "explicit", "selected")
+        journal = SQLiteJournal(tmp_path / "claude-steer.db")
+        factory = Factory()
+        runtime = LocalRuntimeCore(journal, factory, candidates={"claude_stream": candidate},
+            workspace_roots={"ws": str(tmp_path)})
+        authority = replace(context(), allowed_actions=frozenset({
+            "runtime.open", "turn.submit", "turn.steer", "runtime.close"}))
+        cursor = EventCursor("srv", "exe", "session", "epoch")
+
+        async def observe(predicate):
+            async for event in runtime.events(cursor):
+                if predicate(event):
+                    return event
+
+        try:
+            prepared = await runtime.prepare(LaunchIntent("agent", "ws", "claude_stream"), authority)
+            await runtime.open(OpenOperation("open", "session", "epoch", prepared), authority)
+            factory.bridge.effect_fence = EffectFence(probe=lambda: (False, False, revoked, False, False))
+            await runtime.submit(TurnOperation("first", "session", "original"), authority)
+            await asyncio.wait_for(observe(lambda event: event.native_type == "stream_event:content_block_start"), 8)
+            operation = ControlOperation("steer", "session", "steer", text="replacement")
+            key = OperationKey("srv", "exe", "steer")
+            if fault == "before_interrupt":
+                # Trip the true transport guard after the loop-side checks.
+                def refuse_after_scheduling(frame, **kwargs):
+                    nonlocal revoked
+                    revoked = True
+                    return wrapped(frame, **kwargs)
+                wrapped = factory.connector._write_json
+                factory.connector._write_json = refuse_after_scheduling
+                with pytest.raises(CoreError, match="AGENT_REVOKED") as refused:
+                    await runtime.control(operation, authority)
+                assert refused.value.retry_safe and not refused.value.possible_effect
+                expected_stage = "FAILED"
+            elif fault in {"after_interrupt", "before_replacement"}:
+                with pytest.raises(CoreError, match="replacement was not written") as partial:
+                    await runtime.control(operation, authority)
+                assert partial.value.possible_effect and not partial.value.retry_safe
+                expected_stage = "OUTCOME_UNKNOWN"
+            elif fault == "after_replacement":
+                with pytest.raises(NativeAdapterError, match="lost the replacement"):
+                    await runtime.control(operation, authority)
+                expected_stage = "OUTCOME_UNKNOWN"
+            else:
+                assert (await runtime.control(operation, authority)).stage == "SUBMITTED"
+                expected_stage = "SUBMITTED"
+
+            receipt = await journal.get_receipt(key)
+            assert receipt.stage == expected_stage
+            assert receipt.possible_effect is (fault != "before_interrupt")
+            assert receipt.retry_safe is (fault == "before_interrupt")
+            before_replay = list(frames)
+            assert await runtime.control(operation, authority) == receipt
+            assert frames == before_replay
+
+            terminal = await asyncio.wait_for(observe(lambda event: event.operation_id == "first" and
+                event.payload.get("delivery_phase") == "terminal"), 8)
+            assert terminal.payload["delivery_outcome"] == ("success" if fault == "before_interrupt" else "interrupted")
+            if fault == "before_interrupt":
+                assert [frame["type"] for frame in frames] == ["user"]
+                assert not factory.bridge.active_turn()
+                return
+            interrupt, = [frame for frame in frames if frame["type"] == "control_request"]
+            await asyncio.wait_for(observe(lambda event: event.native_type == "control_response:success"
+                and event.payload["response"]["request_id"] == interrupt["request_id"]), 8)
+            interrupt_stage = "interrupt_write_unknown" if fault == "after_interrupt" else "interrupt_submitted"
+            stage = {"after_interrupt": "replacement_not_sent", "before_replacement": "replacement_not_sent",
+                     "after_replacement": "replacement_write_unknown", None: "replacement_submitted"}[fault]
+            for fact_stage in (interrupt_stage, stage):
+                fact = await asyncio.wait_for(observe(lambda event: event.native_type == "nexus_claude_steer" and
+                    event.payload.get("stage") == fact_stage), 8)
+                assert fact.operation_id == operation.operation_id
+                assert fact.payload["turn_operation_id"] == "first"
+                assert fact.payload["interrupt_request_id"] == interrupt["request_id"]
+            if fault in {"after_interrupt", "before_replacement"}:
+                assert [frame["type"] for frame in frames] == ["user", "control_request"]
+                assert not factory.bridge.active_turn()
+                expected_terminal = "OUTCOME_UNKNOWN"
+            else:
+                assert [frame["type"] for frame in frames] == ["user", "control_request", "user"]
+                completed = await asyncio.wait_for(observe(lambda event: event.operation_id == "steer" and
+                    event.payload.get("delivery_phase") == "terminal"), 8)
+                assert completed.payload["delivery_outcome"] == "success"
+                expected_terminal = "SUCCEEDED"
+            report = await runtime.reconcile(ReconcileRequest("srv", "exe", ("steer", "first"), ()))
+            assert {item.operation_id: item.stage for item in report.receipts} == {
+                "steer": expected_terminal, "first": "CANCELLED"}
+            assert (await runtime.control(operation, authority)).stage == expected_terminal
+            assert frames == before_replay
+        finally:
+            await runtime.shutdown(ShutdownPolicy())
+            journal.close()
+
+    asyncio.run(run())
 
 
 def test_pi_launch_file_seals_never_block_sibling_event_loop(monkeypatch, tmp_path):
