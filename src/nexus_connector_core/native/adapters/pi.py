@@ -795,6 +795,28 @@ class PiRpcConnector:
         return observe_transport_configuration('pi_rpc', self._transport,
             version=self._compatibility_report.get('native_version'))
 
+    def read_owned_pi_state(self, session: HarnessSession) -> dict:
+        """Project the exact live session without exposing paths, model or history."""
+        self._validate_session(session)
+        transport = self._transport
+        if (transport is None or not transport.is_alive()
+                or self._compatibility_report.get("native_version") != "0.87.1"
+                or not transport._response_ids_required):
+            raise NativeAdapterError(ErrorCode.CONFIG_ERROR, "Pi presentation state is unavailable.")
+        response = transport.request(_VERB_GET_STATE, {}, timeout_s=min(5.0, self._command_timeout_s))
+        state = response.get("data")
+        if response.get("success") is not True or not isinstance(state, dict):
+            raise NativeAdapterError(ErrorCode.CONFLICT, "The Pi owner did not return session state.")
+        if (state.get("sessionId") != session.session_id or type(state.get("isStreaming")) is not bool
+                or type(state.get("isCompacting")) is not bool or type(state.get("pendingMessageCount")) is not int
+                or not 0 <= state["pendingMessageCount"] < 2**31):
+            raise NativeAdapterError(ErrorCode.CONFLICT, "The Pi state does not match the selected session.")
+        self._validate_session(session)
+        if transport is not self._transport or not transport.is_alive():
+            raise NativeAdapterError(ErrorCode.CONFLICT, "The Pi owner changed during the read.")
+        return {"native_session_id": session.session_id, "is_streaming": state["isStreaming"],
+                "is_compacting": state["isCompacting"], "pending_message_count": state["pendingMessageCount"]}
+
     def start(self, *, owning_agent_id: str) -> HarnessSession:
         with self._start_lock:
             if self._transport is not None:

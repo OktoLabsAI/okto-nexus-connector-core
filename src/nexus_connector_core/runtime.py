@@ -1380,15 +1380,37 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 or type(thread_id) is not str or not 1 <= len(thread_id) <= 160 or not thread_id.isprintable()):
             raise CoreError("VALIDATION_ERROR", stage)
         channel = dict(connection_id=connection_id, connection_generation=connection_generation)
+        result = await self._read_live_native_presentation(scope, target, channel, "read_owned_codex_thread", thread_id)
+        if result.get("thread_id") != thread_id:
+            raise CoreError("SESSION_CONFLICT", stage)
+        return result
+
+    async def read_live_pi_session(
+            self, scope: Mapping, target: NativeSessionTarget, *,
+            connection_id: str, connection_generation: int) -> dict:
+        """Observe current Pi state for the already-owned session under its exact R4 lease."""
+        stage = "native_presentation_read"
+        if not isinstance(target, NativeSessionTarget) or target.adapter_id != "pi_rpc":
+            raise CoreError("VALIDATION_ERROR", stage)
+        channel = dict(connection_id=connection_id, connection_generation=connection_generation)
+        result = await self._read_live_native_presentation(scope, target, channel, "read_owned_pi_state")
+        if (result.keys() != {"native_session_id", "is_streaming", "is_compacting", "pending_message_count"}
+                or result["native_session_id"] != target.native_session_id
+                or type(result["is_streaming"]) is not bool or type(result["is_compacting"]) is not bool
+                or type(result["pending_message_count"]) is not int or not 0 <= result["pending_message_count"] < 2**31):
+            raise CoreError("SESSION_CONFLICT", stage)
+        return result
+
+    async def _read_live_native_presentation(self, scope, target, channel, reader_name, *args):
+        stage = "native_presentation_read"
         before = await self.prove_live_native_session(scope, target, **channel)
         binding = self._sessions.get(before.key)
-        reader = getattr(binding.native, "read_owned_codex_thread", None) if binding is not None else None
+        reader = getattr(binding.native, reader_name, None) if binding is not None else None
         if not callable(reader):
             raise CoreError("CAPABILITY_UNSUPPORTED", stage)
-        result = await reader(thread_id)
+        result = await reader(*args)
         after = await self.prove_live_native_session(scope, target, **channel)
-        if (before != after or self._sessions.get(before.key) is not binding
-                or not isinstance(result, dict) or result.get("thread_id") != thread_id):
+        if before != after or self._sessions.get(before.key) is not binding or not isinstance(result, dict):
             raise CoreError("SESSION_CONFLICT", stage)
         return result
 

@@ -5,11 +5,53 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import Mock
 
 import pytest
 
-from nexus_connector_core.native.adapter_types import HarnessCommand, NativeAdapterError
+from nexus_connector_core.native.adapter_types import STATUS_RUNNING, HarnessCommand, HarnessSession, NativeAdapterError
 from nexus_connector_core.native.adapters.pi import PiRpcConnector, _PiTransport
+
+
+def test_pi_presentation_state_requires_the_exact_correlated_owner():
+    connector = PiRpcConnector(command=("pi", "--mode", "rpc"))
+    session = HarnessSession("owned", "pi", "agent", STATUS_RUNNING, connector.capabilities, "start")
+    connector._session_id = session.session_id
+    connector._compatibility_report = {"native_version": "0.87.1"}
+    transport = Mock(spec_set=["is_alive", "request", "_response_ids_required"])
+    connector._transport = transport
+    transport.is_alive.return_value = True
+    transport._response_ids_required = True
+    state = {"sessionId": "owned", "isStreaming": True, "isCompacting": False,
+             "pendingMessageCount": 2, "sessionFile": "private", "model": "private"}
+    transport.request.return_value = {"success": True, "data": state}
+
+    assert connector.read_owned_pi_state(session) == {
+        "native_session_id": "owned", "is_streaming": True,
+        "is_compacting": False, "pending_message_count": 2,
+    }
+    transport.request.assert_called_once_with("get_state", {}, timeout_s=5.0)
+    for change in ({"sessionId": "sibling"}, {"isCompacting": None}, {"isStreaming": 1},
+                   {"pendingMessageCount": True}, {"pendingMessageCount": -1},
+                   {"pendingMessageCount": 2**31}):
+        transport.request.return_value = {"success": True, "data": state | change}
+        with pytest.raises(NativeAdapterError, match="selected session"):
+            connector.read_owned_pi_state(session)
+
+    transport.request.return_value = {"success": True, "data": state}
+    transport.is_alive.side_effect = [True, False]
+    with pytest.raises(NativeAdapterError, match="owner changed"):
+        connector.read_owned_pi_state(session)
+    transport.is_alive.side_effect = None
+    transport.request.reset_mock()
+    transport._response_ids_required = False
+    with pytest.raises(NativeAdapterError, match="state is unavailable"):
+        connector.read_owned_pi_state(session)
+    transport._response_ids_required = True
+    connector._compatibility_report["native_version"] = "0.85.1"
+    with pytest.raises(NativeAdapterError, match="state is unavailable"):
+        connector.read_owned_pi_state(session)
+    transport.request.assert_not_called()
 
 
 def test_pi_node_cli_default_version_command_probes_package():

@@ -165,7 +165,7 @@ class CopiedAdapterSession:
         # coalesce onto the shared unit instead of piling units on the
         # control pool while a backend hangs.
         self._observe_inflight: asyncio.Task | None = None
-        self._thread_read_inflight: asyncio.Task | None = None
+        self._presentation_read_inflight: asyncio.Task | None = None
         self.native_id = session.session_id
         self._closed = False
         self._preset_bridge = None
@@ -662,20 +662,31 @@ class CopiedAdapterSession:
             raise CoreError("CAPABILITY_UNSUPPORTED", "native_presentation_read")
         if self._close_started or self._session.metadata.get("thread_id") != thread_id:
             raise CoreError("SESSION_CONFLICT", "native_presentation_read")
-        task = self._thread_read_inflight
+        return await self._coalesced_presentation_read(reader, self._session, thread_id)
+
+    async def read_owned_pi_state(self) -> dict:
+        reader = getattr(self._connector, "read_owned_pi_state", None)
+        if self._session.harness_kind != "pi" or not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", "native_presentation_read")
+        if self._close_started:
+            raise CoreError("SESSION_CONFLICT", "native_presentation_read")
+        return await self._coalesced_presentation_read(reader, self._session)
+
+    async def _coalesced_presentation_read(self, reader, *args):
+        task = self._presentation_read_inflight
         if task is None or task.done():
             async def read():
                 try:
-                    return await asyncio.to_thread(reader, self._session, thread_id)
+                    return await asyncio.to_thread(reader, *args)
                 except NativeAdapterError:
                     raise CoreError("NATIVE_UNAVAILABLE", "native_presentation_read") from None
 
             task = asyncio.create_task(read())
-            self._thread_read_inflight = task
+            self._presentation_read_inflight = task
 
             def clear(done):
-                if self._thread_read_inflight is done:
-                    self._thread_read_inflight = None
+                if self._presentation_read_inflight is done:
+                    self._presentation_read_inflight = None
                 if not done.cancelled():
                     done.exception()
 
