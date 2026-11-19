@@ -773,7 +773,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         self._external_session_id(operation.session_id, "control")
         run_id = operation.expected_pi_run_id
         if run_id is not None and (
-                operation.verb != "steer" or operation.expected_turn_id is not None
+                operation.verb not in ("steer", "interrupt") or operation.expected_turn_id is not None
                 or not valid_pi_run_id(run_id) or not valid_pi_steer_operation(operation.operation_id)):
             raise CoreError("VALIDATION_ERROR", "control")
         if operation.verb == "interrupt" and operation.text is None:
@@ -781,12 +781,14 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                     not isinstance(operation.reason, str) or
                     len(operation.reason) > 1024):
                 raise CoreError("VALIDATION_ERROR", "control")
-            semantic = Operation(operation.operation_id, operation.session_id,
-                                 "turn.interrupt",
-                                 ({"reason": operation.reason}
-                                  if operation.reason is not None else {}),
-                                 operation.expected_turn_id)
-            return await self._send(semantic, context, "interrupt", {})
+            payload = {"reason": operation.reason} if operation.reason is not None else {}
+            native = {}
+            if run_id is not None:
+                native["expected_pi_run_id"] = run_id
+                payload.update(native)
+            semantic = Operation(operation.operation_id, operation.session_id, "turn.interrupt",
+                                 payload, operation.expected_turn_id)
+            return await self._send(semantic, context, "interrupt", native)
         # Steer targeting is adapter-specific: Codex correlates an explicit
         # native turn ID, while Pi has no native turn ID on the wire and is
         # steered ID-less against its observed active agent run. The

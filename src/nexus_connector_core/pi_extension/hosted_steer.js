@@ -98,9 +98,23 @@ export function fenceHostedRpcSteer(owner, writeProtocol) {
     if (event.type === "message_start" && run.pending.has(event.message)) {
       fact(run, run.pending.get(event.message), "consumed");
       run.pending.delete(event.message);
-    } else if (event.type === "agent_settled" && run.pending.size) {
-      retire(run);
+    } else if (event.type === "agent_settled") {
+      if (run.pending.size) retire(run);
+      return emit({ ...event, hosted_pi_run_id: run.id });
     }
     return emit(event);
+  };
+
+  return (onLine) => (line) => {
+    // The reviewed RPC handler calls session.abort() in this same stack,
+    // before its first await. Reject here before it can invoke any abort.
+    let frame;
+    try { frame = JSON.parse(line); } catch { return onLine(line); }
+    if (frame?.type !== "abort" || !Object.hasOwn(frame, "nexus_expected_run_id")) return onLine(line);
+    const expected = frame.nexus_expected_run_id;
+    if (typeof expected === "string" && RUN.test(expected) && active?.id === expected &&
+        owner.session === session && session.isStreaming) return onLine(line);
+    writeProtocol(JSON.stringify({ id: frame.id, type: "response", command: "abort", success: false,
+      nexus_refused_before_abort: true, error: "The reviewed Pi run is stale." }) + "\n");
   };
 }

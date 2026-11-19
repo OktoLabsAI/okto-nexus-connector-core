@@ -16,11 +16,17 @@ const reviewed = {
   "dist/core/agent-session.js": "5ebfae51db5a900596145159428e7cb57d195af9d54a28f41d4ac8ff1bfd5729",
   "dist/modes/index.js": "42bd65ff8aee4f60dfcfcfb9db66772219281585cdbef845df747c8846618a87",
   "dist/modes/rpc/rpc-mode.js": "bdd94e753e6d19731d9fb9ea370462d095d64f1e78bddd7651320663fa57c4ff",
+  "dist/modes/rpc/jsonl.js": "049a9f8ca4242c79f1911ed977949e8d8906b4561f424c2729687f426fabaacf",
   "dist/modes/interactive/interactive-mode.js": "7dc366e8609d7d1e81fb85952e466aea9933b13e74842c2a9b9df678d267d12e",
   "dist/modes/interactive/tui-renderer.js": "b215548e8deb8eb6b89b8e42f4d0c7fce57f728f54f22ab04a40b21971687ddb",
 };
 
 let handoff;
+let filterInput;
+
+export function attachOwnedRpcInput(attach, input, onLine) {
+  return attach(input, filterInput ? filterInput(onLine) : onLine);
+}
 
 export async function runOwnedRpc(runtime) {
   const next = handoff;
@@ -51,31 +57,43 @@ export async function runHostedPiRpc(cli, args, observeOwner, options) {
   const url = (relative) => pathToFileURL(path.join(root, relative)).href;
   const mainUrl = url("dist/main.js");
   const modesUrl = url("dist/modes/index.js");
+  const rpcUrl = url("dist/modes/rpc/rpc-mode.js");
   // Substitute only the modes import made by the reviewed CLI. All other
   // modules, including Pi's own RPC implementation, resolve normally.
   const shim = "data:text/javascript," + encodeURIComponent(
     `export { InteractiveMode, runPrintMode } from ${JSON.stringify(modesUrl)};\n` +
     `export { runOwnedRpc as runRpcMode } from ${JSON.stringify(import.meta.url)};`,
   );
+  const jsonlShim = "data:text/javascript," + encodeURIComponent(
+    `import { attachJsonlLineReader as attach, serializeJsonLine } from ${JSON.stringify(url("dist/modes/rpc/jsonl.js"))};\n` +
+    `import { attachOwnedRpcInput } from ${JSON.stringify(import.meta.url)};\n` +
+    `export { serializeJsonLine };\n` +
+    `export const attachJsonlLineReader = (input, onLine) => attachOwnedRpcInput(attach, input, onLine);\n`,
+  );
   const { setupCli } = await import(url("dist/cli/setup.js"));
-  const { InteractiveMode, runRpcMode } = await import(modesUrl);
   let resolutions = 0;
+  let inputResolutions = 0;
   const hooks = registerHooks({
     resolve(specifier, context, nextResolve) {
       if (context.parentURL === mainUrl && specifier === "./modes/index.js") {
         resolutions += 1;
         return { url: shim, shortCircuit: true };
       }
+      if (context.parentURL === rpcUrl && specifier === "./jsonl.js") {
+        inputResolutions += 1;
+        return { url: jsonlShim, shortCircuit: true };
+      }
       return nextResolve(specifier, context);
     },
   });
-  let main;
+  let main, InteractiveMode, runRpcMode;
   try {
+    ({ InteractiveMode, runRpcMode } = await import(modesUrl));
     ({ main } = await import(mainUrl));
   } finally {
     hooks.deregister();
   }
-  if (resolutions !== 1) throw new Error("The reviewed Pi RPC handoff was not selected");
+  if (resolutions !== 1 || inputResolutions !== 1) throw new Error("The reviewed Pi RPC handoff was not selected");
   handoff = async (runtime) => {
     await observeOwner(runtime, InteractiveMode);
     return runRpcMode(runtime);
@@ -93,7 +111,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   // Confirm one frame on the original pipe before starting the RPC reader.
   const writeProtocol = process.stdout.write.bind(process.stdout);
   void runHostedPiRpc(cli, args, async (owner, InteractiveMode) => {
-    fenceHostedRpcSteer(owner, writeProtocol);
+    filterInput = fenceHostedRpcSteer(owner, writeProtocol);
     const port = await startHostedRenderer(InteractiveMode, owner, rendererKey);
     const notice = { type: "nexus_pi_owned_rpc", revision: 1, session_id: owner.session.sessionId, renderer_port: port };
     await new Promise((resolve, reject) => {

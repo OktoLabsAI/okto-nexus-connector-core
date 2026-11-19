@@ -59,7 +59,12 @@ const session = {
 };
 const rpc = { source: "rpc" };
 const owner = { session };
-fenceHostedRpcSteer(owner, (line) => facts.push(JSON.parse(line)));
+const received = [];
+const replies = [];
+const accept = fenceHostedRpcSteer(owner, (line) => {
+  const frame = JSON.parse(line);
+  (frame.type === "response" ? replies : facts).push(frame);
+})((line) => received.push(JSON.parse(line)));
 await assert.rejects(session.steer("idle", undefined, rpc), /selected by the steering command has ended/);
 const run = session._runAgentPrompt(first.promise);
 const runId = events.at(-1).hosted_pi_run_id;
@@ -77,12 +82,23 @@ const delayed = assert.rejects(session.steer("delayed", undefined, rpc), /select
 first.resolve();
 await run;
 const following = session._runAgentPrompt(successor.promise);
+const successorId = events.at(-1).hosted_pi_run_id;
+const abort = (id, target) => ({ type: "abort", id, nexus_expected_run_id: target });
+accept(JSON.stringify(abort("old", runId)));
+accept(JSON.stringify(abort("valid", successorId)));
+assert.deepEqual(received, [abort("valid", successorId)]);
+assert.deepEqual(replies.map(({ id, success, nexus_refused_before_abort }) => [id, success, nexus_refused_before_abort]), [
+  ["old", false, true],
+]);
 input.resolve();
 await delayed;
 await assert.rejects(session.steer(command("wrong-run", "stale"), undefined, rpc), /target is stale/);
 assert.deepEqual(session.agent.steeringQueue.messages.map(message => message.content[0].text), ["during the first run"]);
 await session.steer("during the successor", undefined, rpc);
 owner.session = {};
+accept(JSON.stringify(abort("foreign-process", successorId)));
+assert.deepEqual(received, [abort("valid", successorId)]);
+assert.equal(replies.at(-1).id, "foreign-process");
 await assert.rejects(session.steer("other session", undefined, rpc), /selected by the steering command has ended/);
 successor.resolve();
 await following;

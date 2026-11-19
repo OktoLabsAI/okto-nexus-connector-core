@@ -1139,6 +1139,14 @@ class PiRpcConnector:
         self._require_accepted(response, _VERB_STEER)
 
     def _interrupt(self, command: HarnessCommand) -> None:
+        run_id = command.payload.get("expected_pi_run_id")
+        transport = self._transport
+        fields = {}
+        if run_id is not None:
+            if (not transport._hosted_rpc_ready or not valid_pi_run_id(run_id)
+                    or not valid_pi_steer_operation(command.operation_id)):
+                raise RuntimeCommandNotSent("The hosted Pi interrupt target is unavailable.", code="STALE_TURN")
+            fields["nexus_expected_run_id"] = run_id
         with self._session_lock:
             if self._awaiting_settle_generation is not None:
                 raise NativeAdapterError(
@@ -1158,7 +1166,7 @@ class PiRpcConnector:
             # promises a retry-after-agent_settled event that was never
             # going to come, permanently, even though pi itself was alive
             # and reachable. Any exception here now rolls the gate back.
-            response = self._transport.request(_VERB_ABORT, {}, timeout_s=self._command_timeout_s)  # type: ignore[union-attr]
+            response = transport.request(_VERB_ABORT, fields, timeout_s=self._command_timeout_s)
         except BaseException:
             with self._session_lock:
                 if self._awaiting_settle_generation == generation:
@@ -1171,6 +1179,9 @@ class PiRpcConnector:
             with self._session_lock:
                 if self._awaiting_settle_generation == generation:
                     self._awaiting_settle_generation = None
+        if (run_id is not None and response.get("command") == _VERB_ABORT
+                and response.get("success") is False and response.get("nexus_refused_before_abort") is True):
+            raise RuntimeCommandRejected("The reviewed Pi run ended before abort.", failure_code="STALE_TURN")
         self._surface_if_rejected(response)
         self._require_accepted(response, _VERB_ABORT)
 
@@ -1222,9 +1233,10 @@ class PiRpcConnector:
                                  {"run_id": msg["run_id"], "stage": msg["stage"]},
                                  operation_id=msg["operation_id"])
             return
-        if native_type == "agent_start":
+        if native_type in ("agent_start", _TYPE_AGENT_SETTLED):
             if not hosted or not valid_pi_run_id(msg.get("hosted_pi_run_id")):
                 msg = {key: value for key, value in msg.items() if key != "hosted_pi_run_id"}
+        if native_type == "agent_start":
             self._input_requests.start_turn()
         elif native_type == _TYPE_AGENT_SETTLED:
             self._input_requests.end_turn()

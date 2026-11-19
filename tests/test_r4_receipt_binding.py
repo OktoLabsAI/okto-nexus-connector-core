@@ -100,29 +100,30 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
         validate_r4_receipt_binding(damaged)
 
 
-def test_pi_steer_receipt_binding_keeps_the_private_run_across_restart():
-    frame = _frame() | {'action': 'turn.steer', 'payload': {'text': 'PRIVATE_TEXT'}}
+@pytest.mark.parametrize(('action', 'argument'), [('turn.steer', 'text'), ('turn.interrupt', 'reason')])
+def test_pi_control_receipt_binding_keeps_the_private_run_across_restart(action, argument):
+    frame = _frame() | {'action': action, 'payload': {argument: 'PRIVATE_TEXT'}}
     frame['intent_hash'] = r4_submit_intent_hash(frame)
     context = ExecutionContext(*(frame[k] for k in ('server_id', 'executor_id', 'binding_id', 'agent_id', 'workspace_id')),
-                               1, 1, 1, 100, frozenset({'turn.steer'}))
+                               1, 1, 1, 100, frozenset({action}))
     run = 'prun_' + '1' * 32
-    operation = ControlOperation(frame['operation_id'], frame['session_id'], 'steer',
-                                 text=frame['payload']['text'], expected_pi_run_id=run)
-    semantic = Operation(operation.operation_id, operation.session_id, 'turn.steer',
-                         {'text': operation.text, 'expected_pi_run_id': run})
+    operation = ControlOperation(frame['operation_id'], frame['session_id'], action.split('.')[1],
+                                 **frame['payload'], expected_pi_run_id=run)
+    semantic = Operation(operation.operation_id, operation.session_id, action,
+                         frame['payload'] | {'expected_pi_run_id': run})
     receipt = OperationReceipt(operation.operation_id, intent_hash(semantic, context),
                                'SUBMITTED', True, False, operation.session_id)
     key = OperationKey(context.server_id, context.executor_id, operation.operation_id)
     binding = prepare_r4_receipt_binding(frame, context, applied_operation=operation)
     saved = json.dumps(binding)
-    assert run not in saved and operation.text not in saved
+    assert run not in saved and 'PRIVATE_TEXT' not in saved
     recovered = project_r4_bound_receipt(json.loads(saved), receipt, key=key, receipt_revision=2)
     assert recovered['intent_hash'] == frame['intent_hash'] and recovered['stage'] == 'SUBMITTED'
     for other in (None, replace(operation, expected_pi_run_id='prun_' + '2' * 32)):
         alternate = prepare_r4_receipt_binding(frame, context, applied_operation=other)
         with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
             project_r4_bound_receipt(alternate, receipt, key=key, receipt_revision=2)
-    for changed in (replace(operation, text='Other'), replace(operation, session_id='foreign'),
+    for changed in (replace(operation, **{argument: 'Other'}), replace(operation, session_id='foreign'),
                     replace(operation, expected_turn_id='foreign')):
         with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
             prepare_r4_receipt_binding(frame, context, applied_operation=changed)

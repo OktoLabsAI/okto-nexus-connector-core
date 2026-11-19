@@ -283,12 +283,12 @@ class CopiedAdapterSession:
             # arrives before the blocking replacement write returns.
             self._replacement_operations.append(operation_id)
         native_payload = dict(payload)
-        if verb == "steer" and self._session.harness_kind == "pi":
+        if verb in ("steer", "interrupt") and self._session.harness_kind == "pi":
             run = self._active_pi_run_id
             expected = native_payload.get("expected_pi_run_id")
             if expected is not None and expected != run:
                 raise RuntimeCommandNotSent("The reviewed Pi run changed.", code="STALE_TURN")
-            if run is not None and valid_pi_steer_operation(operation_id):
+            if verb == "steer" and run is not None and valid_pi_steer_operation(operation_id):
                 if len(self._pi_steer_controls) >= 50:
                     raise RuntimeCommandNotSent("The Pi control window is full.", code="CAPACITY_EXCEEDED")
                 native_payload["expected_pi_run_id"] = run
