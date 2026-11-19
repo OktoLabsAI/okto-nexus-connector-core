@@ -14,11 +14,11 @@ from nexus_connector_core.native.claude_terminal_prompt import ClaudeTerminalPro
 
 
 @pytest.mark.parametrize("case", ["answer", "multi", "decline", "revoked", "expiry", "socket_loss"])
-def test_claude_question_is_bound_to_an_admitted_prompt(tmp_path, monkeypatch, case):
+def test_claude_decision_is_bound_to_an_admitted_prompt(tmp_path, monkeypatch, case):
     session = str(uuid4())
     transcript = tmp_path / "claude-session.jsonl"
     if case == "expiry":
-        monkeypatch.setattr(claude_terminal_prompt, "_QUESTION_WAIT", 1)
+        monkeypatch.setattr(claude_terminal_prompt, "_DECISION_WAIT", 1)
     with ClaudeTerminalPromptGate(session, str(tmp_path), "plan", lambda _: True,
                                   observe_results=True, startup=("powershell", transcript),
                                   allow_questions=True) as gate:
@@ -51,7 +51,7 @@ def test_claude_question_is_bound_to_an_admitted_prompt(tmp_path, monkeypatch, c
 
         assert question(payload | {"prompt_id": "different-prompt"})["permissionDecision"] == "deny"
         assert question(payload | {"agent_id": "child"})["permissionDecision"] == "deny"
-        assert gate.take_question() is None
+        assert gate.take_decision() is None
 
         checked = []
 
@@ -61,43 +61,43 @@ def test_claude_question_is_bound_to_an_admitted_prompt(tmp_path, monkeypatch, c
                 raise EffectNotSent("The lease was revoked.", code="AGENT_REVOKED")
 
         if case == "socket_loss":
-            complete = gate._complete_question
-            monkeypatch.setattr(gate, "_complete_question", lambda current, _: complete(current, False))
+            complete = gate._complete_decision
+            monkeypatch.setattr(gate, "_complete_decision", lambda current, _: complete(current, False))
         with ThreadPoolExecutor(max_workers=1) as worker:
             pending = worker.submit(question, payload)
             deadline = time.monotonic() + 4
-            while (event := gate.take_question()) is None:
+            while (event := gate.take_decision()) is None:
                 assert time.monotonic() < deadline
                 time.sleep(.02)
             operation_id, request = event
-            assert operation_id == "operation-1" and gate.take_question() is None
+            assert operation_id == "operation-1" and gate.take_decision() is None
             assert question(payload)["permissionDecision"] == "deny"
             answer = {"answers": {"Which fixture?": ["Blue", "Green"] if case == "multi" else "Blue"}}
             with pytest.raises(EffectNotSent, match="no longer waiting"):
-                gate.reply_question(request | {"local_generation": 7}, "accept", answer, fence)
+                gate.reply_decision(request | {"local_generation": 7}, "accept", answer, fence)
             with pytest.raises(EffectNotSent, match="matching answer"):
-                gate.reply_question(request, "accept", {"answers": {"wrong": "Blue"}}, fence)
+                gate.reply_decision(request, "accept", {"answers": {"wrong": "Blue"}}, fence)
             if case == "expiry":
                 assert pending.result()["permissionDecision"] == "deny"
                 assert checked == []
             elif case == "revoked":
                 with pytest.raises(EffectNotSent) as rejected:
-                    gate.reply_question(request, "accept", answer, fence)
+                    gate.reply_decision(request, "accept", answer, fence)
                 assert rejected.value.code == "AGENT_REVOKED"
                 assert pending.result()["permissionDecision"] == "deny"
             elif case == "decline":
-                gate.reply_question(request, "decline", None, fence)
+                gate.reply_decision(request, "decline", None, fence)
                 assert pending.result()["permissionDecision"] == "deny"
             else:
                 if case == "socket_loss":
                     with pytest.raises(CoreError, match="OUTCOME_UNKNOWN") as unknown:
-                        gate.reply_question(request, "accept", answer, fence)
+                        gate.reply_decision(request, "accept", answer, fence)
                     assert unknown.value.possible_effect
                 else:
-                    gate.reply_question(request, "accept", answer, fence)
+                    gate.reply_decision(request, "accept", answer, fence)
                 native_value = "Blue, Green" if case == "multi" else "Blue"
                 assert pending.result()["updatedInput"] == tool_input | {"answers": {"Which fixture?": native_value}}
             with pytest.raises(EffectNotSent, match="no longer waiting"):
-                gate.reply_question(request, "accept", answer, fence)
+                gate.reply_decision(request, "accept", answer, fence)
             assert question(payload)["permissionDecision"] == "deny"
             assert checked == ([] if case == "expiry" else ["operation-1"])

@@ -99,7 +99,11 @@ def native_request_action(request: Mapping[str, Any]) -> str:
         return "input.provide" if method in INPUT_METHODS else "approval.decide"
     if method == "control_request:can_use_tool":
         tool_name = params.get("tool_name")
-        if not claude_permission_tool_supported(tool_name):
+        if tool_name == "Read":
+            from .native.claude_read_approval import valid_claude_read_arguments
+            if not valid_claude_read_arguments(params.get("input")):
+                raise CoreError("VALIDATION_ERROR", "approval_decide")
+        elif not claude_permission_tool_supported(tool_name):
             raise CoreError("CAPABILITY_UNSUPPORTED", "approval_decide")
         generation = request.get("local_generation")
         if type(generation) is not int or generation < 0:

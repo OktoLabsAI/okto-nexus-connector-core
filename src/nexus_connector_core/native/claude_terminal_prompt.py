@@ -20,6 +20,7 @@ from ..identifiers import validate_external_id
 from ..models import CoreError, EffectNotSent
 from ..protocol import canonical_json, strict_json
 from .claude_history_identity import claude_session_uuid
+from .claude_read_approval import review_claude_read
 from .native_inputs import CLAUDE_INPUT, response_for, validate_request
 
 _ENV_KEY = "OKTO_CLAUDE_PROMPT_HOOK_TOKEN"
@@ -27,16 +28,20 @@ _PATH = "/prompt"
 _COMPLETION_PATH = "/completion"
 _START_PATH = "/start"
 _QUESTION_PATH = "/question"
+_READ_PATH = "/read"
 _START_URL = "OKTO_CLAUDE_TERMINAL_START_URL"
 _MAX_PROMPT_BYTES = 64 * 1024
 _MAX_REQUEST_BYTES = 448 * 1024
 # One MiB of result text can expand to six times that size in JSON.
 _MAX_COMPLETION_REQUEST_BYTES = 7 * 1024 * 1024
 CLAUDE_PROMPT_HOOK_TIMEOUT = 8
-_QUESTION_WAIT = 120
-_QUESTION_METHOD = "control_request:can_use_tool"
+_DECISION_WAIT = 120
+_DECISION_METHOD = "control_request:can_use_tool"
 _QUESTION_DENIAL = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
     "permissionDecisionReason": "The question has no current Nexus answer."}}
+_READ_DENIAL = {"hookSpecificOutput": {"hookEventName": "PermissionRequest",
+    "decision": {"behavior": "deny", "message": "The file has no current Nexus approval."}}}
+_READ_ALLOW = {"hookSpecificOutput": {"hookEventName": "PermissionRequest", "decision": {"behavior": "allow"}}}
 _STAGE = "claude_terminal_prompt"
 _DENIAL = {
     "decision": "block",
@@ -77,10 +82,12 @@ class _CompletionCandidate:
 
 
 @dataclass(slots=True)
-class _PendingQuestion:
+class _PendingDecision:
     prompt: _AuthorizedPrompt
     request: dict
     deadline: float
+    refusal_reply: dict
+    require_target: Callable[[], None] | None
     ready: threading.Event = field(default_factory=threading.Event)
     finished: threading.Event = field(default_factory=threading.Event)
     published: bool = False
@@ -90,7 +97,7 @@ class _PendingQuestion:
     written: bool = False
 
 
-class _QuestionHookServer(ThreadingHTTPServer):
+class _DecisionHookServer(ThreadingHTTPServer):
     def __init__(self, address, handler):
         self._slots = threading.BoundedSemaphore(4)
         super().__init__(address, handler)
@@ -134,11 +141,11 @@ class ClaudeTerminalPromptGate:
     """
 
     def __init__(self, session_uuid, cwd, permission_mode, authorize, *, observe_results=False, startup=None,
-                 allow_questions=False):
+                 allow_questions=False, allow_read=False):
         if (claude_session_uuid(session_uuid) is None or type(cwd) is not str or not Path(cwd).is_absolute()
                 or type(permission_mode) is not str or not permission_mode or not callable(authorize)
-                or type(observe_results) is not bool or type(allow_questions) is not bool
-                or (allow_questions and (not observe_results or startup is None))):
+                or type(observe_results) is not bool or type(allow_questions) is not bool or type(allow_read) is not bool
+                or ((allow_questions or allow_read) and (not observe_results or startup is None))):
             raise ValueError("Invalid Claude prompt gate scope.")
         self._session_uuid = session_uuid
         self._cwd = Path(cwd)
@@ -156,7 +163,8 @@ class ClaudeTerminalPromptGate:
         self._server = None
         self._startup = startup
         self._allow_questions = allow_questions
-        self._question = None
+        self._allow_read = allow_read
+        self._decision = None
         self._question_tools = set()
         self.startup_confirmed = threading.Event()
 
@@ -186,15 +194,15 @@ class ClaudeTerminalPromptGate:
                 except OSError:
                     pass
                 finally:
-                    if isinstance(delivery, _PendingQuestion):
-                        gate._complete_question(delivery, written)
+                    if isinstance(delivery, _PendingDecision):
+                        gate._complete_decision(delivery, written)
                     elif delivery is not None:
                         delivery.complete(written and status == 200 and body == {})
 
         with self._lock:
             if self._server is not None or self._closed:
                 raise CoreError("SESSION_CONFLICT", _STAGE)
-            server_type = _QuestionHookServer if self._allow_questions else HTTPServer
+            server_type = _DecisionHookServer if self._allow_questions or self._allow_read else HTTPServer
             server = server_type(("127.0.0.1", 0), Handler)
             self._thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
             try:
@@ -211,8 +219,8 @@ class ClaudeTerminalPromptGate:
             self._permit = None
             self._pending_result = None
             self._candidate = None
-            if self._question is not None:
-                self._question.ready.set()
+            if self._decision is not None:
+                self._decision.ready.set()
             server, self._server = self._server, None
         if server is not None:
             server.shutdown()
@@ -235,7 +243,11 @@ class ClaudeTerminalPromptGate:
                 hooks[name] = [{"hooks": [dict(hook, url=root + _COMPLETION_PATH)]}]
         if self._allow_questions:
             hooks["PreToolUse"] = [{"matcher": "^AskUserQuestion$", "hooks": [
-                dict(hook, url=root + _QUESTION_PATH, timeout=_QUESTION_WAIT + 5, onFailure="block"),
+                dict(hook, url=root + _QUESTION_PATH, timeout=_DECISION_WAIT + 5, onFailure="block"),
+            ]}]
+        if self._allow_read:
+            hooks["PermissionRequest"] = [{"matcher": "^Read$", "hooks": [
+                dict(hook, url=root + _READ_PATH, timeout=_DECISION_WAIT + 5, onFailure="block"),
             ]}]
         environment = {_ENV_KEY: self._secret}
         if self._startup is not None:
@@ -284,7 +296,8 @@ class ClaudeTerminalPromptGate:
         completion = self._observe_results and handler.path == _COMPLETION_PATH
         startup = self._startup is not None and handler.path == _START_PATH
         question = self._allow_questions and handler.path == _QUESTION_PATH
-        if handler.path != _PATH and not completion and not startup and not question:
+        read = self._allow_read and handler.path == _READ_PATH
+        if handler.path != _PATH and not completion and not startup and not question and not read:
             return 404, {}, None
         token = handler.headers.get_all("Authorization", [])
         if (len(token) != 1 or not token[0].isascii()
@@ -305,8 +318,8 @@ class ClaudeTerminalPromptGate:
             return 400, {}, None
         if completion:
             return self._receive_completion(payload), {}, None
-        if question:
-            return self._receive_question(payload)
+        if question or read:
+            return self._receive_decision(payload, read=read)
         if startup:
             _, path = self._startup
             if (payload.get("hook_event_name") == "SessionStart" and payload.get("source") == "resume"
@@ -346,95 +359,109 @@ class ClaudeTerminalPromptGate:
                 self._pending_result = _AuthorizedPrompt(prompt_id, permit, time.time_ns() // 1_000_000)
             return 200, {}, permit.delivery
 
-    def _receive_question(self, payload):
+    def _receive_decision(self, payload, *, read):
         source = payload.get("tool_input")
         tool_id = payload.get("tool_use_id")
-        if (payload.get("hook_event_name") != "PreToolUse" or payload.get("tool_name") != "AskUserQuestion"
+        hook, tool = ("PermissionRequest", "Read") if read else ("PreToolUse", "AskUserQuestion")
+        denial = _READ_DENIAL if read else _QUESTION_DENIAL
+        if (payload.get("hook_event_name") != hook or payload.get("tool_name") != tool
                 or payload.get("session_id") != self._session_uuid or payload.get("permission_mode") != self._permission_mode
                 or "agent_id" in payload or type(payload.get("cwd")) is not str or Path(payload["cwd"]) != self._cwd
                 or type(payload.get("transcript_path")) is not str
-                or Path(payload["transcript_path"]) != self._startup[1]
-                or not _valid_prompt_id(tool_id) or type(source) is not dict or set(source) != {"questions"}):
-            return 200, _QUESTION_DENIAL, None
-        params = {"tool_name": "AskUserQuestion", "tool_use_id": tool_id, "input": source}
+                or Path(payload["transcript_path"]) != self._startup[1]):
+            return 200, denial, None
         try:
-            validate_request(CLAUDE_INPUT, params)
-            request = {"schema_version": 1, "request_id": "claude_question_" + secrets.token_hex(16),
+            require_target = None
+            if read:
+                reviewed, require_target = review_claude_read(self._cwd, source)
+                params = {"tool_name": tool, "input": reviewed}
+            else:
+                if not _valid_prompt_id(tool_id) or type(source) is not dict or set(source) != {"questions"}:
+                    return 200, denial, None
+                params = {"tool_name": tool, "tool_use_id": tool_id, "input": source}
+                validate_request(CLAUDE_INPUT, params)
+            request = {"schema_version": 1, "request_id": "claude_decision_" + secrets.token_hex(16),
                 "request_hash": hashlib.sha256(canonical_json(params)).hexdigest(),
-                "method": _QUESTION_METHOD, "params": params, "local_generation": 1}
+                "method": _DECISION_METHOD, "params": params, "local_generation": 1}
             if len(canonical_json(request)) > 16384:
-                raise ValueError("Oversized question.")
-        except (ValueError, TypeError, OverflowError, RecursionError):
-            return 200, _QUESTION_DENIAL, None
+                raise ValueError("Oversized decision.")
+        except (OSError, ValueError, TypeError, OverflowError, RecursionError):
+            return 200, denial, None
         with self._lock:
             pending = self._pending_result
             if (self._closed or pending is None or self._candidate is not None
-                    or payload.get("prompt_id") != pending.prompt_id or self._question is not None
-                    or len(self._question_tools) >= 128 or tool_id in self._question_tools):
-                return 200, _QUESTION_DENIAL, None
-            self._question_tools.add(tool_id)
-            question = self._question = _PendingQuestion(pending, request, time.monotonic() + _QUESTION_WAIT)
-        question.ready.wait(max(0, question.deadline - time.monotonic()))
+                    or payload.get("prompt_id") != pending.prompt_id or self._decision is not None
+                    or (not read and (len(self._question_tools) >= 128 or tool_id in self._question_tools))):
+                return 200, denial, None
+            if not read:
+                self._question_tools.add(tool_id)
+            decision = self._decision = _PendingDecision(pending, request, time.monotonic() + _DECISION_WAIT,
+                                                         denial, require_target)
+        decision.ready.wait(max(0, decision.deadline - time.monotonic()))
         try:
-            if question.check is not None:
-                question.check(question.prompt.permit.operation_id)
+            if decision.reply is _READ_ALLOW:
+                decision.require_target()
+            if decision.check is not None:
+                decision.check(decision.prompt.permit.operation_id)
             with self._lock:
-                if (self._closed or question.reply is None or question.prompt is not self._pending_result
-                        or self._candidate is not None or time.monotonic() >= question.deadline):
-                    raise EffectNotSent("The Claude question is no longer waiting.", code="NATIVE_REQUEST_NOT_OBSERVED")
-            return 200, question.reply, question
+                if (self._closed or decision.reply is None or decision.prompt is not self._pending_result
+                        or self._candidate is not None or time.monotonic() >= decision.deadline):
+                    raise EffectNotSent("The Claude request is no longer waiting.", code="NATIVE_REQUEST_NOT_OBSERVED")
+            return 200, decision.reply, decision
         except EffectNotSent as error:
-            question.refusal = error
-            return 200, _QUESTION_DENIAL, question
+            decision.refusal = error
+            return 200, decision.refusal_reply, decision
         except Exception:
-            question.refusal = EffectNotSent("The active Claude question could not be revalidated.",
+            decision.refusal = EffectNotSent("The active Claude request could not be revalidated.",
                                              code="BINDING_NOT_AUTHORIZED")
-            return 200, _QUESTION_DENIAL, question
+            return 200, decision.refusal_reply, decision
 
-    def _complete_question(self, question, written):
+    def _complete_decision(self, decision, written):
         with self._lock:
-            if self._question is question:
-                self._question = None
-            question.written = written
-            question.finished.set()
+            if self._decision is decision:
+                self._decision = None
+            decision.written = written
+            decision.finished.set()
 
-    def take_question(self):
+    def take_decision(self):
         with self._lock:
-            question = self._question
-            if (question is None or question.published or question.ready.is_set() or self._candidate is not None
-                    or question.prompt is not self._pending_result or time.monotonic() >= question.deadline):
+            decision = self._decision
+            if (decision is None or decision.published or decision.ready.is_set() or self._candidate is not None
+                    or decision.prompt is not self._pending_result or time.monotonic() >= decision.deadline):
                 return None
-            question.published = True
-            return question.prompt.permit.operation_id, question.request
+            decision.published = True
+            return decision.prompt.permit.operation_id, decision.request
 
-    def reply_question(self, request, decision, response, check):
+    def reply_decision(self, request, outcome, response, check):
         with self._lock:
-            question = self._question
-            if (self._closed or question is None or not question.published or question.ready.is_set()
-                    or question.prompt is not self._pending_result or time.monotonic() >= question.deadline
-                    or any(request.get(key) != question.request[key] for key in (
+            decision = self._decision
+            if (self._closed or decision is None or not decision.published or decision.ready.is_set()
+                    or decision.prompt is not self._pending_result or time.monotonic() >= decision.deadline
+                    or any(request.get(key) != decision.request[key] for key in (
                         "request_id", "request_hash", "method", "params", "local_generation"))):
-                raise EffectNotSent("The Claude question is no longer waiting.", code="NATIVE_REQUEST_NOT_OBSERVED")
+                raise EffectNotSent("The Claude request is no longer waiting.", code="NATIVE_REQUEST_NOT_OBSERVED")
             try:
-                answer = response_for(question.request, response, approved=decision == "accept")
+                answer = response_for(decision.request, response, approved=outcome == "accept")
             except (ValueError, TypeError, OverflowError, RecursionError):
-                raise EffectNotSent("The Claude question needs a matching answer.", code="VALIDATION_ERROR") from None
-            if answer is None:
-                question.reply = _QUESTION_DENIAL
+                raise EffectNotSent("The Claude request needs a matching answer.", code="VALIDATION_ERROR") from None
+            if decision.require_target is not None:
+                decision.reply = _READ_ALLOW if outcome == "accept" else decision.refusal_reply
+            elif answer is None:
+                decision.reply = decision.refusal_reply
             else:
                 answers = {prompt: ", ".join(value) if isinstance(value, list) else value
                            for prompt, value in answer["answers"].items()}
-                question.reply = {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                decision.reply = {"hookSpecificOutput": {"hookEventName": "PreToolUse",
                     "permissionDecision": "allow",
-                    "updatedInput": {**question.request["params"]["input"], "answers": answers},
+                    "updatedInput": {**decision.request["params"]["input"], "answers": answers},
                 }}
-            question.check = check
-            question.ready.set()
-        if not question.finished.wait(max(0, question.deadline - time.monotonic()) + 3):
+            decision.check = check
+            decision.ready.set()
+        if not decision.finished.wait(max(0, decision.deadline - time.monotonic()) + 3):
             raise CoreError("OUTCOME_UNKNOWN", _STAGE, possible_effect=True)
-        if question.refusal is not None:
-            raise question.refusal
-        if not question.written:
+        if decision.refusal is not None:
+            raise decision.refusal
+        if not decision.written:
             raise CoreError("OUTCOME_UNKNOWN", _STAGE, possible_effect=True)
 
     def _receive_completion(self, payload):
@@ -502,21 +529,21 @@ class ClaudeTerminalPromptGate:
             self._candidate = None
             self._pending_result = None
             self._question_tools.clear()
-            if self._question is not None:
-                self._question.ready.set()
+            if self._decision is not None:
+                self._decision.ready.set()
             return result
 
     def read_generation(self, observe, *, skip_operation=None):
         """Bind current native generation to the authenticated pending prompt."""
         with self._lock:
             pending = self._pending_result
-            if (pending is None or self._candidate is not None or self._question is not None
+            if (pending is None or self._candidate is not None or self._decision is not None
                     or pending.permit.operation_id == skip_operation):
                 return None
         evidence = observe(pending.prompt_id, pending.permit.digest, pending.admitted_ms)
         with self._lock:
             if (evidence is None or pending is not self._pending_result or self._candidate is not None
-                    or self._question is not None):
+                    or self._decision is not None):
                 return None
             return pending.permit.operation_id, evidence
 

@@ -1097,14 +1097,17 @@ class CopiedAdapterFactory:
         environment = await self._environment(prepared)
         env = dict(environment)
         command = prepared.argv
-        question_only = isinstance(environment, ProcessHTTPEnvironment) and environment.claude_question_only is True
-        if question_only:
+        typed_env = isinstance(environment, ProcessHTTPEnvironment)
+        question_only = typed_env and environment.claude_question_only is True
+        read_approval = typed_env and environment.claude_read_approval is True
+        if question_only or read_approval:
             require_reviewed_claude_terminal(prepared, process_launch, process_birth_recorder, opening_guard)
-            if kind != "claude_code" or not native_approvals_enabled:
+            if kind != "claude_code" or not native_approvals_enabled or (question_only and read_approval):
                 raise CoreError("BINDING_NOT_AUTHORIZED", "native_approval_launch", retry_safe=True)
-            command = (*command, "--tools", "AskUserQuestion")
+            command = (*command, "--tools", "AskUserQuestion,Read" if read_approval else "AskUserQuestion")
         if claude_grant is not None and (claude_grant.question_only != question_only
-                                         or native_approvals_enabled != question_only):
+                                         or claude_grant.read_approval != read_approval
+                                         or native_approvals_enabled != (question_only or read_approval)):
             raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
         preset_bridge = environment.pi_mcp_bridge if isinstance(environment, ProcessHTTPEnvironment) else None
         preset_config = None
@@ -1192,6 +1195,8 @@ class CopiedAdapterFactory:
                                                       cwd=prepared.cwd, env=env)
         if native_approvals_enabled and kind in {"codex", "claude_code", "pi"}:
             connector.native_approvals_enabled = True
+        if read_approval:
+            connector.claude_read_approval = True
         secrets = (*credential_values(env),
                    *((native_action.capability_ref,) if native_action is not None else ()))
         redactor = NativeSecretRedactor(secrets)

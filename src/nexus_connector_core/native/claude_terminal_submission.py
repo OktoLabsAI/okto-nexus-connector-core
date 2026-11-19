@@ -162,13 +162,14 @@ class ClaudeTerminalSession:
             if result is not None:
                 yield self._completion_event(result)
                 continue
-            question = self._gate.take_question()
+            question = self._gate.take_decision()
             if question is not None:
                 operation_id, request = question
                 display = self._redactor.clean(request)
                 display["request_hash"] = request["request_hash"]
+                category = "approval_request" if request["params"]["tool_name"] == "Read" else "input_request"
                 yield RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
-                                   self._stream_epoch, 0, "input_request", request["method"],
+                                   self._stream_epoch, 0, category, request["method"],
                                    {"native_approval": request, "native_approval_display": display},
                                    operation_id=operation_id)
             elif self._observe_generation is not None:
@@ -197,14 +198,14 @@ class ClaudeTerminalSession:
 
     async def reply_native_approval(self, request, decision, operator_response):
         if (request.get("method") != "control_request:can_use_tool"
-                or request.get("params", {}).get("tool_name") != "AskUserQuestion"
+                or request.get("params", {}).get("tool_name") not in {"AskUserQuestion", "Read"}
                 or decision not in {"accept", "decline", "cancel"}):
             raise EffectNotSent("This native decision is unavailable in the Claude terminal.")
 
         def check(operation_id):
             if (self._closed or self._terminal.poll() is not None
                     or not self.terminal_submission.owns_turn(operation_id)):
-                raise EffectNotSent("This Claude question no longer belongs to a live turn.", code="STALE_TURN")
+                raise EffectNotSent("This Claude request no longer belongs to a live turn.", code="STALE_TURN")
             if decision == "accept":
                 fence = getattr(self, "effect_fence", None)
                 if self._require_current is None or fence is None:
@@ -213,7 +214,7 @@ class ClaudeTerminalSession:
                 self._require_current()
                 fence.check("send_turn")
 
-        await asyncio.to_thread(self._gate.reply_question, request, decision, operator_response, check)
+        await asyncio.to_thread(self._gate.reply_decision, request, decision, operator_response, check)
 
     async def interrupt(self, operation_id, target, *, verify, fence):
         """Send one Escape to the exact live generating prompt."""

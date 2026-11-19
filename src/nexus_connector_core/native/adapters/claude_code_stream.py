@@ -295,6 +295,7 @@ class ClaudeCodeStreamConnector:
         self._cwd = cwd
         self._env = dict(env) if env is not None else None
         self.native_approvals_enabled = False
+        self.claude_read_approval = False
         self._approval_requests = {}
         self._approval_generation = 0
         self._approval_turn_active = False
@@ -1147,13 +1148,23 @@ class ClaudeCodeStreamConnector:
     def _handle_permission_request(self, obj):
         from ..native_inputs import CLAUDE_INPUT, validate_request, claude_permission_tool_supported
         request_id, params = obj.get("request_id"), obj.get("request")
+        read = self.claude_read_approval and isinstance(params, dict) and params.get("tool_name") == "Read"
         valid = (self.native_approvals_enabled and isinstance(request_id, str) and bool(request_id)
                  and isinstance(params, dict) and params.get("subtype") == "can_use_tool"
-                 and claude_permission_tool_supported(params.get("tool_name"))
+                 and (read or claude_permission_tool_supported(params.get("tool_name")))
                  and isinstance(params.get("tool_use_id"), str) and bool(params["tool_use_id"])
                  and isinstance(params.get("input"), dict))
         encoded = json.dumps([request_id, params], sort_keys=True, separators=(",", ":"))
         valid = valid and len(encoded.encode()) <= 16384
+        read_target = None
+        if valid and read:
+            from ..claude_read_approval import review_claude_read
+            try:
+                reviewed, check = review_claude_read(self._cwd, params["input"])
+                read_target = (params["input"], check)
+                params = {"tool_name": "Read", "tool_use_id": params["tool_use_id"], "input": reviewed}
+            except (OSError, ValueError, TypeError):
+                valid = False
         if valid and params["tool_name"] == "PowerShell":
             command = params["input"].get("command")
             valid = isinstance(command, str) and bool(command.strip())
@@ -1177,10 +1188,12 @@ class ClaudeCodeStreamConnector:
                     "method": "control_request:can_use_tool", "request_hash": digest,
                     "params": params, "local_generation": self._approval_generation}
                 self._approval_requests[request_id] = {"request": request, "pending": True}
+                if read_target is not None:
+                    self._approval_requests[request_id]["read_target"] = read_target
         if request:
             self._emit("tool_activity", "control_request:can_use_tool", {"native_approval": request})
         else:
-            self._emit("tool_activity", "unsupported_control_request", obj)
+            self._emit("tool_activity", "unsupported_control_request", {"tool_name": "Read"} if read else obj)
             if isinstance(request_id, str):
                 self._write_json({"type": "control_response", "response": {"subtype": "error",
                     "request_id": request_id, "error": "Unsupported or stale native permission request"}})
@@ -1212,6 +1225,11 @@ class ClaudeCodeStreamConnector:
                 raise RuntimeCommandNotSent("Claude permission request no longer belongs to the active turn")
             # Use original in-memory input, never the redacted journal projection.
             original_input = entry["request"]["params"]["input"]
+            before_write = None
+            if read_target := entry.get("read_target"):
+                original_input, check = read_target
+                if decision == "accept":
+                    before_write = check
             if decision == "accept" and entry["request"]["params"]["tool_name"] == "AskUserQuestion":
                 try:
                     answer_data = response_for(entry["request"], request.get("operator_response"), approved=True)
@@ -1221,8 +1239,19 @@ class ClaudeCodeStreamConnector:
             entry["pending"] = False
             answer = ({"behavior": "allow", "updatedInput": original_input}
                       if decision == "accept" else {"behavior": "deny", "message": "Nexus operator declined this request"})
-        self._write_json({"type": "control_response", "response": {"subtype": "success",
-            "request_id": request["request_id"], "response": answer}})
+        envelope = {"type": "control_response", "response": {"subtype": "success",
+            "request_id": request["request_id"], "response": answer}}
+        if before_write is None:
+            self._write_json(envelope)
+        else:
+            from ..claude_read_approval import ClaudeReadTargetChanged
+            try:
+                self._write_json(envelope, before_write=before_write)
+            except ClaudeReadTargetChanged:
+                envelope["response"]["response"] = {"behavior": "deny",
+                    "message": "The file changed after the Claude Read request."}
+                self._write_json(envelope)
+                raise
 
     def _emit(self, kind: str, native_event: str, payload: dict[str, Any], *,
               operation_id: str | None = None, origin: str = "native") -> None:

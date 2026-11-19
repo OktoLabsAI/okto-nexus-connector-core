@@ -30,7 +30,7 @@ class ProcessHTTPEnvironment(Mapping[str, str]):
     and is never persisted in a prepared launch or receipt.
     """
     def __init__(self, values, templates, disabled_mcp_names=(), preset_entries=None, preset_strict=False, pi_mcp_bridge=None,
-                 *, claude_question_only=False):
+                 *, claude_question_only=False, claude_read_approval=False):
         self._values = MappingProxyType(dict(values))
         self.http_templates = tuple(templates)
         self.disabled_mcp_names = tuple(disabled_mcp_names)
@@ -38,6 +38,7 @@ class ProcessHTTPEnvironment(Mapping[str, str]):
         self.preset_strict = preset_strict
         self.pi_mcp_bridge = pi_mcp_bridge
         self.claude_question_only = claude_question_only
+        self.claude_read_approval = claude_read_approval
 
     def __getitem__(self, name):
         return self._values[name]

@@ -50,6 +50,7 @@ class ClaudeTerminalResumeGrant:
     root_fingerprint: str
     require_current: Callable[[], None] = field(repr=False)
     question_only: bool = False
+    read_approval: bool = False
 
 
 def require_claude_resume_grant(grant, native_id, prepared, session_id, context):
@@ -62,7 +63,8 @@ def require_claude_resume_grant(grant, native_id, prepared, session_id, context)
             or grant.session_id != session_id
             or grant.profile_fingerprint != prepared.profile_fingerprint
             or grant.root_fingerprint != prepared.root_fingerprint
-            or type(grant.question_only) is not bool
+            or type(grant.question_only) is not bool or type(grant.read_approval) is not bool
+            or (grant.question_only and grant.read_approval)
             or not callable(grant.require_current)
             or any(getattr(grant, key) != getattr(context, key) for key in (
                 "server_id", "executor_id", "binding_id", "agent_id", "workspace_id", "session_owner_generation",
@@ -105,7 +107,8 @@ async def open_saved_claude_terminal(
     # arms and rechecks the exact operation at the hook's write frontier.
     gate = ClaudeTerminalPromptGate(history.session_uuid, prepared.cwd, "plan", lambda _operation: True,
                                   observe_results=True, startup=(str(powershell), transcript),
-                                  allow_questions=grant.question_only)
+                                  allow_questions=grant.question_only or grant.read_approval,
+                                  allow_read=grant.read_approval)
     revalidate = partial(revalidate_launch, _STAGE)
     await asyncio.to_thread(gate.__enter__)
     terminal = None
