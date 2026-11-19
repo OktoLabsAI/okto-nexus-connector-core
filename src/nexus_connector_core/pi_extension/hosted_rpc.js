@@ -4,6 +4,7 @@ import { registerHooks } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { startHostedRenderer } from "./hosted_renderer.js";
+import { fenceHostedRpcSteer } from "./hosted_steer.js";
 
 // These files define the version-specific handoff between Pi's own CLI and RPC.
 // Core also seals the selected installation's full artifact closure at launch.
@@ -12,6 +13,7 @@ const reviewed = {
   "dist/bundle/cli.js": "e79626f2dd6f94aa45d30f3fa63cd84319a6eefcd150b353cfaf274366926774",
   "dist/main.js": "5a9473442cd761b21d07c374bb137967dd11474f5a7754d1c32f585e7b1a1f49",
   "dist/cli/setup.js": "4a2a7a0dbf82e2e5d18cec90896b36cbedce78b3d09e78d4040ac94fa3fbeba8",
+  "dist/core/agent-session.js": "5ebfae51db5a900596145159428e7cb57d195af9d54a28f41d4ac8ff1bfd5729",
   "dist/modes/index.js": "42bd65ff8aee4f60dfcfcfb9db66772219281585cdbef845df747c8846618a87",
   "dist/modes/rpc/rpc-mode.js": "bdd94e753e6d19731d9fb9ea370462d095d64f1e78bddd7651320663fa57c4ff",
   "dist/modes/interactive/interactive-mode.js": "7dc366e8609d7d1e81fb85952e466aea9933b13e74842c2a9b9df678d267d12e",
@@ -91,6 +93,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   // Confirm one frame on the original pipe before starting the RPC reader.
   const writeProtocol = process.stdout.write.bind(process.stdout);
   void runHostedPiRpc(cli, args, async (owner, InteractiveMode) => {
+    fenceHostedRpcSteer(owner);
     const port = await startHostedRenderer(InteractiveMode, owner, rendererKey);
     const notice = { type: "nexus_pi_owned_rpc", revision: 1, session_id: owner.session.sessionId, renderer_port: port };
     await new Promise((resolve, reject) => {
