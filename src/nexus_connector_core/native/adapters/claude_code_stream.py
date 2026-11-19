@@ -134,6 +134,7 @@ from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
 from ..delta_batches import coalesce_claude_delta
 from ..claude_history_identity import CLAUDE_HISTORY_IDENTITY, claude_session_uuid
+from ..claude_chat_facts import CLAUDE_STREAM_CHAT_EVENT, MAX_CLAUDE_CHAT_BYTES, is_claude_tool_use_id
 from ..claude_saved_history import ClaudeSavedHistory, observe_claude_saved_history
 
 from ..legacy_environment import child_environment
@@ -223,6 +224,7 @@ class _PendingTurn:
     operation_id: str | None
     interrupted: bool = False
     started_session_uuid: str | None = None
+    chat_parents: set[str] = field(default_factory=set)
 
 
 @dataclass(slots=True)
@@ -1058,6 +1060,41 @@ class ClaudeCodeStreamConnector:
             if isinstance(block, dict) and block.get("type") == "text"
         )
         self._emit("output_delta", "assistant", {"final": True, "text": text, "raw": obj})
+        self._emit_chat_snapshot(obj, message)
+
+    def _emit_chat_snapshot(self, obj: dict[str, Any], message: dict[str, Any]) -> None:
+        # Claude can repeat a provider message ID for separate text blocks.
+        # The outer stream UUID identifies the individual published snapshot.
+        native = claude_session_uuid(obj.get("session_id"))
+        entry = claude_session_uuid(obj.get("uuid"))
+        parent = obj.get("parent_tool_use_id")
+        parts = message.get("content")
+        if (native is None or entry is None or "parent_tool_use_id" not in obj
+                or message.get("role") != "assistant" or message.get("error") is not None
+                or obj.get("isApiErrorMessage") is True
+                or not isinstance(parts, list) or any(not isinstance(part, dict) for part in parts)):
+            return
+        with self._state_lock:
+            turn = self._pending_turns[0] if self._pending_turns else None
+            if (turn is None or turn.operation_id is None or turn.interrupted
+                    or self._history_identity_conflict or native != turn.started_session_uuid
+                    or (parent is not None and (not is_claude_tool_use_id(parent) or parent not in turn.chat_parents))):
+                return
+            operation = turn.operation_id
+            for part in parts:
+                if (part.get("type") == "tool_use" and part.get("name") in ("Agent", "Task")
+                        and is_claude_tool_use_id(part.get("id")) and len(turn.chat_parents) < 64):
+                    turn.chat_parents.add(part["id"])
+        texts = [part.get("text") for part in parts if part.get("type") == "text"]
+        if not texts or any(not isinstance(text, str) for text in texts):
+            return
+        body = "\n".join(texts)
+        if body:
+            self._emit("tool_activity", CLAUDE_STREAM_CHAT_EVENT,
+                       {"revision": 1, "native_session_id": native, "entry_id": entry,
+                        "parent_tool_use_id": parent, "role": "assistant",
+                        "text": body if len(body.encode("utf-8")) <= MAX_CLAUDE_CHAT_BYTES else None},
+                       operation_id=operation, origin="nexus")
 
     def _observe_generation(self) -> None:
         with self._state_lock:

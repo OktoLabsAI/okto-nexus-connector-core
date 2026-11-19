@@ -22,6 +22,7 @@ from ..pi_extension_resource import PiNativeActionLaunch, qualify_pi_hosted_rpc
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, ReplacementNotSentAfterInterrupt, RuntimeCommandNotSent)
 from .adapters.compatibility import qualified_build, can_probe_protocol
+from .claude_chat_facts import CLAUDE_STREAM_CHAT_EVENT, valid_claude_stream_chat_fact
 from .claude_history_identity import CLAUDE_HISTORY_IDENTITY, project_claude_history
 from .claude_saved_history import ClaudeSavedHistory
 from .claude_terminal_resume import (
@@ -567,6 +568,11 @@ class CopiedAdapterSession:
             if native.harness_kind == "claude_code" and native.native_event == "nexus_claude_generating":
                 if native.origin != "nexus" or native.operation_id != self._active_operation_id:
                     raise CoreError("EVENT_OPERATION_MISMATCH", "native_pump", possible_effect=True)
+            if native.harness_kind == "claude_code" and native.native_event == CLAUDE_STREAM_CHAT_EVENT:
+                if (native.origin != "nexus" or self._active_operation_id is None
+                        or native.operation_id != self._active_operation_id
+                        or not valid_claude_stream_chat_fact(native.payload)):
+                    continue
             if native.harness_kind == "pi" and native.native_event == PI_STEER_EVENT:
                 operation = native.operation_id
                 stage = native.payload.get("stage")
