@@ -11,6 +11,7 @@ from .lease_denial import LEASE_DENIAL_REVISION, decode_lease_denial
 from .session_release import SESSION_RELEASE_REVISION, decode_session_release
 from .startup_refusal_link import STARTUP_REFUSAL_REVISION, decode_startup_refusal
 from .event_artifacts import EVENT_ARTIFACT_REVISION, decode_event_artifact
+from .pi_control_link import PI_RUN_CONTROL_REVISION, decode_pi_run_control
 from .presentation_link import (
     PI_PRESENTATION_LINK_REVISION, PRESENTATION_LINK_REVISION, decode_pi_presentation_frame, decode_presentation_frame,
 )
@@ -32,6 +33,10 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
         raise CoreError('VALIDATION_ERROR', 'control_decode', retry_safe=True) from error
     if type(header) is not dict:
         raise CoreError('VALIDATION_ERROR', 'control_decode', retry_safe=True)
+    if header.get('contract_revision') == PI_RUN_CONTROL_REVISION:
+        if isinstance(capabilities, (str, bytes)) or PI_RUN_CONTROL_REVISION not in capabilities:
+            raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+        return decode_pi_run_control(raw)
     if header.get('contract_revision') == PI_PRESENTATION_LINK_REVISION:
         if isinstance(capabilities, (str, bytes)) or PI_PRESENTATION_LINK_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
