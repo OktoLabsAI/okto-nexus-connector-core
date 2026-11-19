@@ -10,14 +10,15 @@ from uuid import uuid4
 import pytest
 
 from nexus_connector_core import (
-    CoreError, ExecutionContext, LaunchIntent, OpenOperation,
+    CoreError, EventCursor, ExecutionContext, LaunchIntent, OpenOperation,
     OperationKey, RuntimeEvent, ShutdownPolicy, TurnOperation,
 )
 from nexus_connector_core.discovery import fingerprint
 from nexus_connector_core.journal import SQLiteJournal
 from nexus_connector_core.models import EffectNotSent, InstallationCandidate
 from nexus_connector_core.native.claude_terminal_prompt import ClaudeTerminalPromptGate
-from nexus_connector_core.native.claude_terminal_submission import ClaudeTerminalSubmission
+from nexus_connector_core.native.claude_terminal_submission import ClaudeTerminalSession, ClaudeTerminalSubmission
+from nexus_connector_core.native.redaction import NativeSecretRedactor
 from nexus_connector_core.runtime import LocalRuntimeCore
 
 
@@ -35,6 +36,8 @@ class _HookPeer:
     def __init__(self, gate, cwd, session_uuid, boundary):
         settings, env = gate.launch_settings()
         hook, = settings["hooks"]["UserPromptSubmit"][0]["hooks"]
+        if "Stop" in settings["hooks"]:
+            self.completion = settings["hooks"]["Stop"][0]["hooks"][0]["url"]
         self._url = hook["url"]
         self._token = next(iter(env.values()))
         self._scope = {"cwd": cwd, "session_id": session_uuid, "permission_mode": "plan",
@@ -42,16 +45,31 @@ class _HookPeer:
         self.boundary = boundary
         self.writes = []
         self.responses = []
+        self.stopped = False
+        self.birth = None
 
     def write(self, data):
         assert data.startswith(b"\x1b[200~") and data.endswith(b"\x1b[201~\r")
         text = data[6:-7].decode()
         self.writes.append(text)
         self.boundary()
-        request = Request(self._url, data=json.dumps(self._scope | {"prompt": text}).encode(),
+        self.responses.append(self.post(self._url, prompt=text, prompt_id=self.prompt_id))
+
+    @property
+    def prompt_id(self):
+        return "native-prompt-" + str(len(self.writes))
+
+    def post(self, url, **payload):
+        request = Request(url, data=json.dumps(self._scope | payload).encode(),
                           headers={"Authorization": "Bearer " + self._token, "Content-Type": "application/json"})
         with urlopen(request, timeout=4) as response:
-            self.responses.append(json.load(response))
+            return json.load(response)
+
+    def poll(self):
+        return 0 if self.stopped else None
+
+    def close(self):
+        self.stopped = True
 
 
 class _Factory:
@@ -120,6 +138,76 @@ def test_core_binds_the_terminal_hook_to_the_durable_send(tmp_path, case):
                     assert peer.responses == [{}]
                     assert await runtime.submit(operation, context) == retained
             assert peer.writes == [operation.text]
+
+    asyncio.run(run())
+
+
+@pytest.mark.parametrize("failure", [False, True])
+def test_correlated_native_wire_result_settles_only_its_admitted_turn(tmp_path, failure):
+    async def run():
+        native_uuid = str(uuid4())
+        workspace = str(tmp_path)
+        with ClaudeTerminalPromptGate(native_uuid, workspace, "plan", lambda _: True, observe_results=True) as gate:
+            peer = _HookPeer(gate, workspace, native_uuid, lambda: None)
+
+            class Factory:
+                async def open(self, _prepared, session_id, context, *, stream_epoch):
+                    self.native = ClaudeTerminalSession(
+                        peer, gate, native_id="native", session_id=session_id, stream_epoch=stream_epoch,
+                        context=context, redactor=NativeSecretRedactor(("fixture-private-value",)))
+                    return self.native
+
+            binary = tmp_path / "claude-fixture"
+            binary.write_bytes(b"synthetic selected binary")
+            candidate = InstallationCandidate("claude_stream", str(binary), fingerprint(binary), "explicit", "selected")
+            journal = SQLiteJournal(tmp_path / "terminal.sqlite")
+            factory = Factory()
+            runtime = LocalRuntimeCore(journal, factory, candidates={"claude_stream": candidate},
+                                       workspace_roots={"workspace": workspace})
+            context = ExecutionContext("server", "executor", "binding", "agent", "workspace", 1, 1, 1,
+                                       time.monotonic() + 60,
+                                       frozenset({"runtime.open", "turn.submit", "runtime.close"}))
+            try:
+                prepared = await runtime.prepare(LaunchIntent("agent", "workspace", "claude_stream"), context)
+                await runtime.open(OpenOperation("open", "session", "epoch", prepared), context)
+                operation = TurnOperation("terminal-turn", "session", "A scoped task.")
+                receipt = await runtime.submit(operation, context)
+                assert receipt.stage == "SUBMITTED"
+                key = OperationKey("server", "executor", operation.operation_id)
+                stop = {"hook_event_name": "Stop", "prompt_id": peer.prompt_id, "stop_hook_active": False,
+                        "background_tasks": [], "session_crons": [],
+                        "last_assistant_message": "Answer fixture-private-value " + peer._token}
+                post = lambda payload: asyncio.to_thread(peer.post, peer.completion, **payload)
+                await post(stop | {"prompt_id": "unrelated-prompt"})
+                await post(stop | {"session_id": str(uuid4())})
+                await post(stop | {"background_tasks": [{"type": "shell"}]})
+                assert factory.native.terminal_submission.active_turn()
+                assert (await journal.get_receipt(key)).stage == "SUBMITTED"
+                long_output = "X" * (480 * 1024)
+                if not failure:
+                    stop["last_assistant_message"] += "\n" + long_output
+                result = (stop | {"hook_event_name": "StopFailure", "error": "unknown"}) if failure else stop
+                await post(result)
+                await post(result)
+                async with asyncio.timeout(5):
+                    while factory.native.terminal_submission.active_turn():
+                        await asyncio.sleep(.01)
+                assert (await journal.get_receipt(key)).stage == ("FAILED" if failure else "SUCCEEDED")
+                events = [event async for event in journal.events(EventCursor("server", "executor", "session", "epoch"))
+                          if event.operation_id == operation.operation_id]
+                event, = events
+                assert event.operation_id == operation.operation_id and event.category == "turn_state"
+                if failure:
+                    assert event.payload == {"delivery_phase": "terminal", "delivery_outcome": "failed",
+                                             "delivery_error_code": "NATIVE_OPERATION_FAILED"}
+                else:
+                    assert event.payload["output_text"] == "Answer [REDACTED] [REDACTED]\n" + long_output
+                assert await runtime.submit(TurnOperation("next", "session", "A new task."), context)
+                await post(result)
+                assert factory.native.terminal_submission.active_turn()
+            finally:
+                await runtime.shutdown(ShutdownPolicy(0, 0))
+                journal.close()
 
     asyncio.run(run())
 
