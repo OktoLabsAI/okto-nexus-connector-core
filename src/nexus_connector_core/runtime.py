@@ -1404,9 +1404,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         return result
 
     @asynccontextmanager
-    async def open_live_pi_renderer(self, scope: Mapping, target: NativeSessionTarget, *,
-                                    connection_id: str, connection_generation: int, columns: int, rows: int):
-        """Attach a trusted host to one existing renderer, with no input authority."""
+    async def _live_pi_renderer(self, scope: Mapping, target: NativeSessionTarget, *,
+                                connection_id: str, connection_generation: int):
         stage = "pi_renderer"
         if not isinstance(target, NativeSessionTarget) or target.adapter_id != "pi_rpc":
             raise CoreError("VALIDATION_ERROR", stage)
@@ -1423,24 +1422,42 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                     or self._sessions.get(before.key) is not binding or renderer() != endpoint):
                 raise CoreError("STALE_GENERATION", stage)
 
-        async with endpoint.attach(columns, rows) as reader:
-            await verify()
+        yield endpoint, verify
 
-            async def output():
-                while True:
-                    try:
-                        async with asyncio.timeout(1):
-                            data = await reader.read_output()
-                    except TimeoutError:
+    @asynccontextmanager
+    async def open_live_pi_renderer(self, scope: Mapping, target: NativeSessionTarget, *,
+                                    connection_id: str, connection_generation: int, columns: int, rows: int):
+        """Attach a trusted host to one existing renderer."""
+        async with self._live_pi_renderer(scope, target, connection_id=connection_id,
+                                          connection_generation=connection_generation) as (endpoint, verify):
+            async with endpoint.attach(columns, rows) as reader:
+                await verify()
+
+                async def output():
+                    while True:
+                        try:
+                            async with asyncio.timeout(1):
+                                data = await reader.read_output()
+                        except TimeoutError:
+                            await verify()
+                            continue
+                        if data is None:
+                            return
                         await verify()
-                        continue
-                    if data is None:
-                        return
-                    await verify()
-                    yield data
+                        yield data
 
-            async with aclosing(output()) as frames:
-                yield frames
+                async with aclosing(output()) as frames:
+                    yield frames
+
+    @asynccontextmanager
+    async def open_live_pi_editor(self, scope: Mapping, target: NativeSessionTarget, *,
+                                  connection_id: str, connection_generation: int, columns: int, rows: int):
+        """Attach the vendor draft editor without authority to submit a turn."""
+        async with self._live_pi_renderer(scope, target, connection_id=connection_id,
+                                          connection_generation=connection_generation) as (endpoint, verify):
+            async with endpoint.attach(columns, rows, edit=True, verify=verify) as editor:
+                await verify()
+                yield editor
 
     async def _read_live_native_presentation(self, scope, target, channel, reader_name, *args):
         stage = "native_presentation_read"
