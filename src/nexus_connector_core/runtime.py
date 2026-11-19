@@ -11,7 +11,7 @@ import hashlib
 import json
 import math
 from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
-from contextlib import aclosing, asynccontextmanager
+from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Protocol
@@ -1023,7 +1023,12 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
         # close/shutdown acquire both before releasing ownership.
         command_lock = (binding.normal_lock if verb == "send_turn"
                         else binding.control_lock)
-        async with command_lock:
+        async with AsyncExitStack() as locks:
+            if verb == "steer" and getattr(binding.native, "terminal_submission", None) is not None:
+                # Keep ordinary submissions out of the interruption-to-replacement
+                # interval. Close acquires both locks in the same order.
+                await locks.enter_async_context(binding.normal_lock)
+            await locks.enter_async_context(command_lock)
             # Revalidation after the (unlocked) journal read: pure memory
             # checks; the global lock stays free for containment.
             old = await self._existing(semantic, context)
@@ -1099,6 +1104,13 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                     elif verb == "interrupt":
                         await binding.native.interrupt(semantic.operation_id, payload.get("expected_claude_operation_id"),
                             verify=verify, fence=lambda: binding.effect_fence.check("interrupt"))
+                    elif verb == "steer":
+                        target = payload.get("expected_claude_operation_id")
+                        await binding.native.steer(semantic.operation_id, target, payload["text"], verify=verify,
+                            fence=lambda: binding.effect_fence.check("steer"),
+                            settle=lambda: self._wait_for_claude_interrupt(
+                                binding, context, semantic.session_id, target),
+                            record=lambda stage: self._record_claude_steer(binding, semantic, context, target, stage))
                     else:
                         raise EffectNotSent("This action is not available through the Claude terminal.")
                 else:
@@ -3226,6 +3238,29 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 self._event_changed.notify_all()
         except Exception:
             binding.faulted = True
+
+    async def _wait_for_claude_interrupt(self, binding, context, session_id, target):
+        key = OperationKey(context.server_id, context.executor_id, target)
+        async with asyncio.timeout(10), self._event_changed:
+            while True:
+                receipt = await self._journal.get_receipt(key)
+                if (receipt is not None and receipt.session_id == session_id and receipt.possible_effect
+                        and receipt.stage in {"SUCCEEDED", "FAILED", "CANCELLED"}
+                        and not binding.native.terminal_submission.owns_turn(target)):
+                    return receipt.stage
+                await self._event_changed.wait()
+
+    async def _record_claude_steer(self, binding, operation, context, target, stage):
+        session = SessionKey(context.server_id, context.executor_id, operation.session_id)
+        await self._journal.record_event(RuntimeEvent(
+            session.server_id, session.executor_id, session.session_id, binding.epoch, 0,
+            "tool_activity", "nexus_claude_steer",
+            {"turn_operation_id": target, "interrupt_request_id": operation.operation_id, "stage": stage},
+            operation_id=operation.operation_id))
+        async with self._event_changed:
+            self._event_changed.notify_all()
+        if self._event_sink is not None:
+            self._schedule_sink(session, binding)
 
     async def _verify_terminal_submission(self, binding, operation, context):
         """A native hook can proceed only while the exact durable send is in flight."""

@@ -18,7 +18,7 @@ from nexus_connector_core import (
 )
 from nexus_connector_core.discovery import fingerprint
 from nexus_connector_core.journal import SQLiteJournal
-from nexus_connector_core.models import EffectNotSent, InstallationCandidate
+from nexus_connector_core.models import EffectNotSent, EffectRejected, InstallationCandidate
 from nexus_connector_core.native.claude_terminal_prompt import ClaudeTerminalPromptGate
 from nexus_connector_core.native.claude_terminal_submission import ClaudeTerminalSession, ClaudeTerminalSubmission
 from nexus_connector_core.native.redaction import NativeSecretRedactor
@@ -33,6 +33,68 @@ class _Clock:
 
     def wall_time(self):
         return time.time()
+
+
+@pytest.mark.parametrize(("case", "expected", "error_type"), [
+    ("invalid", [], EffectNotSent),
+    ("stale", ["escape"], EffectNotSent),
+    ("escape_unknown", ["escape", "interrupt_write_unknown", "replacement_not_sent"], CoreError),
+    ("timeout", ["escape", "interrupt_submitted", "replacement_not_sent"], CoreError),
+    ("durable_fact_failed", ["escape", "interrupt_submitted", "interrupt_confirmed"], CoreError),
+    ("original_completed", ["escape", "interrupt_submitted", "replacement_not_sent"], EffectRejected),
+    ("authority_lost",
+     ["escape", "interrupt_submitted", "interrupt_confirmed", "replacement_not_sent"], EffectRejected),
+    ("replacement_unknown",
+     ["escape", "interrupt_submitted", "interrupt_confirmed", "paste", "replacement_write_unknown"], CoreError),
+    ("accepted",
+     ["escape", "interrupt_submitted", "interrupt_confirmed", "paste", "replacement_submitted"], None),
+])
+def test_reviewed_terminal_steer_requires_durable_cancellation(case, expected, error_type):
+    observations = []
+
+    async def verify():
+        return case != "authority_lost" or "interrupt_confirmed" not in observations
+
+    async def interrupt(operation_id, target, *, verify, fence):
+        assert (operation_id, target) == ("steer", "original")
+        assert await verify()
+        observations.append("escape")
+        if case == "stale":
+            raise EffectNotSent("The target changed.", code="STALE_TURN")
+        if case == "escape_unknown":
+            raise CoreError("OUTCOME_UNKNOWN", "interrupt", possible_effect=True)
+
+    async def settle():
+        if case == "timeout":
+            raise TimeoutError
+        return "SUCCEEDED" if case == "original_completed" else "CANCELLED"
+
+    async def record(stage):
+        observations.append(stage)
+        if case == "durable_fact_failed" and stage == "interrupt_confirmed":
+            raise OSError("The durable append failed.")
+
+    async def submit(operation_id, text, verify):
+        assert (operation_id, text) == ("steer", "Reviewed replacement")
+        if not await verify():
+            raise EffectNotSent("The replacement lost authority.", code="BINDING_NOT_AUTHORIZED")
+        observations.append("paste")
+        if case == "replacement_unknown":
+            raise CoreError("OUTCOME_UNKNOWN", "submission", possible_effect=True)
+
+    native = SimpleNamespace(interrupt=interrupt, terminal_submission=SimpleNamespace(submit=submit))
+    replacement = "/exit" if case == "invalid" else "Reviewed replacement"
+    operation = ClaudeTerminalSession.steer(native, "steer", "original", replacement, verify=verify,
+                                            fence=lambda: None, settle=settle, record=record)
+    if error_type is None:
+        asyncio.run(operation)
+    else:
+        with pytest.raises(error_type) as rejected:
+            asyncio.run(operation)
+        if error_type is CoreError:
+            assert rejected.value.code == "OUTCOME_UNKNOWN"
+            assert rejected.value.possible_effect and not rejected.value.retry_safe
+    assert observations == expected
 
 
 class _HookPeer:

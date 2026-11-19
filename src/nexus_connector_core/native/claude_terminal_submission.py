@@ -4,7 +4,7 @@ import asyncio
 import threading
 import time
 
-from ..models import CoreError, EffectNotSent, RuntimeEvent
+from ..models import CoreError, EffectNotSent, EffectRejected, RuntimeEvent
 from .claude_terminal_prompt import CLAUDE_PROMPT_HOOK_TIMEOUT
 from .redaction import NativeSecretRedactor
 
@@ -212,6 +212,61 @@ class ClaudeTerminalSession:
                 raise CoreError("OUTCOME_UNKNOWN", "claude_terminal_interrupt",
                                 possible_effect=True, operation_id=operation_id) from error
             raise
+
+    async def steer(self, operation_id, target, text, *, verify, fence, settle, record):
+        """Interrupt once and replace only after the original cancel is durable."""
+        if _terminal_prompt(text) is None:
+            raise EffectNotSent("Only bounded plain text can replace a turn.", code="VALIDATION_ERROR")
+
+        def unknown():
+            return CoreError("OUTCOME_UNKNOWN", "claude_terminal_steer",
+                             possible_effect=True, operation_id=operation_id)
+
+        try:
+            await self.interrupt(operation_id, target, verify=verify, fence=fence)
+        except CoreError as error:
+            if not error.possible_effect:
+                raise
+            try:
+                await record("interrupt_write_unknown")
+                await record("replacement_not_sent")
+            except Exception as recording_error:
+                raise unknown() from recording_error
+            raise unknown() from error
+
+        try:
+            await record("interrupt_submitted")
+            try:
+                stage = await settle()
+            except TimeoutError as error:
+                await record("replacement_not_sent")
+                raise unknown() from error
+            if stage != "CANCELLED":
+                await record("replacement_not_sent")
+                raise EffectRejected("The original turn finished before cancellation.", failure_code="STALE_TURN")
+            await record("interrupt_confirmed")
+            try:
+                await self.terminal_submission.submit(operation_id, text, verify)
+            except EffectNotSent as error:
+                await record("replacement_not_sent")
+                raise EffectRejected("The replacement was refused before writing.", failure_code=error.code) from error
+            except CoreError as error:
+                if error.retry_safe and not error.possible_effect:
+                    await record("replacement_not_sent")
+                    raise EffectRejected("The replacement lost authority before writing.",
+                                         failure_code=error.code) from error
+                await record("replacement_write_unknown")
+                raise unknown() from error
+            except Exception as error:
+                await record("replacement_write_unknown")
+                raise unknown() from error
+            await record("replacement_submitted")
+        except EffectRejected:
+            raise
+        except Exception as error:
+            if isinstance(error, CoreError) and error.code == "OUTCOME_UNKNOWN" and error.possible_effect:
+                raise
+            raise unknown() from error
 
     async def observe(self):
         if await asyncio.to_thread(self._terminal.poll) is not None:
