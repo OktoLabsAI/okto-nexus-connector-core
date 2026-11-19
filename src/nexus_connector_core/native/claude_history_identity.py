@@ -1,6 +1,10 @@
 """Bound identity facts for an observed Claude stream-json conversation."""
 
+from dataclasses import replace
 from uuid import UUID
+
+from ..event_artifacts import MAX_PAYLOAD_BYTES
+from ..protocol import canonical_json
 
 
 CLAUDE_HISTORY_IDENTITY = 'claude_history_identity'
@@ -21,3 +25,14 @@ def confirmed_claude_history(value) -> str | None:
             or type(value['schema_version']) is not int or value['schema_version'] != 1):
         return None
     return claude_session_uuid(value['session_id'])
+
+
+def project_claude_history(event, fact, clean):
+    """Attach corroboration only if it fits on the otherwise valid event."""
+    session_uuid = confirmed_claude_history(fact)
+    if session_uuid is None or clean(fact) != fact or event.payload.get('session_id') != session_uuid:
+        return event
+    payload = {**event.payload, CLAUDE_HISTORY_IDENTITY: fact}
+    if len(canonical_json(payload)) > MAX_PAYLOAD_BYTES:
+        return event
+    return replace(event, payload=payload)

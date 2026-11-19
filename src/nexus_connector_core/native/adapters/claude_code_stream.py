@@ -133,6 +133,7 @@ from ..framing import FrameLimitExceeded, MAX_FRAME_CHARS, protocol_lines, stder
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
 from ..delta_batches import coalesce_claude_delta
+from ..claude_history_identity import CLAUDE_HISTORY_IDENTITY, claude_session_uuid
 
 from ..legacy_environment import child_environment
 from .compatibility import claude_version_observation
@@ -994,8 +995,6 @@ class ClaudeCodeStreamConnector:
 
     def _observe_history_uuid(self, obj):
         """Retain contradictions for the lifetime of this native owner."""
-        from ..claude_history_identity import claude_session_uuid
-
         if 'session_id' not in obj:
             return None
         observed = claude_session_uuid(obj['session_id'])
@@ -1070,8 +1069,6 @@ class ClaudeCodeStreamConnector:
             return "success" if event.native_event == "result:success" and not event.payload.get("is_error") else "failed"
 
     def _handle_result(self, obj: dict[str, Any]) -> None:
-        from ..claude_history_identity import CLAUDE_HISTORY_IDENTITY
-
         subtype = obj.get("subtype")
         is_success = subtype == "success"
         history_identity = None

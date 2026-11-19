@@ -2,7 +2,7 @@
 import json, os, sys, time
 
 scenario = os.environ.get("FAKE_CC_SCENARIO", "basic")
-session_id = "fake-native-session-id"
+session_id = os.environ.get("FAKE_CC_SESSION_ID", "fake-native-session-id")
 generating = False
 
 def emit(obj):

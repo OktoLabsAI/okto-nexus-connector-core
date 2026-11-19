@@ -6,15 +6,17 @@ from types import SimpleNamespace
 
 from nexus_connector_core.native.adapter_types import RuntimeCommandNotSent
 from nexus_connector_core.native.adapters.claude_code_stream import ClaudeCodeStreamConnector
+from nexus_connector_core.native.claude_history_identity import CLAUDE_HISTORY_IDENTITY, confirmed_claude_history
 from nexus_connector_core.native.runtime_bridge import CopiedAdapterSession
 
 
 def test_replacement_result_keeps_its_operation_after_interrupted_original(tmp_path):
     async def run():
         script = Path(__file__).parent / 'fixtures/claude_stream_peer.py'
+        conversation_uuid = 'cb41c871-35f9-480f-90c2-f2aa920caf65'
         connector = ClaudeCodeStreamConnector(binary=sys.executable,
             argv=['-u', '-c', script.read_text(encoding='utf-8')], cwd=str(tmp_path),
-            env={'FAKE_CC_SCENARIO': 'slow_start'})
+            env={'FAKE_CC_SCENARIO': 'slow_start', 'FAKE_CC_SESSION_ID': conversation_uuid})
         native = await asyncio.to_thread(connector.start, owning_agent_id='subject')
         bridge = CopiedAdapterSession(connector, native, session_id='session', stream_epoch='epoch',
             context=SimpleNamespace(server_id='server', executor_id='executor'))
@@ -43,6 +45,9 @@ def test_replacement_result_keeps_its_operation_after_interrupted_original(tmp_p
             terminals = [e for e in observed if e.payload.get('delivery_phase') == 'terminal']
             assert [e.operation_id for e in terminals] == ['original', 'replacement']
             assert [e.payload['delivery_outcome'] for e in terminals] == ['interrupted', 'success']
+            assert [confirmed_claude_history(e.payload.get(CLAUDE_HISTORY_IDENTITY)) for e in terminals] == [
+                None, conversation_uuid,
+            ]
             text = {}
             for event in observed:
                 if event.category == 'text_snapshot':

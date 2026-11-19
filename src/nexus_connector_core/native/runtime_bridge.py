@@ -22,6 +22,7 @@ from ..pi_extension_resource import PiNativeActionLaunch, qualify_pi_hosted_rpc
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, ReplacementNotSentAfterInterrupt, RuntimeCommandNotSent)
 from .adapters.compatibility import qualified_build, can_probe_protocol
+from .claude_history_identity import CLAUDE_HISTORY_IDENTITY, project_claude_history
 from .pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_operation
 
 #: Reserved capacity for containment/observation calls (C2/R02): physical
@@ -651,9 +652,13 @@ class CopiedAdapterSession:
                 operational = strict_json(encoded.decode("utf-8"))
                 action = native_request_action(operational)
                 native = replace(native, operation_id=self._active_operation_id)
+            history = (native.payload.get(CLAUDE_HISTORY_IDENTITY)
+                       if native.harness_kind == "claude_code" and native.native_event == "result:success"
+                       and phase == "terminal" and native.delivery_outcome == "success"
+                       and native.operation_id is not None else None)
             native = replace(native, native_approval=None,
                 payload={key: value for key, value in native.payload.items()
-                         if key not in ("native_approval", "delivery_error_code")})
+                         if key not in ("native_approval", "delivery_error_code", CLAUDE_HISTORY_IDENTITY)})
             event = translate_native_event(self._redactor.scrub(native),
                                          server_id=self._context.server_id,
                                          executor_id=self._context.executor_id,
@@ -662,6 +667,8 @@ class CopiedAdapterSession:
                                          native_session_id=self._session.session_id)
             if terminal_code is not None:
                 event = replace(event, payload={**event.payload, "delivery_error_code": terminal_code})
+            if history is not None:
+                event = project_claude_history(event, history, self._redactor.clean)
             if operational is not None:
                 # This is the authenticated execution plane. Hosts must keep
                 # the immutable proposal separate from UI/history display.

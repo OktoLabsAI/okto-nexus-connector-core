@@ -1,7 +1,10 @@
 import pytest
 
+from nexus_connector_core import RuntimeEvent
 from nexus_connector_core.native.adapters.claude_code_stream import ClaudeCodeStreamConnector
+from nexus_connector_core.native import claude_history_identity
 from nexus_connector_core.native.claude_history_identity import CLAUDE_HISTORY_IDENTITY, confirmed_claude_history
+from nexus_connector_core.protocol import canonical_json
 
 
 NATIVE = 'cb41c871-35f9-480f-90c2-f2aa920caf65'
@@ -43,3 +46,19 @@ def test_conflicting_session_cannot_be_later_reverified_or_detached_from_a_resul
         adapter._handle_system({'type': 'system', 'subtype': 'init', 'session_id': started})
         adapter._handle_result({'type': 'result', 'subtype': 'success', 'session_id': finished})
     assert [confirmed_claude_history(value.get(CLAUDE_HISTORY_IDENTITY)) for value in results] == [NATIVE, None, None]
+
+
+def test_optional_identity_never_overflows_or_reintroduces_redacted_data(monkeypatch):
+    payload = {'session_id': NATIVE, 'delivery_outcome': 'success', 'delivery_phase': 'terminal'}
+    terminal = RuntimeEvent('server', 'executor', 'session', 'epoch', 1, 'turn_state',
+                            'result:success', payload, 'operation')
+    fact = {'schema_version': 1, 'session_id': NATIVE}
+    limit = len(canonical_json({**payload, CLAUDE_HISTORY_IDENTITY: fact}))
+    unchanged = lambda value: value
+
+    monkeypatch.setattr(claude_history_identity, 'MAX_PAYLOAD_BYTES', limit - 1)
+    assert claude_history_identity.project_claude_history(terminal, fact, unchanged) is terminal
+    monkeypatch.setattr(claude_history_identity, 'MAX_PAYLOAD_BYTES', limit)
+    projected = claude_history_identity.project_claude_history(terminal, fact, unchanged)
+    assert projected.payload[CLAUDE_HISTORY_IDENTITY] == fact
+    assert claude_history_identity.project_claude_history(terminal, fact, lambda _: {}) is terminal
