@@ -14,6 +14,7 @@ from typing import Any, Iterable
 
 from ..models import CoreError
 from .adapter_types import HarnessEvent
+from .codex_chat_facts import CODEX_CHAT_DELTA, MAX_CODEX_CHAT_BYTES, is_codex_chat_id
 
 _MASK = "[REDACTED]"
 _TEXT_MASK = "[NATIVE_TEXT_REDACTED]"
@@ -87,6 +88,7 @@ class NativeSecretRedactor:
                        if variants else None)
         self._holdback = max(8, max(map(len, variants), default=1) - 1)
         self._pending: dict[tuple[str, str | None, str | None], str] = {}
+        self._codex_chat_pending: dict[tuple[str, str, str, str], str] = {}
 
     def clean(self, value: Any) -> Any:
         if isinstance(value, dict):
@@ -142,6 +144,49 @@ class NativeSecretRedactor:
                 break
         return self.clean(text[:cut]), text[cut:]
 
+    def _codex_chat_delta(self, event: HarnessEvent, *, final: bool) -> dict | None:
+        # The generic execution output also carries other native output types.
+        # Its pending bytes cannot establish which chat item owns the text.
+        pending = self._codex_chat_pending
+        if final:
+            for key in tuple(pending):
+                if key[0] == event.session_id:
+                    del pending[key]
+            return None
+        thread, turn = event.thread_id, event.turn_id
+        payload = event.payload
+        if (thread != payload.get("threadId") or turn != payload.get("turnId")
+                or not all(is_codex_chat_id(value) and self.clean(value) == value for value in (thread, turn))):
+            return None
+        if event.native_event == "item/completed":
+            item = payload.get("item")
+            if isinstance(item, dict) and item.get("type") == "agentMessage" and is_codex_chat_id(item.get("id")):
+                # The completed item supplies a full, separately redacted snapshot.
+                pending.pop((event.session_id, thread, turn, item["id"]), None)
+            return None
+        if (event.native_event != "item/agentMessage/delta" or event.kind != "output_delta"
+                or event.output_snapshot or event.operation_id is None):
+            return None
+        item, delta = payload.get("itemId"), payload.get("delta")
+        if not is_codex_chat_id(item) or self.clean(item) != item or not isinstance(delta, str):
+            return None
+        key = (event.session_id, thread, turn, item)
+        safe, tail = self._split(pending.pop(key, "") + delta, final=False)
+        self._retain_tail(pending, key, tail)
+        if not safe:
+            return None
+        encoded = safe.encode("utf-8")
+        return {"revision": 1, "thread_id": thread, "item_id": item,
+                "text": encoded[:MAX_CODEX_CHAT_BYTES].decode("utf-8", errors="ignore"),
+                "truncated": len(encoded) > MAX_CODEX_CHAT_BYTES}
+
+    @staticmethod
+    def _retain_tail(pending: dict, key: tuple, tail: str) -> None:
+        if tail:
+            if len(pending) >= _MAX_STREAMS or len(tail) > _MAX_PENDING:
+                raise CoreError("CAPACITY_EXCEEDED", "native_redaction")
+            pending[key] = tail
+
     def scrub(self, event: HarnessEvent) -> HarnessEvent:
         if len(json.dumps(event.payload, ensure_ascii=False, default=str).encode("utf-8")) > _MAX_NATIVE_EVENT_BYTES:
             raise CoreError("EVENT_TOO_LARGE", "native_redaction")
@@ -151,6 +196,11 @@ class NativeSecretRedactor:
         final = event.delivery_phase == "terminal" or event.kind == "turn_completed"
         if event.kind == "output_delta":
             payload = self._withhold_raw_text(payload)
+        payload.pop(CODEX_CHAT_DELTA, None)
+        if event.harness_kind == "codex":
+            chat = self._codex_chat_delta(event, final=final)
+            if chat is not None:
+                payload[CODEX_CHAT_DELTA] = chat
         if output is not None or final:
             pending = self._pending.pop(key, "")
             prior = "" if event.output_snapshot else pending
@@ -159,11 +209,6 @@ class NativeSecretRedactor:
                          if other[0] == event.session_id]
                 prior = "".join(tails)
             output, tail = self._split(prior + (output or ""), final=final)
-            if tail:
-                if key not in self._pending and len(self._pending) >= _MAX_STREAMS:
-                    raise CoreError("CAPACITY_EXCEEDED", "native_redaction")
-                if len(tail) > _MAX_PENDING:
-                    raise CoreError("CAPACITY_EXCEEDED", "native_redaction")
-                self._pending[key] = tail
+            self._retain_tail(self._pending, key, tail)
         return replace(event, payload=payload, output_text=output,
                        native_approval=self.clean(event.native_approval))

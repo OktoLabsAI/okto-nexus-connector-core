@@ -1,10 +1,12 @@
 import asyncio
+from dataclasses import replace
 
 import pytest
 
 from nexus_connector_core import CoreError, EventCursor
 from nexus_connector_core.journal import SQLiteJournal
 from nexus_connector_core.native.adapter_types import HarnessEvent
+from nexus_connector_core.native.codex_chat_facts import CODEX_CHAT_DELTA, valid_codex_chat_delta
 from nexus_connector_core.native.event_ingest import NativeEventIngestor
 from nexus_connector_core.native.redaction import NativeSecretRedactor, credential_values
 
@@ -58,6 +60,46 @@ def test_unknown_native_output_fields_are_withheld():
         "parts": ["[NATIVE_TEXT_REDACTED]", "[NATIVE_TEXT_REDACTED]"],
         "count": 2,
     }}
+
+
+def _codex_delta(item, delta):
+    return HarnessEvent("session", "codex", "output_delta", "item/agentMessage/delta",
+        "2026-11-19T00:00:00Z", {"itemId": item, "delta": delta, "threadId": "thread", "turnId": "turn"},
+        thread_id="thread", turn_id="turn", operation_id="operation")
+
+
+def test_codex_fragments_keep_exact_item_and_mask_a_secret_across_interleaved_events():
+    redactor = NativeSecretRedactor(["fixture-child-secret"])
+    first = redactor.scrub(_codex_delta("item-one", "Public beginning. " * 4 + "fixture-child-"))
+    reasoning = redactor.scrub(replace(_codex_delta("reason", "Private reasoning. " * 3),
+        native_event="item/reasoning/textDelta"))
+    another = redactor.scrub(_codex_delta("item-two", "Separate public answer. " * 4))
+    last = redactor.scrub(_codex_delta("item-one", "secret after boundary. " * 4))
+    facts = [event.payload[CODEX_CHAT_DELTA] for event in (first, another, last)]
+    assert all(valid_codex_chat_delta(fact) for fact in facts)
+    assert CODEX_CHAT_DELTA not in reasoning.payload
+    assert [fact["item_id"] for fact in facts] == ["item-one", "item-two", "item-one"]
+    combined = facts[0]["text"] + facts[2]["text"]
+    assert combined.startswith("Public beginning.")
+    assert "[REDACTED] after boundary." in combined
+    assert "fixture-child-" not in combined and "Private reasoning" not in combined
+    assert "Separate public answer" not in combined
+    assert facts[1]["text"].startswith("Separate public answer.")
+    assert first.payload["delta"] == first.payload["itemId"] == "[NATIVE_TEXT_REDACTED]"
+
+
+def test_codex_fragments_require_native_identity_and_bound_utf8():
+    redactor = NativeSecretRedactor(["child-credential"])
+    malformed = _codex_delta("child-credential", "Public text. " * 8)
+    assert CODEX_CHAT_DELTA not in redactor.scrub(malformed).payload
+    spoofed = _codex_delta("item-other", "Public text. " * 8)
+    spoofed.payload[CODEX_CHAT_DELTA] = {"revision": 1, "thread_id": "thread", "item_id": "wrong",
+                                        "text": "wrong", "truncated": False}
+    assert CODEX_CHAT_DELTA not in redactor.scrub(replace(spoofed, thread_id="stranger")).payload
+    assert CODEX_CHAT_DELTA not in redactor.scrub(replace(spoofed, operation_id=None)).payload
+    bounded = redactor.scrub(_codex_delta("item-large", "🍕" * 2100)).payload[CODEX_CHAT_DELTA]
+    assert valid_codex_chat_delta(bounded) and bounded["truncated"]
+    assert len(bounded["text"].encode()) == 4096
 
 
 def test_redaction_scope_bounded_and_environment_selective():
