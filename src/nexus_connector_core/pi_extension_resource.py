@@ -9,6 +9,12 @@ from .discovery import fingerprint
 from .models import CoreError, InstallationCandidate
 
 _HOSTED_NODE_BUILD = "sha256:3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5"
+_HOSTED_PI_BUILD = "sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b"
+
+
+def reviewed_pi_renderer_build(version, platform, architecture, build_identity) -> bool:
+    """Check the exact installation closure covered by the hosted renderer proof."""
+    return (version, platform, architecture, build_identity) == ("0.87.1", "win32", "x86_64", _HOSTED_PI_BUILD)
 
 
 def pi_hosted_rpc_path() -> Path:

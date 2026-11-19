@@ -1447,6 +1447,13 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
 
         yield endpoint, verify
 
+    async def prove_live_pi_renderer(self, scope: Mapping, target: NativeSessionTarget, *,
+                                     connection_id: str, connection_generation: int) -> None:
+        """Prove the already-owned renderer without occupying its viewer slot."""
+        async with self._live_pi_renderer(scope, target, connection_id=connection_id,
+                                          connection_generation=connection_generation) as (_, verify):
+            await verify()
+
     @asynccontextmanager
     async def open_live_pi_renderer(self, scope: Mapping, target: NativeSessionTarget, *,
                                     connection_id: str, connection_generation: int, columns: int, rows: int):
