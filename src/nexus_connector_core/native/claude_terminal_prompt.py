@@ -12,13 +12,14 @@ import secrets
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 
 from ..identifiers import validate_external_id
 from ..models import CoreError, EffectNotSent
 from ..protocol import canonical_json, strict_json
+from .claude_chat_facts import ClaudeChatTurn
 from .claude_history_identity import claude_session_uuid
 from .claude_read_approval import review_claude_read
 from .native_inputs import CLAUDE_INPUT, response_for, validate_request
@@ -65,6 +66,7 @@ class ClaudeTerminalResult:
     output_text: str | None
     failure_code: str | None
     interrupted: bool = False
+    chat_turn: ClaudeChatTurn | None = field(default=None, repr=False, compare=False)
 
 
 @dataclass(frozen=True, slots=True)
@@ -517,6 +519,9 @@ class ClaudeTerminalPromptGate:
             idle_since = observe_finished(candidate.output_sha256)
             if type(idle_since) is int and candidate.earliest_idle_ms < idle_since <= time.time_ns() // 1_000_000:
                 result = candidate.result
+                if candidate.output_sha256 is not None:
+                    result = replace(result, chat_turn=ClaudeChatTurn(
+                        pending.prompt_id, pending.permit.digest, candidate.output_sha256, pending.admitted_ms))
         if result is None and observe_interrupted is not None:
             ended = observe_interrupted(pending.prompt_id, pending.permit.digest, pending.admitted_ms)
             if type(ended) is int and pending.admitted_ms < ended <= time.time_ns() // 1_000_000:

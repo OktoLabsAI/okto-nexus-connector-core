@@ -5,6 +5,7 @@ import threading
 import time
 
 from ..models import CoreError, EffectNotSent, EffectRejected, RuntimeEvent
+from .claude_chat_facts import CLAUDE_CHAT_EVENT, MAX_CLAUDE_CHAT_BYTES, valid_claude_chat_fact
 from .claude_terminal_prompt import CLAUDE_PROMPT_HOOK_TIMEOUT
 from .redaction import NativeSecretRedactor
 
@@ -109,7 +110,7 @@ class ClaudeTerminalSession:
     """Core's native session port for an exact, already verified Claude terminal."""
 
     def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished,
-                 observe_interrupted=None, observe_generation=None, require_current=None,
+                 observe_interrupted=None, observe_generation=None, observe_chat=None, require_current=None,
                  allow_interrupt=None, resources=()):
         if not isinstance(redactor, NativeSecretRedactor):
             raise TypeError("An owned Claude terminal requires native secret redaction.")
@@ -125,6 +126,7 @@ class ClaudeTerminalSession:
         self._observe_finished = observe_finished
         self._observe_interrupted = observe_interrupted
         self._observe_generation = observe_generation
+        self._observe_chat = observe_chat
         self._require_current = require_current
         self._allow_interrupt = allow_interrupt
         self._interrupt_target = None
@@ -160,6 +162,19 @@ class ClaudeTerminalSession:
             result = await asyncio.to_thread(self._gate.take_finished_result, self._observe_finished,
                                              self._observe_interrupted)
             if result is not None:
+                if result.chat_turn is not None and self._observe_chat is not None:
+                    entries = await asyncio.to_thread(self._observe_chat, result.chat_turn)
+                    for raw in entries:
+                        fact = self._redactor.clean(raw)
+                        text = fact.get("text")
+                        if not isinstance(text, str):
+                            continue
+                        if len(text.encode("utf-8")) > MAX_CLAUDE_CHAT_BYTES:
+                            fact["text"] = None
+                        if valid_claude_chat_fact(fact):
+                            yield RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
+                                               self._stream_epoch, 0, "tool_activity", CLAUDE_CHAT_EVENT,
+                                               fact, operation_id=result.operation_id)
                 yield self._completion_event(result)
                 continue
             question = self._gate.take_decision()

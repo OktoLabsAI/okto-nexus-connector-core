@@ -8,9 +8,11 @@ from uuid import uuid4
 import pytest
 
 from nexus_connector_core import ProcessBirthEvidence
+from nexus_connector_core.native.claude_chat_facts import ClaudeChatTurn, valid_claude_chat_fact
 from nexus_connector_core.native.claude_saved_history import ClaudeSavedHistory, claude_history_path
 from nexus_connector_core.native.claude_terminal_owner import (
     has_default_claude_interrupt_key,
+    observe_claude_chat_turn,
     observe_claude_finished_turn,
     observe_claude_interrupted_turn,
     observe_claude_terminal_idle_since,
@@ -103,6 +105,48 @@ def test_finished_success_needs_an_exact_latest_flushed_turn(registry):
     append(assistant | {"isApiErrorMessage": True})
     assert read() is None
     assert read(None) == 1771556000000
+
+
+def test_claude_chat_uses_exact_prompt_and_native_entry_ids_and_excludes_other_payloads(registry):
+    history = registry.history
+    transcript = claude_history_path(history.state_home, history.session_uuid, history.workspace)
+    transcript.parent.mkdir(parents=True)
+    prefix = b'{"type":"saved-fixture"}\n'
+    transcript.write_bytes(prefix)
+    history = replace(history, file_identity=file_identity(transcript.stat()), byte_size=len(prefix))
+    scope = {"cwd": history.workspace, "sessionId": history.session_uuid, "isSidechain": False,
+             "version": "2.1.328", "entrypoint": "cli", "timestamp": "2026-02-20T03:33:19.500Z"}
+    prompt_id = str(uuid4())
+    prompt = scope | {"type": "user", "uuid": str(uuid4()), "promptId": prompt_id, "permissionMode": "plan",
+                      "promptSource": "typed", "timestamp": "2026-02-20T03:33:18.999Z",
+                      "message": {"role": "user", "content": "Same prompt"}}
+    tool = scope | {"type": "user", "uuid": str(uuid4()), "promptId": prompt_id, "message": {
+        "role": "user", "content": [{"type": "tool_result", "content": "Tool result should stay private"}]}}
+    final = scope | {"type": "assistant", "uuid": str(uuid4()), "message": {"role": "assistant",
+        "content": [{"type": "thinking", "thinking": "Hidden thought"}, {"type": "text", "text": "Final answer"}]}}
+    nested = final | {"isSidechain": True, "uuid": str(uuid4())}
+    turn_end = scope | {"type": "system", "isMeta": False, "subtype": "turn_duration",
+                        "timestamp": "2026-02-20T03:33:20.001Z"}
+    target = ClaudeChatTurn(prompt_id, hashlib.sha256(b"Same prompt").digest(),
+                            hashlib.sha256(b"Final answer").hexdigest(), 1771555999000)
+
+    def publish(*records):
+        transcript.write_bytes(prefix + b"".join(json.dumps(record).encode() + b"\n" for record in records))
+
+    def read(review=target):
+        return observe_claude_chat_turn(registry.terminal, history, registry.birth, review)
+
+    publish(prompt, tool, nested, final, turn_end)
+    chat = read()
+    assert all(valid_claude_chat_fact(row) for row in chat)
+    assert [(row["entry_id"], row["role"], row["text"]) for row in chat] == [
+        (prompt["uuid"], "user", "Same prompt"), (final["uuid"], "assistant", "Final answer")]
+    assert not read(replace(target, prompt_id=str(uuid4())))
+    assert not read(replace(target, output_sha256="0" * 64))
+    publish(prompt, tool, final | {"uuid": prompt["uuid"]}, turn_end)
+    assert not read()
+    publish(prompt, tool, turn_end, final, turn_end)
+    assert not read()
 
 
 def test_interrupt_requires_the_latest_native_abort_and_its_exact_admitted_prompt(registry):

@@ -15,6 +15,7 @@ from .saved_history_file import file_identity, file_version, plain_path
 _REVIEWED_VERSION = "2.1.328"
 _MAX_REGISTRY_BYTES = 64 * 1024
 _MAX_TRANSCRIPT_TAIL = 8 * 1024 * 1024
+_MAX_CHAT_ENTRIES = 16
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _MILLISECOND = timedelta(milliseconds=1)
 
@@ -182,6 +183,88 @@ def _transcript_tail(history):
         return None
     lines = tail.split(b"\n")
     return reversed(lines[1 if start > history.byte_size else 0:-1])
+
+
+def observe_claude_chat_turn(terminal, history, birth, target):
+    """Read only the completed main-thread dialogue for the accepted prompt."""
+    idle_since = observe_claude_terminal_idle_since(terminal, history, birth)
+    if idle_since is None or idle_since <= target.admitted_ms:
+        return ()
+    try:
+        lines = _transcript_tail(history)
+        entries = _read_chat_turn(lines, history, target) if lines is not None else ()
+    except (OSError, ValueError, TypeError, RecursionError, OverflowError):
+        return ()
+    if observe_claude_terminal_idle_since(terminal, history, birth) != idle_since:
+        return ()
+    return tuple(dict(revision=1, native_session_id=history.session_uuid, entry_id=entry_id, role=role, text=text)
+                 for entry_id, role, text in entries)
+
+
+def _read_chat_turn(lines, history, target):
+    completed_at = None
+    entries = []
+    entry_ids = set()
+    for line in lines:
+        record = strict_json(line.decode("utf-8"))
+        if type(record) is not dict:
+            return ()
+        kind = record.get("type")
+        if record.get("isSidechain") is not False or kind not in ("system", "assistant", "user"):
+            continue
+        if kind == "system" and record.get("subtype") != "turn_duration":
+            continue
+        cwd, timestamp = record.get("cwd"), record.get("timestamp")
+        if (record.get("sessionId") != history.session_uuid or type(cwd) is not str
+                or Path(cwd) != Path(history.workspace) or record.get("version") != _REVIEWED_VERSION
+                or record.get("entrypoint") != "cli" or type(timestamp) is not str or not timestamp.endswith("Z")):
+            return ()
+        observed_ms = (datetime.fromisoformat(timestamp) - _EPOCH) // _MILLISECOND
+        if completed_at is None:
+            if kind != "system" or record.get("isMeta") is not False or observed_ms <= target.admitted_ms:
+                return ()
+            completed_at = observed_ms
+            continue
+        if kind == "system" or observed_ms > completed_at:
+            return ()
+        message = record.get("message")
+        if type(message) is not dict or message.get("role") != kind:
+            return ()
+        content = message.get("content")
+        if kind == "assistant":
+            if (observed_ms < target.admitted_ms or record.get("isMeta") is True
+                    or record.get("isApiErrorMessage") is True or record.get("isAbortedMidStream") is True
+                    or type(content) is not list or any(type(part) is not dict for part in content)):
+                return ()
+            texts = [part.get("text") for part in content if part.get("type") == "text"]
+            if any(type(text) is not str for text in texts):
+                return ()
+            text = "\n".join(texts)
+            if not entries and hashlib.sha256(text.encode("utf-8")).hexdigest() != target.output_sha256:
+                return ()
+            if not text:
+                continue
+        else:
+            # Claude timestamps the typed prompt before the authorization hook
+            # returns. Its prompt ID and body digest provide the exact join.
+            if record.get("promptId") != target.prompt_id:
+                return ()
+            if type(content) is list and content and all(
+                    type(part) is dict and part.get("type") == "tool_result" for part in content):
+                continue
+            if (not entries or record.get("promptSource") != "typed" or record.get("isMeta") is True
+                    or record.get("permissionMode") != "plan" or type(content) is not str
+                    or hashlib.sha256(content.encode("utf-8")).digest() != target.prompt_digest):
+                return ()
+            text = content
+        entry_id = claude_session_uuid(record.get("uuid"))
+        if entry_id is None or entry_id in entry_ids or len(entries) >= _MAX_CHAT_ENTRIES:
+            return ()
+        entry_ids.add(entry_id)
+        entries.append((entry_id, kind, text))
+        if kind == "user":
+            return tuple(reversed(entries))
+    return ()
 
 
 def _read_interrupted_turn(lines, history, prompt_id, prompt_digest):
