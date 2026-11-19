@@ -22,6 +22,7 @@ from ..pi_extension_resource import PiNativeActionLaunch, qualify_pi_hosted_rpc
 from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
                             NativeAdapterError, RuntimeCommandNotSent)
 from .adapters.compatibility import qualified_build, can_probe_protocol
+from .pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_operation
 
 #: Reserved capacity for containment/observation calls (C2/R02): physical
 #: force, lifecycle observation and connector close never queue behind the
@@ -177,6 +178,8 @@ class CopiedAdapterSession:
         self._replacement_operations: deque[str] = deque()
         self._active_turn_id: str | None = None
         self._pi_started_for_active = False
+        self._active_pi_run_id: str | None = None
+        self._pi_steer_controls: dict[str, str] = {}
         # Claude Code can emit frames on its own (background subagent output,
         # scheduled wakeup, task notification). Count the frames dropped here.
         self._unsolicited_frames = 0
@@ -269,6 +272,8 @@ class CopiedAdapterSession:
             self._active_operation_id = operation_id
             self._active_turn_id = None
             self._pi_started_for_active = False
+            self._active_pi_run_id = None
+            self._pi_steer_controls.clear()
             self._last_outcome = None
             self._last_failure_code = None
         replacement = verb == "steer" and self._session.harness_kind == "claude_code"
@@ -278,6 +283,16 @@ class CopiedAdapterSession:
             # arrives before the blocking replacement write returns.
             self._replacement_operations.append(operation_id)
         native_payload = dict(payload)
+        if verb == "steer" and self._session.harness_kind == "pi":
+            run = self._active_pi_run_id
+            expected = native_payload.get("expected_pi_run_id")
+            if expected is not None and expected != run:
+                raise RuntimeCommandNotSent("The reviewed Pi run changed.", code="STALE_TURN")
+            if run is not None and valid_pi_steer_operation(operation_id):
+                if len(self._pi_steer_controls) >= 50:
+                    raise RuntimeCommandNotSent("The Pi control window is full.", code="CAPACITY_EXCEEDED")
+                native_payload["expected_pi_run_id"] = run
+                self._pi_steer_controls[operation_id] = "requested"
         if verb in {"send_turn", "steer"} and self._session.harness_kind == "claude_code":
             native_payload = {"content": native_payload["text"]}
         command = HarnessCommand(self._session.session_id, verb, native_payload,
@@ -530,6 +545,22 @@ class CopiedAdapterSession:
             if (native.harness_kind == "pi" and native.native_event == "agent_start" and
                     phase == "started" and self._active_operation_id is not None):
                 self._pi_started_for_active = True
+                run = native.payload.get("hosted_pi_run_id")
+                self._active_pi_run_id = run if valid_pi_run_id(run) else None
+            if native.harness_kind == "pi" and native.native_event == PI_STEER_EVENT:
+                operation = native.operation_id
+                stage = native.payload.get("stage")
+                prior = self._pi_steer_controls.get(operation)
+                if (self._active_pi_run_id is None or self._active_operation_id is None
+                        or native.payload.get("run_id") != self._active_pi_run_id):
+                    continue
+                if stage == "queued" and prior == "requested":
+                    self._pi_steer_controls[operation] = "queued"
+                elif stage in {"consumed", "discarded"} and prior == "queued":
+                    del self._pi_steer_controls[operation]
+                else:
+                    continue
+                native = replace(native, payload=native.payload | {"turn_operation_id": self._active_operation_id})
             if native.kind == "turn_started":
                 if native.harness_kind == "codex" and (
                         self._active_operation_id is None or
@@ -588,6 +619,8 @@ class CopiedAdapterSession:
                     if native.harness_kind == "claude_code" and self._replacement_operations else None)
                 self._active_turn_id = None
                 self._pi_started_for_active = False
+                self._active_pi_run_id = None
+                self._pi_steer_controls.clear()
                 self._last_outcome = None
                 self._last_failure_code = None
             elif outcome in {"success", "failed", "interrupted"}:

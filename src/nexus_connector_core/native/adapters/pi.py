@@ -128,7 +128,8 @@ from ..adapter_types import (
     HarnessSession,
     new_harness_session_id,
 )
-from ..adapter_types import ErrorCode, NativeAdapterError, RuntimeCommandRejected
+from ..adapter_types import ErrorCode, NativeAdapterError, RuntimeCommandNotSent, RuntimeCommandRejected
+from ..pi_steer_facts import PI_STEER_EVENT, valid_pi_run_id, valid_pi_steer_fact, valid_pi_steer_operation
 
 __all__ = ["PiRpcConnector"]
 
@@ -1123,7 +1124,17 @@ class PiRpcConnector:
     def _steer(self, command: HarnessCommand) -> None:
         text = self._extract_text(command)
         self._guard_not_awaiting_settle(command.verb)
-        response = self._transport.request(_VERB_STEER, {"message": text}, timeout_s=self._command_timeout_s)  # type: ignore[union-attr]
+        transport = self._transport
+        run_id = command.payload.get("expected_pi_run_id")
+        if run_id is not None:
+            if (not transport._hosted_rpc_ready or not valid_pi_run_id(run_id)
+                    or not valid_pi_steer_operation(command.operation_id)):
+                raise RuntimeCommandNotSent("The hosted Pi steering target is unavailable.", code="STALE_TURN")
+            message = {"kind": "nexus_hosted_steer", "text": text, "run_id": run_id,
+                       "operation_id": command.operation_id}
+        else:
+            message = text
+        response = transport.request(_VERB_STEER, {"message": message}, timeout_s=self._command_timeout_s)
         self._surface_if_rejected(response)
         self._require_accepted(response, _VERB_STEER)
 
@@ -1204,7 +1215,16 @@ class PiRpcConnector:
 
     def _on_push_event(self, msg: dict[str, Any]) -> None:
         native_type = msg.get("type")
+        hosted = self._transport is not None and self._transport._hosted_rpc_ready
+        if native_type == PI_STEER_EVENT:
+            if hosted and valid_pi_steer_fact(msg):
+                self._push_event("tool_activity", native_type,
+                                 {"run_id": msg["run_id"], "stage": msg["stage"]},
+                                 operation_id=msg["operation_id"])
+            return
         if native_type == "agent_start":
+            if not hosted or not valid_pi_run_id(msg.get("hosted_pi_run_id")):
+                msg = {key: value for key, value in msg.items() if key != "hosted_pi_run_id"}
             self._input_requests.start_turn()
         elif native_type == _TYPE_AGENT_SETTLED:
             self._input_requests.end_turn()
@@ -1318,7 +1338,7 @@ class PiRpcConnector:
         """
         self._closed_event.set()
 
-    def _push_event(self, kind: str, native_type: str, payload: dict[str, Any]) -> None:
+    def _push_event(self, kind: str, native_type: str, payload: dict[str, Any], *, operation_id=None) -> None:
         session_id = self._session_id
         if session_id is None:
             return  # defensive: cannot happen on the real start()/close() paths
@@ -1329,6 +1349,7 @@ class PiRpcConnector:
             native_event=native_type,
             occurred_at=utc_now_iso(),
             payload=payload,
+            operation_id=operation_id,
         )
         # Append and nonblocking fanout share one ordering lock. Overflow
         # stops the owned process; every affected reader observes an explicit gap.

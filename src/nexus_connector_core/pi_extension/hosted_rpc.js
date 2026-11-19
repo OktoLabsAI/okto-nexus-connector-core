@@ -93,7 +93,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   // Confirm one frame on the original pipe before starting the RPC reader.
   const writeProtocol = process.stdout.write.bind(process.stdout);
   void runHostedPiRpc(cli, args, async (owner, InteractiveMode) => {
-    fenceHostedRpcSteer(owner);
+    fenceHostedRpcSteer(owner, writeProtocol);
     const port = await startHostedRenderer(InteractiveMode, owner, rendererKey);
     const notice = { type: "nexus_pi_owned_rpc", revision: 1, session_id: owner.session.sessionId, renderer_port: port };
     await new Promise((resolve, reject) => {

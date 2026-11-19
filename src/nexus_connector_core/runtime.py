@@ -767,8 +767,15 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
 
     async def control(self, operation: ControlOperation,
                       context: ExecutionContext) -> OperationReceipt:
+        from .native.pi_steer_facts import valid_pi_run_id, valid_pi_steer_operation
+
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "control")
+        run_id = operation.expected_pi_run_id
+        if run_id is not None and (
+                operation.verb != "steer" or operation.expected_turn_id is not None
+                or not valid_pi_run_id(run_id) or not valid_pi_steer_operation(operation.operation_id)):
+            raise CoreError("VALIDATION_ERROR", "control")
         if operation.verb == "interrupt" and operation.text is None:
             if operation.reason is not None and (
                     not isinstance(operation.reason, str) or
@@ -789,10 +796,12 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("CAPABILITY_UNSUPPORTED", "control")
         if len(operation.text.encode("utf-8")) > 1024 * 1024:
             raise CoreError("VALIDATION_ERROR", "control")
+        payload = {"text": operation.text}
+        if run_id is not None:
+            payload["expected_pi_run_id"] = run_id
         semantic = Operation(operation.operation_id, operation.session_id,
-                             "turn.steer", {"text": operation.text},
-                             operation.expected_turn_id)
-        return await self._send(semantic, context, "steer", {"text": operation.text})
+                             "turn.steer", payload, operation.expected_turn_id)
+        return await self._send(semantic, context, "steer", payload)
 
     async def decide_native_approval(
             self, operation: NativeApprovalOperation,
@@ -1018,6 +1027,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             if verb in {"steer", "interrupt"}:
                 validate_control_target(binding.adapter_id, semantic.action,
                                         semantic.expected_turn_id)
+            if "expected_pi_run_id" in payload and binding.adapter_id != "pi_rpc":
+                raise CoreError("CAPABILITY_UNSUPPORTED", "control_target")
             if semantic.action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
 

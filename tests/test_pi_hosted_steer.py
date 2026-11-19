@@ -19,6 +19,8 @@ import assert from "node:assert/strict";
 import { fenceHostedRpcSteer } from MODULE;
 
 const queued = [];
+const events = [];
+const facts = [];
 function deferred() {
   let resolve;
   const promise = new Promise(done => { resolve = done; });
@@ -28,31 +30,57 @@ const first = deferred();
 const successor = deferred();
 const input = deferred();
 const session = {
-  agent: {},
+  agent: {
+    steeringQueue: { messages: [] },
+    steer(message) { this.steeringQueue.messages.push(message); },
+  },
+  _steeringMessages: [],
   isStreaming: false,
+  _emit(event) { events.push(event); },
   async _runAgentPrompt(completion) {
     this.isStreaming = true;
     this.agent.signal = new AbortController().signal;
-    try { await completion; } finally { this.isStreaming = false; this.agent.signal = undefined; }
+    this._emit({ type: "agent_start" });
+    try { await completion; } finally {
+      this.isStreaming = false;
+      this.agent.signal = undefined;
+      this._emit({ type: "agent_settled" });
+    }
   },
   async steer(text, images) {
     if (text === "delayed") await input.promise;
     await this._queueSteer(text, images);
   },
-  async _queueSteer(text, images) { queued.push({ text, images }); },
+  async _queueSteer(text, images) {
+    queued.push({ text, images });
+    this._steeringMessages.push(text);
+    this.agent.steer({ role: "user", content: [{ type: "text", text }] });
+  },
 };
 const rpc = { source: "rpc" };
 const owner = { session };
-fenceHostedRpcSteer(owner);
+fenceHostedRpcSteer(owner, (line) => facts.push(JSON.parse(line)));
 await assert.rejects(session.steer("idle", undefined, rpc), /selected by the steering command has ended/);
 const run = session._runAgentPrompt(first.promise);
+const runId = events.at(-1).hosted_pi_run_id;
+const command = (op, text, target = runId) => ({ kind: "nexus_hosted_steer", operation_id: op, run_id: target, text });
 await session.steer("during the first run", ["fixture-image"], rpc);
+await session.steer(command("steer-1", "same text"), undefined, rpc);
+await session.steer("same text", undefined, rpc);
+const [, owned, equal] = session.agent.steeringQueue.messages;
+session._emit({ type: "message_start", message: equal });
+assert.equal(facts.length, 1);
+session.agent.steeringQueue.messages.splice(1, 2);
+session._emit({ type: "message_start", message: owned });
+await session.steer(command("steer-2", "same text"), undefined, rpc);
 const delayed = assert.rejects(session.steer("delayed", undefined, rpc), /selected by the steering command has ended/);
 first.resolve();
 await run;
 const following = session._runAgentPrompt(successor.promise);
 input.resolve();
 await delayed;
+await assert.rejects(session.steer(command("wrong-run", "stale"), undefined, rpc), /target is stale/);
+assert.deepEqual(session.agent.steeringQueue.messages.map(message => message.content[0].text), ["during the first run"]);
 await session.steer("during the successor", undefined, rpc);
 owner.session = {};
 await assert.rejects(session.steer("other session", undefined, rpc), /selected by the steering command has ended/);
@@ -60,7 +88,16 @@ successor.resolve();
 await following;
 assert.deepEqual(queued, [
   { text: "during the first run", images: ["fixture-image"] },
+  { text: "same text", images: undefined },
+  { text: "same text", images: undefined },
+  { text: "same text", images: undefined },
   { text: "during the successor", images: undefined },
+]);
+assert.deepEqual(facts, [
+  { type: "nexus_pi_steer", run_id: runId, operation_id: "steer-1", stage: "queued" },
+  { type: "nexus_pi_steer", run_id: runId, operation_id: "steer-1", stage: "consumed" },
+  { type: "nexus_pi_steer", run_id: runId, operation_id: "steer-2", stage: "queued" },
+  { type: "nexus_pi_steer", run_id: runId, operation_id: "steer-2", stage: "discarded" },
 ]);
 '''.replace("MODULE", json.dumps(module.as_uri()))
     result = subprocess.run([node, "--input-type=module", "-e", script],
