@@ -28,12 +28,13 @@ _ACTIONS = {'runtime.open', 'turn.submit', 'turn.steer', 'turn.interrupt',
 
 
 def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
-                               stream_epoch=None, applied_operation=None, resume_thread_id=None):
+                               stream_epoch=None, applied_operation=None, resume_thread_id=None,
+                               resume_claude_session_id=None):
     """Validate and hash the exact local semantic, including a host's private target."""
     try:
         frame = _checked_source(submit_frame, context, action=submit_frame.get('action'))
         action, payload = frame['action'], frame['payload']
-        if resume_thread_id is not None and action != 'runtime.open':
+        if action != 'runtime.open' and (resume_thread_id is not None or resume_claude_session_id is not None):
             raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
         if applied_operation is not None and action not in ('approval.decide', 'input.provide', 'turn.steer', 'turn.interrupt'):
             raise CoreError('VALIDATION_ERROR', 'r4_receipt_binding')
@@ -48,7 +49,8 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
                     effective_installation_ref(prepared.candidate) != payload['candidate_ref']):
                 raise CoreError('PROFILE_DRIFT', 'r4_receipt_binding')
             semantic = open_operation_semantic(OpenOperation(frame['operation_id'],
-                frame['session_id'], stream_epoch, prepared, resume_thread_id=resume_thread_id))
+                frame['session_id'], stream_epoch, prepared, resume_thread_id=resume_thread_id,
+                resume_claude_session_id=resume_claude_session_id))
         elif action == 'runtime.close':
             semantic = close_operation_semantic(r4_close_operation(frame))
         elif action in ('approval.decide', 'input.provide'):

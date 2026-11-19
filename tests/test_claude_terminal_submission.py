@@ -4,6 +4,7 @@ import asyncio
 import json
 import time
 from contextlib import asynccontextmanager
+from dataclasses import replace
 from urllib.request import Request, urlopen
 from uuid import uuid4
 
@@ -99,6 +100,74 @@ class _Factory:
 
     async def observe(self):
         return ("STOPPED" if self.stopped else "RUNNING", "IDLE")
+
+
+def test_saved_claude_open_is_bound_to_one_exact_native_context(tmp_path):
+    async def run():
+        saved_id = str(uuid4())
+        selected_ids = []
+
+        native = _Factory(None)
+
+        class LegacyFactory:
+            async def open(self, prepared, session_id, context, *, stream_epoch):
+                return await native.open(prepared, session_id, context, stream_epoch=stream_epoch)
+
+        class ResumingFactory(LegacyFactory):
+            async def open(self, prepared, session_id, context, *, stream_epoch, resume_claude_session_id=None):
+                selected_ids.append(resume_claude_session_id)
+                return await super().open(prepared, session_id, context, stream_epoch=stream_epoch)
+
+        binary = tmp_path / "claude-fixture"
+        binary.write_bytes(b"synthetic selected binary")
+        candidate = InstallationCandidate("claude_stream", str(binary), fingerprint(binary), "explicit", "selected")
+        database = tmp_path / "resume.sqlite"
+        context = ExecutionContext("server", "executor", "binding", "agent", "workspace", 1, 1, 1,
+                                   time.monotonic() + 60, frozenset({"runtime.open", "runtime.close"}))
+
+        def make_runtime(journal, factory):
+            return LocalRuntimeCore(journal, factory, candidates={"claude_stream": candidate},
+                                    workspace_roots={"workspace": str(tmp_path)})
+
+        journal = SQLiteJournal(database)
+        legacy = make_runtime(journal, LegacyFactory())
+        try:
+            prepared = await legacy.prepare(LaunchIntent("agent", "workspace", "claude_stream"), context)
+            opening = OpenOperation("open", "session", "epoch", prepared, resume_claude_session_id=saved_id)
+            with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED") as unsupported:
+                await legacy.open(opening, context)
+            assert unsupported.value.retry_safe and not unsupported.value.possible_effect
+            assert await journal.get_receipt(OperationKey("server", "executor", "open")) is None
+        finally:
+            await legacy.shutdown(ShutdownPolicy(0, 0))
+
+        runtime = make_runtime(journal, ResumingFactory())
+        try:
+            for invalid in (replace(opening, resume_claude_session_id="--last"),
+                            replace(opening, resume_thread_id="another-target")):
+                with pytest.raises(CoreError, match="VALIDATION_ERROR"):
+                    await runtime.open(invalid, context)
+            receipt = await runtime.open(opening, context)
+            assert receipt.stage == "SUBMITTED"
+            assert saved_id not in repr(opening) and saved_id not in repr(receipt)
+            assert selected_ids == [saved_id]
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+
+        journal = SQLiteJournal(database)
+        runtime = make_runtime(journal, ResumingFactory())
+        try:
+            assert await runtime.open(opening, context) == receipt
+            for target in (None, str(uuid4())):
+                with pytest.raises(CoreError, match="OPERATION_CONFLICT"):
+                    await runtime.open(replace(opening, resume_claude_session_id=target), context)
+            assert selected_ids == [saved_id]
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0, 0))
+            journal.close()
+
+    asyncio.run(run())
 
 
 @pytest.mark.parametrize("case", ["accepted", "revoked_at_hook", "lost_after_reply"])

@@ -406,13 +406,14 @@ class Inventory:
 
 @dataclass(frozen=True, slots=True)
 class OpenOperation:
-    """Open a new owner, optionally requiring an exact saved Codex thread."""
+    """Open a new owner, optionally requiring an exact saved native context."""
 
     operation_id: str
     session_id: str
     stream_epoch: str
     prepared: PreparedLaunch
     resume_thread_id: str | None = field(default=None, repr=False)
+    resume_claude_session_id: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

@@ -20,10 +20,11 @@ from test_r4_decision_bridge import decision_frame
 
 
 @pytest.mark.parametrize('action', ['runtime.open', 'turn.submit', 'turn.steer', 'turn.interrupt',
-                                   'runtime.close', 'approval.decide', 'input.provide', 'codex-resume'])
+                                   'runtime.close', 'approval.decide', 'input.provide', 'codex-resume', 'claude-resume'])
 def test_binding_recovery_matches_live_projection_for_all_actions(action):
     resume_thread_id = 'PRIVATE_canonical_codex_thread' if action == 'codex-resume' else None
-    if resume_thread_id is not None:
+    resume_claude_session_id = 'ff0d9a21-98b7-4a80-985a-381b75c842a0' if action == 'claude-resume' else None
+    if action in ('codex-resume', 'claude-resume'):
         action = 'runtime.open'
     frame = decision_frame(action) if action in ('approval.decide', 'input.provide') else _frame()
     frame['action'] = action
@@ -31,7 +32,8 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
                                1, 1, 1, 100, frozenset({action}))
     options = {}
     if action == 'runtime.open':
-        candidate = InstallationCandidate('codex_app_server', 'C:/synthetic.exe', 'fp', 'explicit', 'selected')
+        adapter = 'claude_stream' if resume_claude_session_id is not None else 'codex_app_server'
+        candidate = InstallationCandidate(adapter, 'C:/synthetic.exe', 'fp', 'explicit', 'selected')
         frame['payload'] = dict(adapter_id=candidate.adapter_id,
             candidate_ref=installation_ref(candidate.adapter_id, candidate.executable),
             inventory_revision='sha256:' + 'b' * 64, realization_ref='realization',
@@ -45,6 +47,10 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
             options['resume_thread_id'] = resume_thread_id
             semantic = replace(semantic, payload=dict(semantic.payload,
                 resume_thread_sha256=hashlib.sha256(resume_thread_id.encode('ascii')).hexdigest()))
+        if resume_claude_session_id is not None:
+            options['resume_claude_session_id'] = resume_claude_session_id
+            semantic = replace(semantic, payload=dict(semantic.payload,
+                resume_claude_session_sha256=hashlib.sha256(resume_claude_session_id.encode('ascii')).hexdigest()))
     elif action in ('approval.decide', 'input.provide'):
         operation = r4_native_decision_operation(frame)
         options = dict(applied_operation=operation)
@@ -62,6 +68,8 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
     binding = prepare_r4_receipt_binding(frame, context, **options)
     saved = json.dumps(binding)
     assert 'PRIVATE_' not in saved and 'private operator response' not in saved
+    if resume_claude_session_id is not None:
+        assert resume_claude_session_id not in saved
     assert 'payload' not in saved and 'params' not in saved and 'C:/workspace' not in saved
     receipt = OperationReceipt(frame['operation_id'], intent_hash(semantic, context),
                                'SUBMITTED', True, False, frame['session_id'], native_id='native')
@@ -69,16 +77,20 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
     recovered = project_r4_bound_receipt(json.loads(saved), receipt, key=key, receipt_revision=1)
     if action == 'runtime.open':
         live = project_r4_open_receipt(frame, receipt, context, prepared, stream_epoch='stream',
-            receipt_revision=1, resume_thread_id=resume_thread_id)
+            receipt_revision=1, resume_thread_id=resume_thread_id, resume_claude_session_id=resume_claude_session_id)
+        wrong_targets = ()
         if resume_thread_id is not None:
-            for wrong_thread in (None, 'PRIVATE_other_thread'):
-                wrong_binding = prepare_r4_receipt_binding(frame, context, prepared=prepared,
-                    stream_epoch='stream', resume_thread_id=wrong_thread)
-                with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
-                    project_r4_bound_receipt(wrong_binding, receipt, key=key, receipt_revision=1)
-                with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
-                    project_r4_open_receipt(frame, receipt, context, prepared, stream_epoch='stream',
-                        receipt_revision=1, resume_thread_id=wrong_thread)
+            wrong_targets = ({}, {'resume_thread_id': 'PRIVATE_other_thread'})
+        elif resume_claude_session_id is not None:
+            wrong_targets = ({}, {'resume_claude_session_id': 'e3e9953e-e31b-4ea7-9b7f-530464313e07'})
+        for target in wrong_targets:
+            wrong_binding = prepare_r4_receipt_binding(frame, context, prepared=prepared,
+                stream_epoch='stream', **target)
+            with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
+                project_r4_bound_receipt(wrong_binding, receipt, key=key, receipt_revision=1)
+            with pytest.raises(CoreError, match='OPERATION_CONFLICT'):
+                project_r4_open_receipt(frame, receipt, context, prepared, stream_epoch='stream',
+                    receipt_revision=1, **target)
     elif action in ('approval.decide', 'input.provide'):
         live = project_r4_decision_receipt(frame, receipt, context, operation, receipt_revision=1)
     else:
