@@ -11,6 +11,7 @@ from .lease_denial import LEASE_DENIAL_REVISION, decode_lease_denial
 from .session_release import SESSION_RELEASE_REVISION, decode_session_release
 from .startup_refusal_link import STARTUP_REFUSAL_REVISION, decode_startup_refusal
 from .event_artifacts import EVENT_ARTIFACT_REVISION, decode_event_artifact
+from .presentation_link import PRESENTATION_LINK_REVISION, decode_presentation_frame
 
 
 def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> dict:
@@ -29,6 +30,10 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
         raise CoreError('VALIDATION_ERROR', 'control_decode', retry_safe=True) from error
     if type(header) is not dict:
         raise CoreError('VALIDATION_ERROR', 'control_decode', retry_safe=True)
+    if header.get('contract_revision') == PRESENTATION_LINK_REVISION:
+        if isinstance(capabilities, (str, bytes)) or PRESENTATION_LINK_REVISION not in capabilities:
+            raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+        return decode_presentation_frame(raw)
     if header.get('contract_revision') == EVENT_ARTIFACT_REVISION:
         if isinstance(capabilities, (str, bytes)) or EVENT_ARTIFACT_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
