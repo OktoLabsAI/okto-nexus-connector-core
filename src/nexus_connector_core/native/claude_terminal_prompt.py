@@ -11,25 +11,32 @@ import re
 import secrets
 import threading
 import time
-from dataclasses import dataclass
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from collections.abc import Callable
+from dataclasses import dataclass, field
+from http.server import BaseHTTPRequestHandler, HTTPServer, ThreadingHTTPServer
 from pathlib import Path
 
 from ..identifiers import validate_external_id
-from ..models import CoreError
-from ..protocol import strict_json
+from ..models import CoreError, EffectNotSent
+from ..protocol import canonical_json, strict_json
 from .claude_history_identity import claude_session_uuid
+from .native_inputs import CLAUDE_INPUT, response_for, validate_request
 
 _ENV_KEY = "OKTO_CLAUDE_PROMPT_HOOK_TOKEN"
 _PATH = "/prompt"
 _COMPLETION_PATH = "/completion"
 _START_PATH = "/start"
+_QUESTION_PATH = "/question"
 _START_URL = "OKTO_CLAUDE_TERMINAL_START_URL"
 _MAX_PROMPT_BYTES = 64 * 1024
 _MAX_REQUEST_BYTES = 448 * 1024
 # One MiB of result text can expand to six times that size in JSON.
 _MAX_COMPLETION_REQUEST_BYTES = 7 * 1024 * 1024
 CLAUDE_PROMPT_HOOK_TIMEOUT = 8
+_QUESTION_WAIT = 120
+_QUESTION_METHOD = "control_request:can_use_tool"
+_QUESTION_DENIAL = {"hookSpecificOutput": {"hookEventName": "PreToolUse", "permissionDecision": "deny",
+    "permissionDecisionReason": "The question has no current Nexus answer."}}
 _STAGE = "claude_terminal_prompt"
 _DENIAL = {
     "decision": "block",
@@ -69,6 +76,42 @@ class _CompletionCandidate:
     output_sha256: str | None
 
 
+@dataclass(slots=True)
+class _PendingQuestion:
+    prompt: _AuthorizedPrompt
+    request: dict
+    deadline: float
+    ready: threading.Event = field(default_factory=threading.Event)
+    finished: threading.Event = field(default_factory=threading.Event)
+    published: bool = False
+    reply: dict | None = None
+    check: Callable[[str], None] | None = None
+    refusal: EffectNotSent | None = None
+    written: bool = False
+
+
+class _QuestionHookServer(ThreadingHTTPServer):
+    def __init__(self, address, handler):
+        self._slots = threading.BoundedSemaphore(4)
+        super().__init__(address, handler)
+
+    def process_request(self, request, address):
+        if not self._slots.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, address)
+        except BaseException:
+            self._slots.release()
+            raise
+
+    def process_request_thread(self, request, address):
+        try:
+            super().process_request_thread(request, address)
+        finally:
+            self._slots.release()
+
+
 class _PromptDelivery:
     def __init__(self):
         self._done = threading.Event()
@@ -90,10 +133,12 @@ class ClaudeTerminalPromptGate:
     permit spent. Reconciliation belongs to the host journal.
     """
 
-    def __init__(self, session_uuid, cwd, permission_mode, authorize, *, observe_results=False, startup=None):
+    def __init__(self, session_uuid, cwd, permission_mode, authorize, *, observe_results=False, startup=None,
+                 allow_questions=False):
         if (claude_session_uuid(session_uuid) is None or type(cwd) is not str or not Path(cwd).is_absolute()
                 or type(permission_mode) is not str or not permission_mode or not callable(authorize)
-                or type(observe_results) is not bool):
+                or type(observe_results) is not bool or type(allow_questions) is not bool
+                or (allow_questions and (not observe_results or startup is None))):
             raise ValueError("Invalid Claude prompt gate scope.")
         self._session_uuid = session_uuid
         self._cwd = Path(cwd)
@@ -110,6 +155,9 @@ class ClaudeTerminalPromptGate:
         self._closed = False
         self._server = None
         self._startup = startup
+        self._allow_questions = allow_questions
+        self._question = None
+        self._question_tools = set()
         self.startup_confirmed = threading.Event()
 
     def __enter__(self):
@@ -138,13 +186,16 @@ class ClaudeTerminalPromptGate:
                 except OSError:
                     pass
                 finally:
-                    if delivery is not None:
+                    if isinstance(delivery, _PendingQuestion):
+                        gate._complete_question(delivery, written)
+                    elif delivery is not None:
                         delivery.complete(written and status == 200 and body == {})
 
         with self._lock:
             if self._server is not None or self._closed:
                 raise CoreError("SESSION_CONFLICT", _STAGE)
-            server = HTTPServer(("127.0.0.1", 0), Handler)
+            server_type = _QuestionHookServer if self._allow_questions else HTTPServer
+            server = server_type(("127.0.0.1", 0), Handler)
             self._thread = threading.Thread(target=server.serve_forever, kwargs={"poll_interval": 0.05}, daemon=True)
             try:
                 self._thread.start()
@@ -160,6 +211,8 @@ class ClaudeTerminalPromptGate:
             self._permit = None
             self._pending_result = None
             self._candidate = None
+            if self._question is not None:
+                self._question.ready.set()
             server, self._server = self._server, None
         if server is not None:
             server.shutdown()
@@ -180,6 +233,10 @@ class ClaudeTerminalPromptGate:
         if self._observe_results:
             for name in ("Stop", "StopFailure"):
                 hooks[name] = [{"hooks": [dict(hook, url=root + _COMPLETION_PATH)]}]
+        if self._allow_questions:
+            hooks["PreToolUse"] = [{"matcher": "^AskUserQuestion$", "hooks": [
+                dict(hook, url=root + _QUESTION_PATH, timeout=_QUESTION_WAIT + 5, onFailure="block"),
+            ]}]
         environment = {_ENV_KEY: self._secret}
         if self._startup is not None:
             powershell, _ = self._startup
@@ -226,7 +283,8 @@ class ClaudeTerminalPromptGate:
     def _request(self, handler):
         completion = self._observe_results and handler.path == _COMPLETION_PATH
         startup = self._startup is not None and handler.path == _START_PATH
-        if handler.path != _PATH and not completion and not startup:
+        question = self._allow_questions and handler.path == _QUESTION_PATH
+        if handler.path != _PATH and not completion and not startup and not question:
             return 404, {}, None
         token = handler.headers.get_all("Authorization", [])
         if (len(token) != 1 or not token[0].isascii()
@@ -247,6 +305,8 @@ class ClaudeTerminalPromptGate:
             return 400, {}, None
         if completion:
             return self._receive_completion(payload), {}, None
+        if question:
+            return self._receive_question(payload)
         if startup:
             _, path = self._startup
             if (payload.get("hook_event_name") == "SessionStart" and payload.get("source") == "resume"
@@ -285,6 +345,97 @@ class ClaudeTerminalPromptGate:
                 # Keep correlation even if the response socket fails after a partial write.
                 self._pending_result = _AuthorizedPrompt(prompt_id, permit, time.time_ns() // 1_000_000)
             return 200, {}, permit.delivery
+
+    def _receive_question(self, payload):
+        source = payload.get("tool_input")
+        tool_id = payload.get("tool_use_id")
+        if (payload.get("hook_event_name") != "PreToolUse" or payload.get("tool_name") != "AskUserQuestion"
+                or payload.get("session_id") != self._session_uuid or payload.get("permission_mode") != self._permission_mode
+                or "agent_id" in payload or type(payload.get("cwd")) is not str or Path(payload["cwd"]) != self._cwd
+                or type(payload.get("transcript_path")) is not str
+                or Path(payload["transcript_path"]) != self._startup[1]
+                or not _valid_prompt_id(tool_id) or type(source) is not dict or set(source) != {"questions"}):
+            return 200, _QUESTION_DENIAL, None
+        params = {"tool_name": "AskUserQuestion", "tool_use_id": tool_id, "input": source}
+        try:
+            validate_request(CLAUDE_INPUT, params)
+            request = {"schema_version": 1, "request_id": "claude_question_" + secrets.token_hex(16),
+                "request_hash": hashlib.sha256(canonical_json(params)).hexdigest(),
+                "method": _QUESTION_METHOD, "params": params, "local_generation": 1}
+            if len(canonical_json(request)) > 16384:
+                raise ValueError("Oversized question.")
+        except (ValueError, TypeError, OverflowError, RecursionError):
+            return 200, _QUESTION_DENIAL, None
+        with self._lock:
+            pending = self._pending_result
+            if (self._closed or pending is None or self._candidate is not None
+                    or payload.get("prompt_id") != pending.prompt_id or self._question is not None
+                    or len(self._question_tools) >= 128 or tool_id in self._question_tools):
+                return 200, _QUESTION_DENIAL, None
+            self._question_tools.add(tool_id)
+            question = self._question = _PendingQuestion(pending, request, time.monotonic() + _QUESTION_WAIT)
+        question.ready.wait(max(0, question.deadline - time.monotonic()))
+        try:
+            if question.check is not None:
+                question.check(question.prompt.permit.operation_id)
+            with self._lock:
+                if (self._closed or question.reply is None or question.prompt is not self._pending_result
+                        or self._candidate is not None or time.monotonic() >= question.deadline):
+                    raise EffectNotSent("The Claude question is no longer waiting.", code="NATIVE_REQUEST_NOT_OBSERVED")
+            return 200, question.reply, question
+        except EffectNotSent as error:
+            question.refusal = error
+            return 200, _QUESTION_DENIAL, question
+        except Exception:
+            question.refusal = EffectNotSent("The active Claude question could not be revalidated.",
+                                             code="BINDING_NOT_AUTHORIZED")
+            return 200, _QUESTION_DENIAL, question
+
+    def _complete_question(self, question, written):
+        with self._lock:
+            if self._question is question:
+                self._question = None
+            question.written = written
+            question.finished.set()
+
+    def take_question(self):
+        with self._lock:
+            question = self._question
+            if (question is None or question.published or question.ready.is_set() or self._candidate is not None
+                    or question.prompt is not self._pending_result or time.monotonic() >= question.deadline):
+                return None
+            question.published = True
+            return question.prompt.permit.operation_id, question.request
+
+    def reply_question(self, request, decision, response, check):
+        with self._lock:
+            question = self._question
+            if (self._closed or question is None or not question.published or question.ready.is_set()
+                    or question.prompt is not self._pending_result or time.monotonic() >= question.deadline
+                    or any(request.get(key) != question.request[key] for key in (
+                        "request_id", "request_hash", "method", "params", "local_generation"))):
+                raise EffectNotSent("The Claude question is no longer waiting.", code="NATIVE_REQUEST_NOT_OBSERVED")
+            try:
+                answer = response_for(question.request, response, approved=decision == "accept")
+            except (ValueError, TypeError, OverflowError, RecursionError):
+                raise EffectNotSent("The Claude question needs a matching answer.", code="VALIDATION_ERROR") from None
+            if answer is None:
+                question.reply = _QUESTION_DENIAL
+            else:
+                answers = {prompt: ", ".join(value) if isinstance(value, list) else value
+                           for prompt, value in answer["answers"].items()}
+                question.reply = {"hookSpecificOutput": {"hookEventName": "PreToolUse",
+                    "permissionDecision": "allow",
+                    "updatedInput": {**question.request["params"]["input"], "answers": answers},
+                }}
+            question.check = check
+            question.ready.set()
+        if not question.finished.wait(max(0, question.deadline - time.monotonic()) + 3):
+            raise CoreError("OUTCOME_UNKNOWN", _STAGE, possible_effect=True)
+        if question.refusal is not None:
+            raise question.refusal
+        if not question.written:
+            raise CoreError("OUTCOME_UNKNOWN", _STAGE, possible_effect=True)
 
     def _receive_completion(self, payload):
         with self._lock:
@@ -350,17 +501,22 @@ class ClaudeTerminalPromptGate:
                 return None
             self._candidate = None
             self._pending_result = None
+            self._question_tools.clear()
+            if self._question is not None:
+                self._question.ready.set()
             return result
 
     def read_generation(self, observe, *, skip_operation=None):
         """Bind current native generation to the authenticated pending prompt."""
         with self._lock:
             pending = self._pending_result
-            if pending is None or self._candidate is not None or pending.permit.operation_id == skip_operation:
+            if (pending is None or self._candidate is not None or self._question is not None
+                    or pending.permit.operation_id == skip_operation):
                 return None
         evidence = observe(pending.prompt_id, pending.permit.digest, pending.admitted_ms)
         with self._lock:
-            if evidence is None or pending is not self._pending_result or self._candidate is not None:
+            if (evidence is None or pending is not self._pending_result or self._candidate is not None
+                    or self._question is not None):
                 return None
             return pending.permit.operation_id, evidence
 

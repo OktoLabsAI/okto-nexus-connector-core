@@ -944,10 +944,7 @@ class CopiedAdapterFactory:
         if resume_thread_id is not None and (spec.native_kind != "codex" or registered is not None):
             raise CoreError("CAPABILITY_UNSUPPORTED", "codex_resume", retry_safe=True)
         if resume_claude_session_id is not None:
-            if (spec.native_kind != "claude_code" or registered is not None or self._claude_resume is None
-                    or self._native_approvals_enabled or (self._native_approvals_from_lease
-                        and context.r4_authority is not None
-                        and {"approval.decide", "input.provide"}.issubset(context.allowed_actions))):
+            if spec.native_kind != "claude_code" or registered is not None or self._claude_resume is None:
                 raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
             require_reviewed_claude_terminal(prepared, process_launch, process_birth_recorder, opening_guard)
         # PC11: refuse productive work before secrets/spawn when the host's
@@ -1100,6 +1097,15 @@ class CopiedAdapterFactory:
         environment = await self._environment(prepared)
         env = dict(environment)
         command = prepared.argv
+        question_only = isinstance(environment, ProcessHTTPEnvironment) and environment.claude_question_only is True
+        if question_only:
+            require_reviewed_claude_terminal(prepared, process_launch, process_birth_recorder, opening_guard)
+            if kind != "claude_code" or not native_approvals_enabled:
+                raise CoreError("BINDING_NOT_AUTHORIZED", "native_approval_launch", retry_safe=True)
+            command = (*command, "--tools", "AskUserQuestion")
+        if claude_grant is not None and (claude_grant.question_only != question_only
+                                         or native_approvals_enabled != question_only):
+            raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
         preset_bridge = environment.pi_mcp_bridge if isinstance(environment, ProcessHTTPEnvironment) else None
         preset_config = None
         if preset_bridge is not None:
