@@ -171,7 +171,7 @@ def test_saved_claude_open_is_bound_to_one_exact_native_context(tmp_path):
     asyncio.run(run())
 
 
-@pytest.mark.parametrize("case", ["accepted", "revoked_at_hook", "lost_after_reply"])
+@pytest.mark.parametrize("case", ["accepted", "slow_profile_at_hook", "revoked_at_hook", "lost_after_reply"])
 def test_core_binds_the_terminal_hook_to_the_durable_send(tmp_path, case):
     async def run():
         clock = _Clock()
@@ -182,7 +182,7 @@ def test_core_binds_the_terminal_hook_to_the_durable_send(tmp_path, case):
             runtime, context, native, peer = values
             operation = TurnOperation("terminal-turn-1", "session", "An exact approved message.")
             key = OperationKey("server", "executor", operation.operation_id)
-            if case == "accepted":
+            if case in {"accepted", "slow_profile_at_hook"}:
                 submitted = await runtime.submit(operation, context)
                 assert submitted.stage == "SUBMITTED" and submitted.possible_effect
                 assert await runtime.submit(operation, context) == submitted
@@ -319,7 +319,15 @@ async def _runtime(journal, clock, session_uuid, workspace, root, case):
                 raise OSError("Simulated loss of the local terminal write result.")
 
             peer.write = lose_reply
-        native = _Factory(ClaudeTerminalSubmission(peer, gate))
+        profile_checks = 0
+
+        def require_current():
+            nonlocal profile_checks
+            profile_checks += 1
+            if case == "slow_profile_at_hook" and profile_checks == 2:
+                time.sleep(2.25)
+
+        native = _Factory(ClaudeTerminalSubmission(peer, gate, require_current=require_current))
         binary = root / "claude-fixture"
         binary.write_bytes(b"synthetic selected binary")
         candidate = InstallationCandidate("claude_stream", str(binary), fingerprint(binary), "explicit", "selected")

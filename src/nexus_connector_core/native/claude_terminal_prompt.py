@@ -29,6 +29,7 @@ _MAX_PROMPT_BYTES = 64 * 1024
 _MAX_REQUEST_BYTES = 448 * 1024
 # One MiB of result text can expand to six times that size in JSON.
 _MAX_COMPLETION_REQUEST_BYTES = 7 * 1024 * 1024
+CLAUDE_PROMPT_HOOK_TIMEOUT = 8
 _STAGE = "claude_terminal_prompt"
 _DENIAL = {
     "decision": "block",
@@ -173,7 +174,8 @@ class ClaudeTerminalPromptGate:
         hook = {"type": "http", "timeout": 4, "headers": {"Authorization": "Bearer $" + _ENV_KEY},
                 "allowedEnvVars": [_ENV_KEY]}
         root = f"http://127.0.0.1:{port}"
-        hooks = {"UserPromptSubmit": [{"hooks": [dict(hook, url=root + _PATH, onFailure="block")]}]}
+        hooks = {"UserPromptSubmit": [{"hooks": [dict(
+            hook, url=root + _PATH, timeout=CLAUDE_PROMPT_HOOK_TIMEOUT, onFailure="block")]}]}
         if self._observe_results:
             for name in ("Stop", "StopFailure"):
                 hooks[name] = [{"hooks": [dict(hook, url=root + _COMPLETION_PATH)]}]

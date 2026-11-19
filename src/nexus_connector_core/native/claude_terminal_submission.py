@@ -5,6 +5,7 @@ import threading
 import time
 
 from ..models import CoreError, EffectNotSent, RuntimeEvent
+from .claude_terminal_prompt import CLAUDE_PROMPT_HOOK_TIMEOUT
 from .redaction import NativeSecretRedactor
 
 _WRITE_WINDOW = 10.0
@@ -50,7 +51,10 @@ class ClaudeTerminalSubmission:
                 return False
             future = asyncio.run_coroutine_threadsafe(verify_profile_and_authority(), loop)
             try:
-                allowed = future.result(timeout=min(2.0, max(0, deadline - time.monotonic()))) is True
+                # Leave the native hook time to receive the verdict while
+                # revalidating the host profile and durable write authority.
+                budget = min(CLAUDE_PROMPT_HOOK_TIMEOUT - 1, max(0, deadline - time.monotonic()))
+                allowed = future.result(timeout=budget) is True
                 return allowed and not cancelled.is_set()
             finally:
                 if not future.done():
