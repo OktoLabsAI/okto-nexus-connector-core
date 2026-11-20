@@ -1,10 +1,16 @@
 """Presentation transport has no operation methods and needs mutual negotiation."""
 
 import pytest
+from base64 import b64encode
 from nexus_connector_core.control_codec import decode_control_frame
 from nexus_connector_core.models import CoreError
 from nexus_connector_core.native.pi_renderer import PiEditorUpdate
 from nexus_connector_core.presentation_link import (
+    CLAUDE_PRESENTATION_LINK_REVISION,
+    CLAUDE_PRESENTATION_OPEN,
+    claude_presentation_result,
+    decode_claude_presentation_output,
+    encode_claude_presentation_frame,
     MAX_PI_PRESENTATION_LINK_BYTES,
     PI_PRESENTATION_EDIT,
     PI_PRESENTATION_LINK_REVISION,
@@ -87,3 +93,34 @@ def test_pi_presentation_uses_strict_scoped_pull_and_draft_frames():
     with pytest.raises(CoreError) as oversized:
         decode_pi_presentation_frame(b'x' * (MAX_PI_PRESENTATION_LINK_BYTES + 1))
     assert oversized.value.code == 'CAPACITY_EXCEEDED'
+
+
+def test_claude_preview_accepts_only_negotiated_scoped_read_and_safe_text():
+    identity = {'contract_revision': CLAUDE_PRESENTATION_LINK_REVISION, 'server_id': 's', 'executor_id': 'e',
+                'connection_id': 'c', 'connection_generation': 2, 'request_id': 'r', 'stream_id': 'clv_' + '1' * 32}
+    scope = {key: identity[key] for key in ('server_id', 'executor_id')} | {
+        'binding_id': 'b', 'agent_id': 'a', 'session_id': 'session', 'workspace_id': 'w', 'workspace_binding_id': 'wb',
+        'session_owner_generation': 1, 'binding_revision': 1, 'credential_epoch': 1,
+        'authorization_revision': 2, 'configuration_revision': 3}
+    frame = identity | {'type': CLAUDE_PRESENTATION_OPEN, 'scope': scope,
+        'target': {'adapter_id': 'claude_stream', 'native_session_id': 'owned',
+                   'opening_operation_id': 'opening', 'stream_epoch': 'stream'}}
+    raw = encode_claude_presentation_frame(frame)
+    with pytest.raises(CoreError, match='VERSION_INCOMPATIBLE'):
+        decode_control_frame(raw, capabilities=[PI_PRESENTATION_LINK_REVISION])
+    negotiated = [CLAUDE_PRESENTATION_LINK_REVISION]
+    assert decode_control_frame(raw, capabilities=negotiated) == frame
+    output = 'Resposta em português\n'.encode()
+
+    def reply(data):
+        return claude_presentation_result(frame, {'state': 'output', 'bytes': b64encode(data).decode('ascii')})
+
+    response = decode_control_frame(encode_claude_presentation_frame(reply(output)), capabilities=negotiated)
+    assert response['request_hash'] == presentation_request_hash(frame)
+    assert decode_claude_presentation_output(response['result']) == output
+    for invalid in (frame | {'editor': True}, frame | {'type': PI_PRESENTATION_EDIT},
+                    frame | {'scope': scope | {'executor_id': 'different'}},
+                    frame | {'target': frame['target'] | {'adapter_id': 'pi_rpc'}},
+                    reply(b'\x1b[1m'), reply(b'\xff'), reply(b'')):
+        with pytest.raises(CoreError, match='VALIDATION_ERROR'):
+            decode_control_frame(canonical_json(invalid), capabilities=negotiated)

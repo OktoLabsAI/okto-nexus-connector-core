@@ -24,6 +24,15 @@ PI_PRESENTATION_RESULT = 'presentation.pi.result'
 PI_PRESENTATION_REQUESTS = frozenset({PI_PRESENTATION_PROBE, PI_PRESENTATION_OPEN, PI_PRESENTATION_NEXT,
                                      PI_PRESENTATION_EDIT, PI_PRESENTATION_CLOSE})
 MAX_PI_PRESENTATION_LINK_BYTES = 18 * 1024
+CLAUDE_PRESENTATION_LINK_REVISION = 'nexus-claude-presentation-v1'
+CLAUDE_PRESENTATION_PROBE = 'presentation.claude.probe'
+CLAUDE_PRESENTATION_OPEN = 'presentation.claude.open'
+CLAUDE_PRESENTATION_NEXT = 'presentation.claude.next'
+CLAUDE_PRESENTATION_CLOSE = 'presentation.claude.close'
+CLAUDE_PRESENTATION_RESULT = 'presentation.claude.result'
+CLAUDE_PRESENTATION_REQUESTS = frozenset({
+    CLAUDE_PRESENTATION_PROBE, CLAUDE_PRESENTATION_OPEN, CLAUDE_PRESENTATION_NEXT, CLAUDE_PRESENTATION_CLOSE,
+})
 
 _COMMON = frozenset({'contract_revision', 'type', 'server_id', 'executor_id', 'connection_id',
                      'connection_generation', 'request_id'})
@@ -103,6 +112,13 @@ _PI_FIELDS = {
     PI_PRESENTATION_CLOSE: set(),
     PI_PRESENTATION_RESULT: {'request_hash', 'result'},
 }
+_CLAUDE_FIELDS = {
+    CLAUDE_PRESENTATION_PROBE: {'scope', 'target'},
+    CLAUDE_PRESENTATION_OPEN: {'scope', 'target'},
+    CLAUDE_PRESENTATION_NEXT: set(),
+    CLAUDE_PRESENTATION_CLOSE: set(),
+    CLAUDE_PRESENTATION_RESULT: {'request_hash', 'result'},
+}
 _PI_SIMPLE_STATES = frozenset({'available', 'opened', 'idle', 'edited', 'closed', 'refused'})
 
 
@@ -136,25 +152,38 @@ def _pi_result(document):
 
 
 def decode_pi_presentation_frame(raw: bytes) -> dict:
+    return _decode_stream_frame(raw, claude=False)
+
+
+def decode_claude_presentation_frame(raw: bytes) -> dict:
+    return _decode_stream_frame(raw, claude=True)
+
+
+def _decode_stream_frame(raw, *, claude):
+    stage = 'claude_presentation_decode' if claude else 'pi_presentation_decode'
+    revision = CLAUDE_PRESENTATION_LINK_REVISION if claude else PI_PRESENTATION_LINK_REVISION
+    stream_pattern = r'clv_[0-9a-f]{32}' if claude else r'piv_[0-9a-f]{32}'
+    fields = _CLAUDE_FIELDS if claude else _PI_FIELDS
     if type(raw) is not bytes or len(raw) > MAX_PI_PRESENTATION_LINK_BYTES:
-        raise CoreError('CAPACITY_EXCEEDED', 'pi_presentation_decode')
+        raise CoreError('CAPACITY_EXCEEDED', stage)
     try:
         value = strict_json(raw.decode('utf-8'))
-        if (type(value) is not dict or value.get('contract_revision') != PI_PRESENTATION_LINK_REVISION
+        if (type(value) is not dict or value.get('contract_revision') != revision
                 or not all(_identifier(value.get(key)) for key in ('server_id', 'executor_id', 'connection_id', 'request_id'))
                 or type(value.get('connection_generation')) is not int
                 or not 1 <= value['connection_generation'] < 2**53
-                or type(value.get('stream_id')) is not str or not re.fullmatch(r'piv_[0-9a-f]{32}', value['stream_id'])):
-            raise ValueError('Invalid Pi presentation identity')
+                or type(value.get('stream_id')) is not str or not re.fullmatch(stream_pattern, value['stream_id'])):
+            raise ValueError('Invalid presentation stream identity')
         frame_type = value.get('type')
-        if type(frame_type) is not str or frame_type not in _PI_FIELDS or value.keys() != _PI_COMMON | _PI_FIELDS[frame_type]:
-            raise ValueError('Invalid Pi presentation frame')
-        if frame_type in (PI_PRESENTATION_PROBE, PI_PRESENTATION_OPEN):
+        if type(frame_type) is not str or frame_type not in fields or value.keys() != _PI_COMMON | fields[frame_type]:
+            raise ValueError('Invalid presentation stream frame')
+        if 'scope' in fields[frame_type]:
             scope, target = native_action_scope(value['scope']), value['target']
+            adapter = 'claude_stream' if claude else 'pi_rpc'
             if (any(scope[key] != value[key] for key in ('server_id', 'executor_id'))
-                    or type(target) is not dict or target.keys() != _TARGET or target['adapter_id'] != 'pi_rpc'
+                    or type(target) is not dict or target.keys() != _TARGET or target['adapter_id'] != adapter
                     or not all(_identifier(item) for item in target.values())):
-                raise ValueError('Invalid Pi presentation target')
+                raise ValueError('Invalid presentation stream target')
         if frame_type == PI_PRESENTATION_OPEN and (
                 type(value['columns']) is not int or not 24 <= value['columns'] <= 300
                 or type(value['rows']) is not int or not 8 <= value['rows'] <= 120
@@ -166,12 +195,12 @@ def decode_pi_presentation_frame(raw: bytes) -> dict:
                     or type(value['sequence']) is not int or not 1 <= value['sequence'] < 2**31
                     or (not _valid_text(value['text'], _MAX_INSERT_BYTES) if key == 'insert' else value['text'] is not None)):
                 raise ValueError('Invalid Pi presentation key')
-        if frame_type == PI_PRESENTATION_RESULT:
+        if frame_type in (PI_PRESENTATION_RESULT, CLAUDE_PRESENTATION_RESULT):
             if type(value['request_hash']) is not str or not re.fullmatch(r'sha256:[0-9a-f]{64}', value['request_hash']):
                 raise ValueError('Invalid Pi presentation request hash')
-            _pi_result(value['result'])
+            (_claude_result if claude else _pi_result)(value['result'])
     except (UnicodeError, ValueError, TypeError, RecursionError) as error:
-        raise CoreError('VALIDATION_ERROR', 'pi_presentation_decode', retry_safe=True) from error
+        raise CoreError('VALIDATION_ERROR', stage, retry_safe=True) from error
     return value
 
 
@@ -184,6 +213,37 @@ def encode_pi_presentation_frame(value: dict) -> bytes:
 def pi_presentation_result(request: dict, result: dict) -> dict:
     frame = {key: request[key] for key in _PI_COMMON}
     return dict(frame, type=PI_PRESENTATION_RESULT, request_hash=presentation_request_hash(request), result=result)
+
+
+def encode_claude_presentation_frame(value: dict) -> bytes:
+    raw = canonical_json(value)
+    decode_claude_presentation_frame(raw)
+    return raw
+
+
+def claude_presentation_result(request: dict, result: dict) -> dict:
+    frame = {key: request[key] for key in _PI_COMMON}
+    return dict(frame, type=CLAUDE_PRESENTATION_RESULT, request_hash=presentation_request_hash(request), result=result)
+
+
+def _claude_result(document):
+    if type(document) is not dict or type(document.get('state')) is not str:
+        raise ValueError('Invalid Claude presentation result')
+    if document['state'] in ('available', 'opened', 'idle', 'closed', 'refused') and document.keys() == {'state'}:
+        return None
+    if document['state'] != 'output' or document.keys() != {'state', 'bytes'}:
+        raise ValueError('Invalid Claude presentation result')
+    data = _pi_bytes(document['bytes'])
+    if any(char not in '\r\n\t' and (char < ' ' or '\x7f' <= char <= '\x9f') for char in data.decode('utf-8')):
+        raise ValueError('Invalid Claude terminal text')
+    return data
+
+
+def decode_claude_presentation_output(result: dict) -> bytes:
+    output = _claude_result(result)
+    if output is None:
+        raise ValueError('Claude presentation output was expected')
+    return output
 
 
 def encode_pi_presentation_output(value: bytes | PiEditorUpdate) -> dict:

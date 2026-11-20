@@ -14,6 +14,7 @@ from .event_artifacts import EVENT_ARTIFACT_REVISION, decode_event_artifact
 from .targeted_control_link import TARGETED_CONTROL_CODECS
 from .turn_operation import PI_LITERAL_INPUT_REVISION
 from .presentation_link import (
+    CLAUDE_PRESENTATION_LINK_REVISION, decode_claude_presentation_frame,
     PI_PRESENTATION_LINK_REVISION, PRESENTATION_LINK_REVISION, decode_pi_presentation_frame, decode_presentation_frame,
 )
 
@@ -43,6 +44,10 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
         if isinstance(capabilities, (str, bytes)) or PI_PRESENTATION_LINK_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
         return decode_pi_presentation_frame(raw)
+    if header.get('contract_revision') == CLAUDE_PRESENTATION_LINK_REVISION:
+        if isinstance(capabilities, (str, bytes)) or CLAUDE_PRESENTATION_LINK_REVISION not in capabilities:
+            raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+        return decode_claude_presentation_frame(raw)
     if header.get('contract_revision') == PRESENTATION_LINK_REVISION:
         if isinstance(capabilities, (str, bytes)) or PRESENTATION_LINK_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
