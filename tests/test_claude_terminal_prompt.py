@@ -75,19 +75,22 @@ def test_unavailable_issuer_does_not_leave_a_replayable_prompt(tmp_path):
             gate.arm("server-turn-uncertain", body["prompt"])
 
 
-def test_prompt_arming_waits_for_the_exact_resumed_transcript(tmp_path):
+@pytest.mark.parametrize("source", ["resume", "startup"])
+def test_prompt_arming_waits_for_the_exact_startup_transcript(tmp_path, source):
     session_uuid = str(uuid4())
     transcript = tmp_path / f"{session_uuid}.jsonl"
     with ClaudeTerminalPromptGate(session_uuid, str(tmp_path), "plan", lambda _: True,
-                                  startup=("powershell.exe", transcript)) as gate:
+                                  startup=("powershell.exe", transcript), startup_source=source) as gate:
         settings, env = gate.launch_settings()
+        assert settings["hooks"]["SessionStart"][0]["matcher"] == source
         hook, = settings["hooks"]["UserPromptSubmit"][0]["hooks"]
         token = env[hook["allowedEnvVars"][0]]
         url = env["OKTO_CLAUDE_TERMINAL_START_URL"]
-        body = {"hook_event_name": "SessionStart", "source": "resume", "session_id": session_uuid,
+        body = {"hook_event_name": "SessionStart", "source": source, "session_id": session_uuid,
                 "cwd": str(tmp_path), "transcript_path": str(transcript)}
         assert _call(url, "wrong-token", body)[0] == 403
-        for changed in ({"source": "fork"}, {"session_id": str(uuid4())},
+        for changed in ({"source": "startup" if source == "resume" else "resume"},
+                        {"source": "fork"}, {"session_id": str(uuid4())},
                         {"cwd": str(tmp_path.parent)}, {"transcript_path": str(tmp_path / "other.jsonl")}):
             assert _call(url, token, body | changed)[0] == 409
         assert not gate.startup_confirmed.is_set()

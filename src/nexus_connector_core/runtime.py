@@ -1542,6 +1542,14 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 await verify()
                 yield editor
 
+    def has_owned_claude_terminal(self, key: SessionKey) -> bool:
+        """Observe the actual retained adapter without opening or changing it."""
+        from .native.claude_terminal_submission import ClaudeTerminalSession
+
+        binding = self._sessions.get(key)
+        return (binding is not None and isinstance(binding.native, ClaudeTerminalSession)
+                and not (binding.closing or binding.closed or binding.faulted))
+
     @asynccontextmanager
     async def open_live_claude_terminal(self, scope: Mapping, target: NativeSessionTarget, *,
                                         connection_id: str, connection_generation: int):

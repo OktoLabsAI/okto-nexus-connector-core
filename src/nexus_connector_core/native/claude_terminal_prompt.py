@@ -143,10 +143,12 @@ class ClaudeTerminalPromptGate:
     """
 
     def __init__(self, session_uuid, cwd, permission_mode, authorize, *, observe_results=False, startup=None,
+                 startup_source="resume",
                  allow_questions=False, allow_read=False):
         if (claude_session_uuid(session_uuid) is None or type(cwd) is not str or not Path(cwd).is_absolute()
                 or type(permission_mode) is not str or not permission_mode or not callable(authorize)
                 or type(observe_results) is not bool or type(allow_questions) is not bool or type(allow_read) is not bool
+                or startup_source not in ("resume", "startup")
                 or ((allow_questions or allow_read) and (not observe_results or startup is None))):
             raise ValueError("Invalid Claude prompt gate scope.")
         self._session_uuid = session_uuid
@@ -164,6 +166,7 @@ class ClaudeTerminalPromptGate:
         self._closed = False
         self._server = None
         self._startup = startup
+        self._startup_source = startup_source
         self._allow_questions = allow_questions
         self._allow_read = allow_read
         self._decision = None
@@ -263,7 +266,7 @@ class ClaudeTerminalPromptGate:
                 f"Invoke-WebRequest -UseBasicParsing -Method Post -Uri $env:{_START_URL} "
                 "-Headers $header -ContentType 'application/json' -Body $payload -TimeoutSec 3 | Out-Null"
             )
-            hooks["SessionStart"] = [{"matcher": "resume", "hooks": [{
+            hooks["SessionStart"] = [{"matcher": self._startup_source, "hooks": [{
                 "type": "command", "command": powershell,
                 "args": ["-NoProfile", "-NonInteractive", "-Command", script], "timeout": 5,
             }]}]
@@ -324,7 +327,7 @@ class ClaudeTerminalPromptGate:
             return self._receive_decision(payload, read=read)
         if startup:
             _, path = self._startup
-            if (payload.get("hook_event_name") == "SessionStart" and payload.get("source") == "resume"
+            if (payload.get("hook_event_name") == "SessionStart" and payload.get("source") == self._startup_source
                     and payload.get("session_id") == self._session_uuid
                     and type(payload.get("cwd")) is str and Path(payload["cwd"]) == self._cwd
                     and type(payload.get("transcript_path")) is str and Path(payload["transcript_path"]) == path):

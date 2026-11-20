@@ -111,7 +111,9 @@ from .capacity_codec import (
     CAPACITY_FRAME_TYPES, CAPACITY_REQUEST_TYPES, encode_capacity_frame, decode_capacity_frame,
 )
 from .composition import create_runtime
-from .native.claude_terminal_resume import ClaudeTerminalResumeGrant
+from .native.claude_terminal_resume import (
+    ClaudeTerminalFreshGrant, ClaudeTerminalResumeGrant, reviewed_claude_terminal_candidate,
+)
 from .catalog import (
     RuntimeDescriptor, RuntimeCatalog, get_runtime_catalog, get_runtime_connection_contract,
     CATALOG_FORMAT_VERSION,
@@ -201,6 +203,7 @@ __all__ = [
     "InstallationCandidate", "LaunchIntent", "PreparedLaunch",
     "DiscoveryRequest", "Inventory", "OpenOperation", "TurnOperation",
     "ControlOperation", "NativeApprovalOperation", "CloseOperation", "CodexResumeGrant", "ClaudeTerminalResumeGrant",
+    "ClaudeTerminalFreshGrant", "reviewed_claude_terminal_candidate",
     "ReconcileRequest",
     "ReconcileReport", "ShutdownPolicy", "ShutdownReport",
     "RuntimeCore", "LocalRuntimeCore", "create_runtime", "OwnedSlotLedger",

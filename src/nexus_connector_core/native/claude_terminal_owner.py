@@ -3,8 +3,10 @@
 import hashlib
 import os
 import re
+from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from threading import Lock
 
 from ..models import ProcessBirthEvidence
 from ..protocol import strict_json
@@ -18,6 +20,26 @@ _MAX_TRANSCRIPT_TAIL = 8 * 1024 * 1024
 _MAX_CHAT_ENTRIES = 16
 _EPOCH = datetime(1970, 1, 1, tzinfo=timezone.utc)
 _MILLISECOND = timedelta(milliseconds=1)
+
+
+@dataclass(slots=True)
+class FreshClaudeTerminalIdentity:
+    """The owned launch has no transcript until its first admitted prompt."""
+
+    session_uuid: str
+    state_home: str
+    workspace: str
+    home_identity: tuple[int, int]
+    workspace_identity: tuple[int, int]
+    byte_size: int = field(default=0, init=False)
+    _file_identity: tuple[int, int] | None = field(default=None, init=False)
+    _lock: Lock = field(default_factory=Lock, repr=False, init=False)
+
+    def match_file(self, identity):
+        with self._lock:
+            if self._file_identity is None:
+                self._file_identity = identity
+            return self._file_identity == identity
 
 
 def observe_claude_terminal_owner(
@@ -90,10 +112,14 @@ def observe_claude_terminal_status(terminal, history, birth, status):
 def _registry_version(registry, home, workspace, history):
     for parent in registry.parents:
         plain_path(parent, directory=True)
-    if (file_identity(plain_path(home, directory=True)) != history.home_identity
-            or file_identity(plain_path(workspace, directory=True)) != history.workspace_identity):
+    if not claude_terminal_directories_current(history, home, workspace):
         raise ValueError("The saved Claude state or workspace directory changed.")
     return file_version(plain_path(registry, directory=False))
+
+
+def claude_terminal_directories_current(history, home, workspace):
+    return (file_identity(plain_path(home, directory=True)) == history.home_identity
+            and file_identity(plain_path(workspace, directory=True)) == history.workspace_identity)
 
 
 def has_default_claude_interrupt_key(history):
@@ -167,7 +193,10 @@ def _transcript_tail(history):
     for parent in path.parents:
         plain_path(parent, directory=True)
     original = file_version(plain_path(path, directory=False))
-    if original[:2] != history.file_identity or original[2] <= history.byte_size:
+    fresh = isinstance(history, FreshClaudeTerminalIdentity)
+    if ((not fresh and original[:2] != history.file_identity) or original[2] <= history.byte_size
+            or (fresh and not claude_terminal_directories_current(
+                history, Path(history.state_home), Path(history.workspace)))):
         return None
     start = max(history.byte_size, original[2] - _MAX_TRANSCRIPT_TAIL)
     with path.open("rb") as stream:
@@ -180,6 +209,8 @@ def _transcript_tail(history):
                 or file_version(os.fstat(stream.fileno())) != opened):
             return None
     if file_version(plain_path(path, directory=False)) != original:
+        return None
+    if fresh and not history.match_file(original[:2]):
         return None
     lines = tail.split(b"\n")
     return reversed(lines[1 if start > history.byte_size else 0:-1])

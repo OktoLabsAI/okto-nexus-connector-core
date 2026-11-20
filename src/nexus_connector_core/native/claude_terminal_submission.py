@@ -3,9 +3,15 @@
 import asyncio
 import threading
 import time
+from dataclasses import replace
 
 from ..models import CoreError, EffectNotSent, EffectRejected, RuntimeEvent
-from .claude_chat_facts import CLAUDE_CHAT_EVENT, MAX_CLAUDE_CHAT_BYTES, valid_claude_chat_fact
+from .claude_chat_facts import (
+    CLAUDE_CHAT_EVENT,
+    MAX_CLAUDE_CHAT_BYTES,
+    valid_claude_chat_fact,
+)
+from .claude_history_identity import project_claude_history
 from .claude_terminal_prompt import CLAUDE_PROMPT_HOOK_TIMEOUT
 from .redaction import NativeSecretRedactor
 
@@ -110,7 +116,8 @@ class ClaudeTerminalSession:
     """Core's native session port for an exact, already verified Claude terminal."""
 
     def __init__(self, terminal, gate, *, native_id, session_id, stream_epoch, context, redactor, observe_finished,
-                 observe_interrupted=None, observe_generation=None, observe_chat=None, require_current=None,
+                 observe_interrupted=None, observe_generation=None, observe_chat=None, observe_history=None,
+                 require_current=None,
                  allow_interrupt=None, resources=()):
         if not isinstance(redactor, NativeSecretRedactor):
             raise TypeError("An owned Claude terminal requires native secret redaction.")
@@ -127,6 +134,8 @@ class ClaudeTerminalSession:
         self._observe_interrupted = observe_interrupted
         self._observe_generation = observe_generation
         self._observe_chat = observe_chat
+        self._observe_history = observe_history
+        self._history_turn = None
         self._require_current = require_current
         self._allow_interrupt = allow_interrupt
         self._interrupt_target = None
@@ -148,9 +157,15 @@ class ClaudeTerminalSession:
             payload["delivery_outcome"] = "success"
             payload["output_text"] = self._redactor.clean(result.output_text)
             kind = "Stop"
-        return RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
-                            self._stream_epoch, 0, "turn_state", kind,
-                            payload, operation_id=result.operation_id)
+        event = RuntimeEvent(self._context.server_id, self._context.executor_id, self._session_id,
+                             self._stream_epoch, 0, "turn_state", kind, payload, operation_id=result.operation_id)
+        if self._history_turn is None:
+            return event
+        session_uuid, _, _ = self._history_turn
+        scoped = replace(event, payload=payload | {"session_id": session_uuid})
+        projected = project_claude_history(scoped, {"schema_version": 1, "session_id": session_uuid},
+                                           self._redactor.clean)
+        return event if projected is scoped else projected
 
     async def events(self):
         if self._closed or await asyncio.to_thread(self._terminal.poll) is not None:
@@ -162,8 +177,11 @@ class ClaudeTerminalSession:
             result = await asyncio.to_thread(self._gate.take_finished_result, self._observe_finished,
                                              self._observe_interrupted)
             if result is not None:
+                self._history_turn = None
                 if result.chat_turn is not None and self._observe_chat is not None:
                     entries = await asyncio.to_thread(self._observe_chat, result.chat_turn)
+                    if entries and self._observe_history is not None and result.failure_code is None:
+                        self._history_turn = (entries[0]["native_session_id"], result.operation_id, result.chat_turn)
                     for raw in entries:
                         fact = self._redactor.clean(raw)
                         text = fact.get("text")
@@ -207,6 +225,22 @@ class ClaudeTerminalSession:
         from .claude_terminal_reader import ClaudeTerminalReader
 
         return ClaudeTerminalReader(self._terminal)
+
+    async def read_owned_claude_history(self, session_uuid, operation_id):
+        claim = self._history_turn
+        if self._closed or claim is None or claim[:2] != (session_uuid, operation_id):
+            return None
+
+        def observe():
+            if self._require_current is not None:
+                self._require_current()
+            current = self._observe_history()
+            if current is None or current.session_uuid != session_uuid or not self._observe_chat(claim[2]):
+                return None
+            # A different snapshot during the terminal correlation is not retirement evidence.
+            return current if self._observe_history() == current else None
+
+        return await asyncio.to_thread(observe)
 
     async def send(self, _verb, _payload, _operation_id, *, expected_turn_id=None):
         raise EffectNotSent("This action is not available on the owned Claude terminal.")

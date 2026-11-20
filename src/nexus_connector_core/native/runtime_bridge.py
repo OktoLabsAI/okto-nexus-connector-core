@@ -26,7 +26,8 @@ from .claude_chat_facts import CLAUDE_STREAM_CHAT_EVENT, valid_claude_stream_cha
 from .claude_history_identity import CLAUDE_HISTORY_IDENTITY, project_claude_history
 from .claude_saved_history import ClaudeSavedHistory
 from .claude_terminal_resume import (
-    ClaudeTerminalResumeGrant, open_saved_claude_terminal, require_claude_resume_grant, require_reviewed_claude_terminal,
+    ClaudeTerminalFreshGrant, ClaudeTerminalResumeGrant, open_claude_terminal, require_claude_fresh_grant,
+    require_claude_resume_grant, require_reviewed_claude_terminal,
 )
 from .claude_terminal_submission import ClaudeTerminalSession
 from .pi_chat_facts import PI_CHAT_EVENT
@@ -900,6 +901,8 @@ class CopiedAdapterFactory:
                                         Awaitable[CodexResumeGrant | None]] | None = None,
                  claude_resume: Callable[[PreparedLaunch, str, ExecutionContext],
                                          Awaitable[ClaudeTerminalResumeGrant | None]] | None = None,
+                 claude_fresh: Callable[[PreparedLaunch, str, ExecutionContext, Mapping[str, str]],
+                                        Awaitable[ClaudeTerminalFreshGrant | None]] | None = None,
                  native_approvals_enabled: bool = False,
                  native_approvals_from_lease: bool = False,
                  clock: Callable[[], float] | None = None):
@@ -914,6 +917,7 @@ class CopiedAdapterFactory:
                                    if codex_client_info is not None else None)
         self._codex_resume = codex_resume
         self._claude_resume = claude_resume
+        self._claude_fresh = claude_fresh
         self._native_approvals_enabled = native_approvals_enabled
         self._native_approvals_from_lease = native_approvals_from_lease
         # C3/S01: the spawn gate ALWAYS has a clock - None never means
@@ -1125,6 +1129,13 @@ class CopiedAdapterFactory:
         from ..harness_config import process_http_arguments
         environment = await self._environment(prepared)
         env = dict(environment)
+        if (kind == "claude_code" and registered is None and resume_claude_session_id is None
+                and self._claude_fresh is not None):
+            claude_grant = await self._claude_fresh(prepared, session_id, context, environment)
+            if claude_grant is not None:
+                require_reviewed_claude_terminal(prepared, process_launch, process_birth_recorder, opening_guard)
+                require_claude_fresh_grant(claude_grant, prepared, session_id, context)
+                await _validate_frontier("claude_terminal_open")
         command = prepared.argv
         typed_env = isinstance(environment, ProcessHTTPEnvironment)
         question_only = typed_env and environment.claude_question_only is True
@@ -1136,7 +1147,8 @@ class CopiedAdapterFactory:
             command = (*command, "--tools", "AskUserQuestion,Read" if read_approval else "AskUserQuestion")
         if claude_grant is not None and (claude_grant.question_only != question_only
                                          or claude_grant.read_approval != read_approval
-                                         or native_approvals_enabled != (question_only or read_approval)):
+                                         or (resume_claude_session_id is not None and
+                                             native_approvals_enabled != (question_only or read_approval))):
             raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
         preset_bridge = environment.pi_mcp_bridge if isinstance(environment, ProcessHTTPEnvironment) else None
         preset_config = None
@@ -1176,11 +1188,11 @@ class CopiedAdapterFactory:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "environment",
                                 retry_safe=True)
         if claude_grant is not None:
-            return await open_saved_claude_terminal(
+            return await open_claude_terminal(
                 prepared, command, env, session_id, context, stream_epoch, grant=claude_grant,
                 process_launch=process_launch, process_birth_recorder=process_birth_recorder,
                 revalidate_launch=_revalidate_launch, resources=resources,
-                verify_content=lambda: _revalidate_content('claude_resume', content_snapshot))
+                verify_content=lambda: _revalidate_content('claude_terminal_launch', content_snapshot))
         native_action = None
         if registered is not None:
             connector = load_adapter(spec.adapter_id)(command=command, cwd=prepared.cwd, env=env)
