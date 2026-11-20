@@ -112,6 +112,18 @@ def test_codex_replacement_cannot_merge_old_transport_or_credentials(tmp_path):
     assert 'url' not in actual and 'bearer_token_env_var' not in actual
 
 
+@pytest.mark.parametrize('inherit', [False, True])
+def test_codex_preset_without_injected_tools_obeys_global_inheritance(tmp_path, inherit):
+    config = tmp_path / 'config.toml'
+    original = '[mcp_servers.unrelated]\ncommand = "another-tool"\n'
+    config.write_text(original, encoding='utf-8')
+    entries, _, _ = render('codex_app_server', tmp_path,
+        [dict(name='docs', transport='stdio', command='example')], inherit=inherit, nexus=False)
+    assert entries['docs']['command'] == 'example'
+    assert entries.get('unrelated') == (None if inherit else {'enabled': False})
+    assert config.read_text(encoding='utf-8') == original
+
+
 def test_claude_preserves_unrelated_global_mcp_and_disables_selected_entry(tmp_path):
     (tmp_path / '.claude.json').write_text(json.dumps({'mcpServers': {
         'keep': {'type': 'http', 'url': 'https://keep.test/mcp', 'headers': {'Authorization': 'global-private'}},

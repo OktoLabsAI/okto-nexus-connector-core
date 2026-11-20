@@ -174,7 +174,8 @@ async def child_environment(
             raise CoreError("AGENT_AUTH_REQUIRED", "environment")
         env[name] = value
     disabled_mcps = ()
-    if render_http and not inherit_mcps and prepared.intent.adapter_id == 'codex_app_server':
+    if ((render_http or prepared.intent.mcp_preset) and not inherit_mcps
+            and prepared.intent.adapter_id == 'codex_app_server'):
         import asyncio
         from .mcp_inheritance import codex_mcp_names
         disabled_mcps = await asyncio.to_thread(codex_mcp_names, env, prepared.cwd)
