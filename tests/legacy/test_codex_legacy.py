@@ -1439,9 +1439,9 @@ def test_events_stays_live_after_a_failed_start_is_followed_by_a_successful_retr
 
     Uses ONE script, invoked TWICE by the SAME connector instance (its
     ``command`` is fixed at construction - a real retry re-spawns the exact
-    same argv): a marker file on disk makes the FIRST invocation hang (never
-    answers ``initialize``, so the handshake times out and ``start()`` #1
-    raises) and the SECOND invocation behave like a minimal, real app-server
+    same argv): a marker file makes the FIRST invocation exit after reading
+    ``initialize`` (so the handshake fails and ``start()`` #1 raises) and
+    the SECOND invocation behaves like a minimal app-server
     (answers ``initialize`` and ``thread/start``, so ``start()`` #2
     succeeds) - the same "flip behaviour via a stateful marker" shape used
     throughout this file's fakes, applied across two separate process
@@ -1450,12 +1450,12 @@ def test_events_stays_live_after_a_failed_start_is_followed_by_a_successful_retr
     marker = tmp_path / "spawned_once.marker"
     script = tmp_path / "flaky_then_ok.py"
     script.write_text(
-        "import json, os, sys, time\n"
+        "import json, os, sys\n"
         f"marker = {str(marker)!r}\n"
         "if not os.path.exists(marker):\n"
         "    open(marker, 'w').close()\n"
         "    sys.stdin.readline()\n"  # consume `initialize` without answering
-        "    time.sleep(30)\n"
+        "    sys.exit(0)\n"
         "else:\n"
         "    for raw in sys.stdin:\n"
         "        line = raw.strip()\n"
@@ -1474,12 +1474,12 @@ def test_events_stays_live_after_a_failed_start_is_followed_by_a_successful_retr
     )
     conn = CodexAppServerConnector(
         command=[sys.executable, str(script)],
-        handshake_timeout_s=0.3,
     )
     t: threading.Thread | None = None
     try:
         with pytest.raises(NativeAdapterError):
-            conn.start(owning_agent_id="nxs_agent")  # spawn #1: hangs, times out, sets _closed_event
+            conn.start(owning_agent_id="nxs_agent")  # spawn #1: exits during the handshake
+        assert marker.is_file()
 
         session = conn.start(owning_agent_id="nxs_agent")  # spawn #2 (retry): succeeds
         assert session.session_id

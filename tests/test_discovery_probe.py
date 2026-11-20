@@ -238,7 +238,7 @@ def test_qualification_requires_exact_platform_architecture_and_binary(monkeypat
 
 
 def test_production_allowlist_grants_only_the_recorded_real_builds():
-    """The 2026-09-26 real-campaign grants are exact and control-aware."""
+    """Production grants are exact and conversation-only builds cannot use controls."""
     codex = ("codex", "0.157.0", "win32", "x86_64",
              "sha256:ed1c7b36e44536809c868864c833af8a857f56599a7a7fe23b908a1ba1093b1f")
     pi = ("pi", "0.87.1", "win32", "x86_64",
@@ -247,10 +247,14 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
               "sha256:fc0e3af017705624b9e1bce913f72761864ff994804514da1f5e41380fca4484")
     claude_288 = ("claude_code", "2.1.288", "win32", "x86_64",
                   "sha256:84304f7d4b0cd0ebcbe8318695a260151b48991a6659c3366fdd5da290c0ab91")
-    assert compatibility.QUALIFIED_BUILDS - compatibility.QUALIFIED_CONTROL_BUILDS == {claude_288}
+    claude_328 = ("claude_code", "2.1.328", "win32", "x86_64",
+                  "sha256:551d573567b46ce78aba1b20beb20ac2494f5f8adffd1b41dfd269a96e1d9839")
+    conversation_only = {claude_288, claude_328}
+    assert compatibility.QUALIFIED_BUILDS - compatibility.QUALIFIED_CONTROL_BUILDS == conversation_only
     assert compatibility.QUALIFIED_CONTROL_BUILDS <= compatibility.QUALIFIED_BUILDS
-    assert compatibility.qualified_build(*claude_288)
-    assert not compatibility.qualified_build(*claude_288, control=True)
+    for key in conversation_only:
+        assert compatibility.qualified_build(*key)
+        assert not compatibility.qualified_build(*key, control=True)
     # C2/R06: Pi qualifies only through the dependency-covering portable
     # identity; the legacy composite fingerprint stays a binding proof but
     # is not a grant on its own. Codex/Claude keep the fingerprint grant.
