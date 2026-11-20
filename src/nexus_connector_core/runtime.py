@@ -1125,8 +1125,13 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 terminal_expected = (semantic.action == 'turn.submit' or
                     (semantic.action == 'turn.steer' and binding.adapter_id not in
                      {'codex_app_server', 'pi_rpc'}))
+                completion_stage = 'SUBMITTED'
+                if verb == 'send_turn' and binding.adapter_id == 'pi_rpc':
+                    from .native.runtime_bridge import CopiedAdapterSession
+                    if isinstance(binding.native, CopiedAdapterSession) and binding.native.confirms_prompt_acceptance:
+                        completion_stage = 'ACCEPTED'
                 return await self._kernel.execute(semantic, context, effect,
-                    terminal_event_expected=terminal_expected)
+                    terminal_event_expected=terminal_expected, completion_stage=completion_stage)
             except BaseException as error:
                 if capacity_key is not None and (not effect_entered or (
                         isinstance(error, CoreError) and error.retry_safe and not error.possible_effect)):

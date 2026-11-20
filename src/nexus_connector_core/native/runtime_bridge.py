@@ -249,6 +249,12 @@ class CopiedAdapterSession:
         """Whether a native turn was sent without a correlated terminal event."""
         return self._active_operation_id is not None
 
+    @property
+    def confirms_prompt_acceptance(self) -> bool:
+        from .adapters.pi import PiRpcConnector
+
+        return isinstance(self._connector, PiRpcConnector) and self._connector.confirms_prompt_acceptance
+
     async def send(self, verb: str, payload: Mapping[str, str],
                    operation_id: str, *,
                    expected_turn_id: str | None = None) -> None:

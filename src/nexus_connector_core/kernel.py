@@ -39,7 +39,9 @@ class OperationKernel:
                       completion_stage: str = "SUBMITTED") -> OperationReceipt:
         # Only a caller that has observed completion may request a terminal
         # receipt. Validate before admission or any native effect.
-        if type(completion_stage) is not str or completion_stage not in {"SUBMITTED", "SUCCEEDED"}:
+        if type(completion_stage) is not str or completion_stage not in {"SUBMITTED", "ACCEPTED", "SUCCEEDED"}:
+            raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)
+        if completion_stage == "ACCEPTED" and (operation.action != "turn.submit" or terminal_event_expected is not True):
             raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)
         if opening_deadline is not None and operation.action != "runtime.open":
             raise CoreError("VALIDATION_ERROR", "admission", retry_safe=True)

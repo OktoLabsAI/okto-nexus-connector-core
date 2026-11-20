@@ -1097,6 +1097,13 @@ class PiRpcConnector:
         if response.get("success") is False:
             self._push_event("error", _TYPE_RESPONSE, dict(response))
 
+    @property
+    def confirms_prompt_acceptance(self) -> bool:
+        """The reviewed RPC replies after preflight and correlates each prompt."""
+        transport = self._transport
+        return (transport is not None and self._hosted_rpc is not None
+                and transport._hosted_rpc_ready and transport._response_ids_required)
+
     @staticmethod
     def _require_accepted(response: Mapping[str, Any], verb: str) -> None:
         if (verb == _VERB_PROMPT and response.get("type") == _TYPE_RESPONSE

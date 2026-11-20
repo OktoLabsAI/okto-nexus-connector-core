@@ -16,7 +16,8 @@ def context():
                             time.monotonic() + 60, frozenset({"turn.submit"}))
 
 
-def test_dedupe_and_conflict(tmp_path):
+@pytest.mark.parametrize("stage", ["SUBMITTED", "ACCEPTED"])
+def test_dedupe_and_conflict(tmp_path, stage):
     async def run():
         journal = SQLiteJournal(tmp_path / "journal.db")
         kernel = OperationKernel(journal)
@@ -28,9 +29,11 @@ def test_dedupe_and_conflict(tmp_path):
             return "native-1"
 
         operation = Operation("op1", "session", "turn.submit", {"text": "olá"})
-        first = await kernel.execute(operation, context(), effect)
+        first = await kernel.execute(operation, context(), effect,
+                                     completion_stage=stage, terminal_event_expected=True)
         second = await kernel.execute(operation, context(), effect)
         assert first == second
+        assert first.stage == stage and first.possible_effect and not first.retry_safe
         assert called == 1
         with pytest.raises(CoreError, match="OPERATION_CONFLICT"):
             await kernel.execute(Operation("op1", "session", "turn.submit",
