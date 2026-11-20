@@ -6,6 +6,7 @@ const MAX_BACKLOG = 256 * 1024;
 const MAX_CHUNK = 12 * 1024;
 const MAX_EDITOR_FRAME = 16 * 1024 + 128;
 const MAX_INSERT = 4 * 1024;
+const MAX_READERS = 2;
 const EDITOR_KEYS = new Map([
   ["insert", ""], ["enter", "\r"], ["newline", "\n"], ["backspace", "\x7f"], ["delete", "\x1b[3~"],
   ["left", "\x1b[D"], ["right", "\x1b[C"], ["up", "\x1b[A"], ["down", "\x1b[B"],
@@ -115,7 +116,7 @@ function validText(text, limit) {
     !/[\x00-\x08\x0b-\x1f\x7f-\x9f\uD800-\uDFFF]/u.test(text);
 }
 
-/** One private renderer subscriber, bound to the exact session already held by RPC. */
+/** Bounded private renderer subscriptions to the exact session already held by RPC. */
 export async function startHostedRenderer(InteractiveMode, owner, key) {
   if (!/^[0-9a-f]{64}$/.test(key)) throw new Error("Missing private Pi presentation key");
   const session = owner.session;
@@ -204,10 +205,11 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
     maybeSuggestBugReport() {}
   }
 
-  let active;
+  const readers = new Set();
+  let editor;
   const server = net.createServer({ pauseOnConnect: true }, (socket) => {
     socket.on("error", () => socket.destroy());
-    if (active || !ownsSession()) { socket.destroy(); return; }
+    if (!ownsSession()) { socket.destroy(); return; }
     socket.setTimeout(3000, () => socket.destroy());
     const challenge = randomBytes(32).toString("hex");
     socket.write(JSON.stringify({ type: "challenge", revision: 1, challenge }) + "\n");
@@ -219,7 +221,8 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
     let scheduled;
     const events = [];
     socket.once("close", () => {
-      if (active === socket) active = undefined;
+      if (editor === socket) editor = undefined;
+      readers.delete(socket);
       unsubscribe?.();
       clearImmediate(scheduled);
       events.length = 0;
@@ -242,10 +245,12 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
           socket.write(reply);
           return;
         }
-        if (active || !validAttach(request, key, challenge, id)) { socket.destroy(); return; }
-        active = socket;
+        if (!validAttach(request, key, challenge, id)) { socket.destroy(); return; }
         const { columns, rows } = request;
         editing = request.revision === 2;
+        if (editing ? editor : readers.size >= MAX_READERS) { socket.destroy(); return; }
+        if (editing) editor = socket;
+        else readers.add(socket);
         const terminal = new TranscriptTerminal(socket, columns, rows, ownsSession);
         mode = new TranscriptMode(observerHost, { terminal, tuiMode: "transcript" });
         mode.openTranscript(socket, terminal, editing);
@@ -262,7 +267,7 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
                 const current = events.shift();
                 // Pi can decorate an aborted message with an error string.
                 const projected = current.type === "message_end" ? { ...current, message: { ...current.message } } : current;
-              await mode.handleTranscriptEvent(projected);
+                await mode.handleTranscriptEvent(projected);
               }
             } catch { socket.destroy(); }
             finally { scheduled = undefined; }
@@ -272,8 +277,11 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
     });
     socket.resume();
   });
-  server.maxConnections = 4; // Bound unauthenticated handshakes separately from the viewer slot.
-  server.on("error", () => active?.destroy());
+  server.maxConnections = MAX_READERS + 1 + 4; // Include headroom for pending handshakes.
+  server.on("error", () => {
+    for (const reader of readers) reader.destroy();
+    editor?.destroy();
+  });
   await new Promise((resolve, reject) => {
     server.once("error", reject);
     server.listen({ host: "127.0.0.1", port: 0, exclusive: true, backlog: 1 }, () => {

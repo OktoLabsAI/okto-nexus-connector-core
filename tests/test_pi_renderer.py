@@ -66,22 +66,23 @@ class NativeTranscript {
   }
   stop() {}
 }
-let listener;
+const listeners = new Set();
 const session = { sessionId: "exact", state: {}, subscribe: (callback) => {
-  listener = callback;
-  return () => { listener = undefined; };
+  listeners.add(callback);
+  return () => { listeners.delete(callback); };
 } };
+const emit = (event) => { for (const listener of listeners) listener(event); };
 const pending = { role: "assistant", text: "Retained partial response" };
 process.stdin.on("data", (buffer) => {
   const command = buffer.toString().trim();
   if (command === "streaming") session.state.streamingMessage = pending;
   else if (command === "finish") {
-    listener({ type: "message_start", message: pending });
-    listener({ type: "message_update", message: { role: "assistant", text: "New delta" } });
-    listener({ type: "message_end", message: { role: "assistant", text: "Final response" } });
+    emit({ type: "message_start", message: pending });
+    emit({ type: "message_update", message: { role: "assistant", text: "New delta" } });
+    emit({ type: "message_end", message: { role: "assistant", text: "Final response" } });
     session.state.streamingMessage = undefined;
   } else if (command === "finish-only") {
-    listener({ type: "message_end", message: { role: "assistant", text: "Response at attach boundary" } });
+    emit({ type: "message_end", message: { role: "assistant", text: "Response at attach boundary" } });
   }
   console.log("applied");
 });
@@ -109,9 +110,15 @@ process.stdin.resume();
                 async with target.attach(100, 40) as reader:
                     frame = await reader.read_output()
                     assert frame == "\x1b[2J\x1b[Hthe session\x1b[32m✓\x1b[0m".encode()
-                    with pytest.raises(CoreError, match="NATIVE_UNAVAILABLE"):
-                        async with target.attach(100, 40):
-                            pytest.fail("A concurrent viewer replaced the active renderer")
+                    async with target.attach(180, 40) as second, target.attach(100, 40, edit=True) as writer:
+                        assert b"Retained history" in await second.read_output()
+                        assert await writer.read_event() == frame
+                        with pytest.raises(CoreError, match="NATIVE_UNAVAILABLE"):
+                            async with target.attach(100, 40):
+                                pytest.fail("A third reader exceeded the renderer limit")
+                        with pytest.raises(CoreError, match="NATIVE_UNAVAILABLE"):
+                            async with target.attach(100, 40, edit=True):
+                                pytest.fail("A second editor attached to the same renderer")
                 async with AsyncExitStack() as attachments:
                     while True:
                         try:
