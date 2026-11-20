@@ -36,6 +36,7 @@ class NativeTranscript {
     this.chatContainer = { children: [] };
     this.sessionManager = { buildContextEntries: () => [] };
     this.editorContainer = {};
+    this.messages = [];
     this.defaultEditor = {
       value: "",
       getText() { return this.value; },
@@ -47,14 +48,43 @@ class NativeTranscript {
       },
     };
     this.ui.setFocus = (editor) => assert.equal(editor, this.defaultEditor);
-    this.renderer = { render: () => terminal.columns === 300 ? ["x".repeat(70_000)] :
+    this.renderer = { render: () => terminal.columns === 180 ? ["Retained history", ...this.messages] :
+      terminal.columns === 300 ? ["x".repeat(70_000)] :
       ["\x1b]52;c;c2VjcmV0\x07the session\x1b[32m✓\x1b[0m"] };
   }
   mountInteractiveTui() {}
   renderSessionEntries() {}
+  async handleEvent({ type, message }) {
+    if (type === "message_start") {
+      this.streamingComponent = {};
+      this.messages.push(message.text);
+    } else if (this.streamingComponent) {
+      this.messages[this.messages.length - 1] = message.text;
+      if (type === "message_end") this.streamingComponent = undefined;
+    }
+    this.renderer.requestRender();
+  }
   stop() {}
 }
-const session = { sessionId: "exact", subscribe: () => () => {} };
+let listener;
+const session = { sessionId: "exact", state: {}, subscribe: (callback) => {
+  listener = callback;
+  return () => { listener = undefined; };
+} };
+const pending = { role: "assistant", text: "Retained partial response" };
+process.stdin.on("data", (buffer) => {
+  const command = buffer.toString().trim();
+  if (command === "streaming") session.state.streamingMessage = pending;
+  else if (command === "finish") {
+    listener({ type: "message_start", message: pending });
+    listener({ type: "message_update", message: { role: "assistant", text: "New delta" } });
+    listener({ type: "message_end", message: { role: "assistant", text: "Final response" } });
+    session.state.streamingMessage = undefined;
+  } else if (command === "finish-only") {
+    listener({ type: "message_end", message: { role: "assistant", text: "Response at attach boundary" } });
+  }
+  console.log("applied");
+});
 const port = await startHostedRenderer(NativeTranscript, { session }, "a".repeat(64));
 console.log(port);
 process.stdin.resume();
@@ -112,6 +142,32 @@ process.stdin.resume();
                     assert await edited("snapshot") == PiEditorUpdate(8, "Reviewed draft")
                     assert await edited("clear") == PiEditorUpdate(9, None)
                     assert await edited("enter") == PiEditorUpdate(10, None)
+
+                async def advance(command):
+                    proc.stdin.write(command.encode() + b"\n")
+                    await proc.stdin.drain()
+                    assert await proc.stdout.readline() == b"applied\n"
+
+                for command, initial, completion, expected in (
+                    ("streaming", b"Retained partial response", "finish", b"Final response"),
+                    ("idle", b"Retained history", "finish-only", b"Response at attach boundary"),
+                ):
+                    await advance(command)
+                    async with AsyncExitStack() as attachments:
+                        while True:
+                            try:
+                                reader = await attachments.enter_async_context(target.attach(180, 40))
+                                break
+                            except CoreError as error:
+                                if error.code != "NATIVE_UNAVAILABLE":
+                                    raise
+                                await asyncio.sleep(.02)
+                        assert initial in await reader.read_output()
+                        await advance(completion)
+                        while expected not in (frame := await reader.read_output()):
+                            pass
+                        assert frame.count(expected) == 1
+                        assert b"Retained partial response" not in frame
         finally:
             if proc.returncode is None:
                 proc.terminate()

@@ -153,7 +153,26 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
       this.mountInteractiveTui(this.renderer, components);
       this.isInitialized = true;
       this.renderSessionEntries(this.sessionManager.buildContextEntries().slice(-48));
+      const assistant = session.state?.streamingMessage;
+      if (assistant?.role === "assistant") {
+        this.reattachedMessage = assistant;
+        this.handleEvent({ type: "message_start", message: assistant }).catch(() => socket.destroy());
+      }
       this.renderer.requestRender();
+    }
+    async handleTranscriptEvent(event) {
+      const { type, message } = event;
+      if (message?.role === "assistant") {
+        const alreadyStarted = type === "message_start" && message === this.reattachedMessage;
+        this.reattachedMessage = undefined;
+        if (alreadyStarted) return;
+        // A new viewer can also arrive after the Agent cleared its partial
+        // message and before AgentSession publishes and persists the completion.
+        if ((type === "message_update" || type === "message_end") && !this.streamingComponent) {
+          await this.handleEvent({ type: "message_start", message });
+        }
+      }
+      await this.handleEvent(event);
     }
     editDraft(frame, sequence) {
       if (!frame || Object.keys(frame).length !== 4 || frame.type !== "key" ||
@@ -243,7 +262,7 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
                 const current = events.shift();
                 // Pi can decorate an aborted message with an error string.
                 const projected = current.type === "message_end" ? { ...current, message: { ...current.message } } : current;
-                await mode.handleEvent(projected);
+              await mode.handleTranscriptEvent(projected);
               }
             } catch { socket.destroy(); }
             finally { scheduled = undefined; }
