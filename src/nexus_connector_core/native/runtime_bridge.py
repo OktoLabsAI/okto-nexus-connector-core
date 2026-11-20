@@ -256,12 +256,18 @@ class CopiedAdapterSession:
         return isinstance(self._connector, PiRpcConnector) and self._connector.confirms_prompt_acceptance
 
     @property
+    def supports_literal_text(self) -> bool:
+        from .adapters.pi import PiRpcConnector
+
+        return isinstance(self._connector, PiRpcConnector) and self._connector.supports_literal_text
+
+    @property
     def confirms_steer_acceptance(self) -> bool:
         from .adapters.codex import CodexAppServerConnector
 
         return isinstance(self._connector, CodexAppServerConnector) and self._connector.confirms_steer_acceptance
 
-    async def send(self, verb: str, payload: Mapping[str, str],
+    async def send(self, verb: str, payload: Mapping[str, Any],
                    operation_id: str, *,
                    expected_turn_id: str | None = None) -> None:
         if self._close_started:

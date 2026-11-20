@@ -28,6 +28,8 @@ def pi_prompt_failure_code(response):
     # Pi 0.87.1 auth-guidance.js emits this fixed preflight format. This is
     # called only for a correlated negative prompt response, never model text.
     error = response.get("error")
+    if error == "Literal Pi input is unavailable.":
+        return "CAPABILITY_UNSUPPORTED"
     if isinstance(error, str) and re.match(
             r"No API key found for (?:[A-Za-z0-9_.:-]{1,128}|the selected model)\.\n\n"
             r"Use /login to log into a provider via OAuth or API key\. See:\n", error):

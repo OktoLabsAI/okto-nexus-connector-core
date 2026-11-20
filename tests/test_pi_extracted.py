@@ -12,7 +12,10 @@ from unittest.mock import Mock
 import pytest
 
 from nexus_connector_core import CoreError, InstallationCandidate, pi_extension_resource
-from nexus_connector_core.native.adapter_types import STATUS_RUNNING, HarnessCommand, HarnessSession, NativeAdapterError
+from nexus_connector_core.native.adapter_types import (
+    STATUS_RUNNING, HarnessCommand, HarnessSession, NativeAdapterError,
+    RuntimeCommandNotSent, RuntimeCommandRejected,
+)
 from nexus_connector_core.native.adapters.pi import PiRpcConnector, _PiTransport
 
 
@@ -64,6 +67,43 @@ def test_pi_node_cli_default_version_command_probes_package():
                                           "--version"]
     direct = PiRpcConnector(command=("pi", "--mode", "rpc"))
     assert direct._version_command == ["pi", "--version"]
+
+
+@pytest.mark.parametrize("revision", [None, 1, 2])
+def test_literal_prompt_requires_the_new_hosted_rpc_revision(revision, tmp_path):
+    connector = PiRpcConnector(command=("pi", "--mode", "rpc"), hosted_rpc=tmp_path / "host.js")
+    session = HarnessSession("owned", "pi", "agent", STATUS_RUNNING, connector.capabilities, "start")
+    connector._session_id = session.session_id
+    transport = Mock(spec_set=["is_alive", "request", "_response_ids_required", "_hosted_rpc_ready",
+                               "_hosted_rpc_revision"])
+    connector._transport = transport
+    transport.is_alive.return_value = True
+    transport._response_ids_required = True
+    transport._hosted_rpc_ready = revision is not None
+    transport._hosted_rpc_revision = revision
+    transport.request.return_value = {"type": "response", "command": "prompt", "id": "prompt-1", "success": True}
+
+    text = "/skill:fixture café  "
+    command = HarnessCommand(session.session_id, "send_turn", {"text": text, "literal": True})
+    if revision != 2:
+        with pytest.raises(RuntimeCommandNotSent, match="Literal Pi input is unavailable"):
+            connector.send(session, command)
+        transport.request.assert_not_called()
+    else:
+        connector.send(session, command)
+        fields = {"message": {"kind": "nexus_hosted_literal", "text": text}}
+        transport.request.assert_called_once_with("prompt", fields, timeout_s=connector._command_timeout_s)
+        transport.request.reset_mock()
+        transport.request.return_value |= {"success": False, "error": "Literal Pi input is unavailable."}
+        with pytest.raises(RuntimeCommandRejected) as caught:
+            connector.send(session, command)
+        assert caught.value.failure_code == "CAPABILITY_UNSUPPORTED"
+        transport.request.assert_called_once_with("prompt", fields, timeout_s=connector._command_timeout_s)
+
+    transport.request.reset_mock()
+    transport.request.return_value = {"success": True}
+    connector.send(session, HarnessCommand(session.session_id, "send_turn", {"text": text}))
+    transport.request.assert_called_once_with("prompt", {"message": text}, timeout_s=connector._command_timeout_s)
 
 
 def test_hosted_pi_capacity_requires_an_exact_idle_and_settled_session():

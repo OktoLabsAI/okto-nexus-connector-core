@@ -37,6 +37,23 @@ export async function runOwnedRpc(runtime) {
   return next(runtime);
 }
 
+export function fenceHostedRpcLiteral(session) {
+  const prompt = session.prompt.bind(session);
+  session.prompt = async (message, options) => {
+    if (typeof message === "string") return prompt(message, options);
+    if (!message || options?.source !== "rpc" || message.kind !== "nexus_hosted_literal" ||
+        Object.keys(message).length !== 2 || typeof message.text !== "string" || !message.text ||
+        options.images !== undefined || options.streamingBehavior !== undefined) {
+      throw new Error("Literal Pi input is malformed.");
+    }
+    if (session.isStreaming || session.isCompacting || session._isEmittingAgentSettled ||
+        session._extensionRunner.hasHandlers("input")) {
+      throw new Error("Literal Pi input is unavailable.");
+    }
+    return prompt(message.text, { ...options, expandPromptTemplates: false });
+  };
+}
+
 /** Run Pi's canonical settings, auth, resource loader and RPC on one owner. */
 export async function runHostedPiRpc(cli, args, observeOwner, options) {
   if (process.platform !== "win32" || process.arch !== "x64" || process.version !== "v24.15.0") {
@@ -114,9 +131,10 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   const writeProtocol = process.stdout.write.bind(process.stdout);
   void runHostedPiRpc(cli, args, async (owner, InteractiveMode) => {
     filterInput = fenceHostedRpcSteer(owner, writeProtocol);
+    fenceHostedRpcLiteral(owner.session);
     observeHostedPiChat(owner, writeProtocol);
     const port = await startHostedRenderer(InteractiveMode, owner, rendererKey);
-    const notice = { type: "nexus_pi_owned_rpc", revision: 1, session_id: owner.session.sessionId, renderer_port: port };
+    const notice = { type: "nexus_pi_owned_rpc", revision: 2, session_id: owner.session.sessionId, renderer_port: port };
     await new Promise((resolve, reject) => {
       writeProtocol(JSON.stringify(notice) + "\n", (error) => error ? reject(error) : resolve());
     });

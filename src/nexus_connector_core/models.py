@@ -449,6 +449,7 @@ class TurnOperation:
     session_id: str
     text: str
     expected_turn_id: str | None = None
+    literal: bool = False
 
 
 @dataclass(frozen=True, slots=True)

@@ -14,7 +14,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable, Mapping
 from contextlib import AsyncExitStack, aclosing, asynccontextmanager
 from dataclasses import dataclass, field, replace
 from pathlib import Path
-from typing import Protocol
+from typing import Any, Protocol
 
 from .discovery import discover_installations
 from .clock import RollbackFencedClock, SystemClock
@@ -102,7 +102,7 @@ class NativeSession(Protocol):
 
     native_id: str
 
-    async def send(self, verb: str, payload: Mapping[str, str],
+    async def send(self, verb: str, payload: Mapping[str, Any],
                    operation_id: str, *,
                    expected_turn_id: str | None = None) -> None: ...
     def events(self) -> AsyncIterator[RuntimeEvent]: ...
@@ -766,13 +766,16 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                      context: ExecutionContext) -> OperationReceipt:
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "submit")
-        if not operation.text or len(operation.text.encode("utf-8")) > 1024 * 1024:
+        if (type(operation.literal) is not bool or not operation.text
+                or len(operation.text.encode("utf-8")) > 1024 * 1024):
             raise CoreError("VALIDATION_ERROR", "submit")
+        payload = {"text": operation.text}
+        if operation.literal:
+            payload["literal"] = True
         semantic = Operation(operation.operation_id, operation.session_id,
-                             "turn.submit", {"text": operation.text},
+                             "turn.submit", payload,
                              operation.expected_turn_id)
-        return await self._send(semantic, context, "send_turn",
-                                {"text": operation.text})
+        return await self._send(semantic, context, "send_turn", payload)
 
     async def control(self, operation: ControlOperation,
                       context: ExecutionContext) -> OperationReceipt:
@@ -954,7 +957,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                     containment=kernel_containment)
 
     async def _send(self, semantic: Operation, context: ExecutionContext,
-                    verb: str, payload: Mapping[str, str]) -> OperationReceipt:
+                    verb: str, payload: Mapping[str, Any]) -> OperationReceipt:
         self._authorize(context, semantic.action)
         # C2/R04: an idempotent retry (same ID, same hash) must receive the
         # known receipt even when the session is faulted, closing, closed or
@@ -1062,6 +1065,11 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 raise CoreError("CAPABILITY_UNSUPPORTED", "control_target", retry_safe=True)
             if semantic.action not in binding.context.allowed_actions:
                 raise CoreError("BINDING_NOT_AUTHORIZED", "admission")
+            if payload.get("literal") is True:
+                from .native.runtime_bridge import CopiedAdapterSession
+                if (not isinstance(binding.native, CopiedAdapterSession)
+                        or not binding.native.supports_literal_text):
+                    raise CoreError("CAPABILITY_UNSUPPORTED", "submit", retry_safe=True)
 
             capacity_key = None
             effect_entered = False

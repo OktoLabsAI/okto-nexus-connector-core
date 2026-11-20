@@ -286,6 +286,7 @@ class _PiTransport:
         self._hosted_session_id = hosted_session_id
         self._hosted_rpc_notices = 0
         self._hosted_rpc_ready = False
+        self._hosted_rpc_revision = None
         self._renderer_key = secrets.token_hex(32) if hosted_session_id is not None else None
         self._renderer_port: int | None = None
         self._on_push_event = on_push_event
@@ -628,10 +629,12 @@ class _PiTransport:
         if self._hosted_session_id is not None and msg.get("type") == "nexus_pi_owned_rpc":
             self._hosted_rpc_notices += 1
             port = msg.get("renderer_port")
-            self._hosted_rpc_ready = (self._hosted_rpc_notices == 1 and type(msg.get("revision")) is int
+            revision = msg.get("revision")
+            self._hosted_rpc_ready = (self._hosted_rpc_notices == 1 and type(revision) is int and revision in (1, 2)
                 and type(port) is int and 1 <= port <= 65535
-                and msg == {"type": "nexus_pi_owned_rpc", "revision": 1, "session_id": self._hosted_session_id,
+                and msg == {"type": "nexus_pi_owned_rpc", "revision": revision, "session_id": self._hosted_session_id,
                             "renderer_port": port})
+            self._hosted_rpc_revision = revision if self._hosted_rpc_ready else None
             self._renderer_port = port if self._hosted_rpc_ready else None
             return
         if msg.get("type") == _TYPE_RESPONSE:
@@ -1104,6 +1107,10 @@ class PiRpcConnector:
         return (transport is not None and self._hosted_rpc is not None
                 and transport._hosted_rpc_ready and transport._response_ids_required)
 
+    @property
+    def supports_literal_text(self) -> bool:
+        return self.confirms_prompt_acceptance and self._transport._hosted_rpc_revision == 2
+
     @staticmethod
     def _require_accepted(response: Mapping[str, Any], verb: str) -> None:
         if (verb == _VERB_PROMPT and response.get("type") == _TYPE_RESPONSE
@@ -1125,7 +1132,12 @@ class PiRpcConnector:
     def _send_turn(self, command: HarnessCommand) -> None:
         text = self._extract_text(command)
         self._guard_not_awaiting_settle(command.verb)
-        response = self._transport.request(_VERB_PROMPT, {"message": text}, timeout_s=self._command_timeout_s)  # type: ignore[union-attr]
+        message = text
+        if "literal" in command.payload:
+            if command.payload["literal"] is not True or not self.supports_literal_text:
+                raise RuntimeCommandNotSent("Literal Pi input is unavailable.", code="CAPABILITY_UNSUPPORTED")
+            message = {"kind": "nexus_hosted_literal", "text": text}
+        response = self._transport.request(_VERB_PROMPT, {"message": message}, timeout_s=self._command_timeout_s)  # type: ignore[union-attr]
         self._surface_if_rejected(response)
         self._require_accepted(response, _VERB_PROMPT)
 

@@ -399,6 +399,13 @@ def test_async_runtime_admission_events_reconcile_and_close(tmp_path):
         assert receipt.stage == "SUBMITTED" and receipt.possible_effect
         assert await runtime.submit(turn, context()) == receipt
         assert factory.native.sent == [("send_turn", {"text": "hello"}, "turn-1")]
+        with pytest.raises(CoreError, match="OPERATION_CONFLICT"):
+            await runtime.submit(replace(turn, literal=True), context())
+        with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED") as refused:
+            await runtime.submit(replace(turn, operation_id="turn-literal", literal=True), context())
+        assert refused.value.retry_safe and not refused.value.possible_effect
+        assert await journal.get_receipt(OperationKey("srv", "exe", "turn-literal")) is None
+        assert factory.native.sent == [("send_turn", {"text": "hello"}, "turn-1")]
         interrupted = await runtime.control(ControlOperation("int-1", "session", "interrupt"),
                                             context())
         assert interrupted.stage == "SUBMITTED"
