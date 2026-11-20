@@ -77,7 +77,7 @@ OPEN = obj({
 }, ("adapter_id", "candidate_ref", "inventory_revision", "realization_ref",
     "realization_revision", "profile_revision", "mode"))
 SUBMIT = obj({"text": {"type": "string", "minLength": 1, "maxLength": 65536},
-              "delivery_id": ID}, ("text",))
+              "delivery_id": ID, "literal": {"const": True}}, ("text",))
 STEER = obj({"text": {"type": "string", "minLength": 1, "maxLength": 65536}},
             ("text",))
 INTERRUPT = obj({"reason": {"type": "string", "maxLength": 1024}},

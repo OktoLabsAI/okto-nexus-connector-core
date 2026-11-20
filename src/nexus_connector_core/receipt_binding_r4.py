@@ -15,6 +15,7 @@ from .installation import effective_installation_ref
 from .identifiers import validate_external_id
 from .close_operation import close_operation_semantic, r4_close_operation
 from .open_operation import open_operation_semantic
+from .turn_operation import r4_turn_operation, turn_operation_semantic
 from .decision_bridge_r4 import native_decision_semantic, r4_native_decision_operation
 from .native.pi_steer_facts import valid_pi_run_id, valid_pi_steer_operation
 from .receipt_bridge_r4 import _checked_source
@@ -51,6 +52,8 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
             semantic = open_operation_semantic(OpenOperation(frame['operation_id'],
                 frame['session_id'], stream_epoch, prepared, resume_thread_id=resume_thread_id,
                 resume_claude_session_id=resume_claude_session_id))
+        elif action == 'turn.submit':
+            semantic = turn_operation_semantic(r4_turn_operation(frame))
         elif action == 'runtime.close':
             semantic = close_operation_semantic(r4_close_operation(frame))
         elif action in ('approval.decide', 'input.provide'):
@@ -82,7 +85,7 @@ def prepare_r4_receipt_binding(submit_frame, context, *, prepared=None,
             semantic = Operation(frame['operation_id'], frame['session_id'], action,
                                  {key: payload[key], **target})
         else:
-            key = 'text' if action in ('turn.submit', 'turn.steer') else 'reason'
+            key = 'text' if action == 'turn.steer' else 'reason'
             semantic = Operation(frame['operation_id'], frame['session_id'], action,
                                  {key: payload[key]}, frame.get('expected_turn_id'))
         body = dict(schema_version=1, action=action, core_intent_hash=intent_hash(semantic, context),

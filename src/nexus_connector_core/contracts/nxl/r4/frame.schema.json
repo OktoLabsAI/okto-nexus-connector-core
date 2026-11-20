@@ -1379,6 +1379,9 @@
                   "minLength": 1,
                   "type": "string"
                 },
+                "literal": {
+                  "const": true
+                },
                 "text": {
                   "maxLength": 65536,
                   "minLength": 1,

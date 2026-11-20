@@ -6,13 +6,15 @@ import pytest
 
 from nexus_connector_core import (
     CoreError, ExecutionContext, InstallationCandidate, LaunchIntent,
-    Operation, OperationReceipt, PreparedLaunch, installation_ref,
+    Operation, OperationKey, OperationReceipt, PreparedLaunch, decode_control_frame,
+    encode_r4_frame, installation_ref, prepare_r4_receipt_binding, project_r4_bound_receipt,
     R4_PREVIEW_REVISION, project_r4_open_receipt, project_r4_turn_receipt,
     project_r4_steer_receipt, project_r4_interrupt_receipt,
     project_r4_close_receipt,
     r4_submit_intent_hash,
 )
 from nexus_connector_core.protocol import intent_hash
+from nexus_connector_core.turn_operation import PI_LITERAL_INPUT_REVISION, r4_turn_operation
 
 
 def _frame():
@@ -131,6 +133,46 @@ def test_r4_turn_receipt_projects_distinct_hashes_after_core_proof():
     with pytest.raises(CoreError):
         project_r4_turn_receipt(frame, replace(receipt, operation_id="other"),
                                 context, receipt_revision=1)
+
+
+def test_r4_literal_requires_negotiation_and_survives_receipt_recovery():
+    ordinary = _frame()
+    text = "/skill:sample café  "
+    literal = ordinary | {"payload": {"text": text, "literal": True}}
+    literal["intent_hash"] = r4_submit_intent_hash(literal)
+    raw = encode_r4_frame(literal)
+    assert decode_control_frame(encode_r4_frame(ordinary)) == ordinary
+    with pytest.raises(CoreError, match="VERSION_INCOMPATIBLE"):
+        decode_control_frame(raw)
+    parsed = decode_control_frame(raw, capabilities=(PI_LITERAL_INPUT_REVISION,))
+    operation = r4_turn_operation(parsed)
+    assert operation.literal is True and operation.text == text
+    context = ExecutionContext("server", "executor", "binding", "agent", "workspace",
+                               1, 1, 1, 100.0, frozenset({"turn.submit"}))
+    receipt = OperationReceipt("operation", intent_hash(Operation("operation", "session", "turn.submit",
+        literal["payload"]), context), "ACCEPTED", True, False, "session")
+    binding = prepare_r4_receipt_binding(parsed, context)
+    key = OperationKey("server", "executor", "operation")
+    assert project_r4_bound_receipt(binding, receipt, key=key, receipt_revision=1) == (
+        project_r4_turn_receipt(parsed, receipt, context, receipt_revision=1))
+    plain_hash = intent_hash(Operation("operation", "session", "turn.submit", {"text": text}), context)
+    with pytest.raises(CoreError, match="OPERATION_CONFLICT"):
+        project_r4_bound_receipt(binding, replace(receipt, intent_hash=plain_hash), key=key, receipt_revision=1)
+
+
+@pytest.mark.parametrize(('action', 'payload', 'target'), [
+    ('turn.submit', {'text': 'x', 'literal': False}, None),
+    ('turn.submit', {'text': 'x', 'literal': 1}, None),
+    ('turn.submit', {'text': 'x', 'literal': 'true'}, None),
+    ('turn.submit', {'text': 'x', 'literal': True, 'delivery_id': 'delivery'}, None),
+    ('turn.submit', {'text': 'x', 'literal': True}, 'native-turn'),
+    ('turn.steer', {'text': 'x', 'literal': True}, None),
+])
+def test_r4_literal_has_no_alternate_wire_shape(action, payload, target):
+    frame = _frame() | {'action': action, 'payload': payload, 'expected_turn_id': target}
+    frame['intent_hash'] = r4_submit_intent_hash(frame)
+    with pytest.raises(CoreError, match='VALIDATION_ERROR'):
+        encode_r4_frame(frame)
 
 
 def test_r4_steer_receipt_requires_matching_core_semantic_and_turn_target():

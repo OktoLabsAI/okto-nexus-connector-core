@@ -104,6 +104,9 @@ def _validate(frame: dict[str, Any]) -> None:
     except ValidationError as exc:
         raise CoreError("VALIDATION_ERROR", "r4_schema", retry_safe=True) from exc
     if frame["type"] == "operation.submit":
+        if (frame['action'] == 'turn.submit' and frame['payload'].get('literal') is True
+                and (frame.get('expected_turn_id') is not None or 'delivery_id' in frame['payload'])):
+            raise CoreError('VALIDATION_ERROR', 'r4_literal_input', retry_safe=True)
         if frame['action'] == 'runtime.open':
             from .native.registry import adapter_specs
             if frame['payload']['adapter_id'] not in {spec.adapter_id for spec in adapter_specs()}:

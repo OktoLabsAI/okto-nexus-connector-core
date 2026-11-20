@@ -19,6 +19,7 @@ from .models import (
 from .decision_bridge_r4 import native_decision_semantic, r4_native_decision_operation
 from .open_operation import open_operation_semantic
 from .protocol import canonical_json, intent_hash
+from .turn_operation import r4_turn_operation, turn_operation_semantic
 
 
 def project_r4_open_receipt(
@@ -65,7 +66,7 @@ def project_r4_turn_receipt(
     """Prove the Core turn semantic before producing a closed R4 receipt.
 
     The R4 delivery_id is admission metadata and is covered by the R4 hash;
-    Core's native turn semantic is the text and optional expected turn ID.
+    Core's native turn semantic binds the text, literal intent and optional target.
     The host remains responsible for admission, lease, source connection and
     monotonic receipt revision. This function grants no effect authority.
     """
@@ -146,16 +147,15 @@ def _project_r4_receipt(
     frame = _checked_submit(
         submit_frame, core_receipt, context,
         receipt_revision=receipt_revision, action=action)
-    payload_key = ("text" if action in {"turn.submit", "turn.steer"}
-                   else "reason")
-    semantic = Operation(
-        frame["operation_id"], frame["session_id"], action,
-        {payload_key: frame["payload"][payload_key]},
-        frame.get("expected_turn_id"),
-    )
-    if action == "runtime.close":
+    if action == "turn.submit":
+        semantic = turn_operation_semantic(r4_turn_operation(frame))
+    elif action == "runtime.close":
         from .close_operation import close_operation_semantic, r4_close_operation
         semantic = close_operation_semantic(r4_close_operation(frame))
+    else:
+        payload_key = "text" if action == "turn.steer" else "reason"
+        semantic = Operation(frame["operation_id"], frame["session_id"], action,
+                             {payload_key: frame["payload"][payload_key]}, frame.get("expected_turn_id"))
     if core_receipt.intent_hash != intent_hash(semantic, context):
         raise CoreError("OPERATION_CONFLICT", "r4_receipt_projection",
                         possible_effect=True,

@@ -12,6 +12,7 @@ from .session_release import SESSION_RELEASE_REVISION, decode_session_release
 from .startup_refusal_link import STARTUP_REFUSAL_REVISION, decode_startup_refusal
 from .event_artifacts import EVENT_ARTIFACT_REVISION, decode_event_artifact
 from .targeted_control_link import TARGETED_CONTROL_CODECS
+from .turn_operation import PI_LITERAL_INPUT_REVISION
 from .presentation_link import (
     PI_PRESENTATION_LINK_REVISION, PRESENTATION_LINK_REVISION, decode_pi_presentation_frame, decode_presentation_frame,
 )
@@ -66,4 +67,9 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
         if isinstance(capabilities, (str, bytes)) or CAPACITY_CONTRACT_REVISION not in capabilities:
             raise CoreError('CAPACITY_PROTOCOL_UNSUPPORTED', 'control_negotiation')
         return decode_capacity_frame(raw)
-    return decode_r4_frame(raw)
+    frame = decode_r4_frame(raw)
+    if (frame['type'] == 'operation.submit' and frame['action'] == 'turn.submit'
+            and frame['payload'].get('literal') is True
+            and (isinstance(capabilities, (str, bytes)) or PI_LITERAL_INPUT_REVISION not in capabilities)):
+        raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+    return frame

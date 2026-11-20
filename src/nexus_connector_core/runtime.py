@@ -25,7 +25,7 @@ from .models import (
     CloseOperation, CodexRolloutEvidence, ControlOperation, CoreError, DiscoveryRequest, EventCursor,
     EffectNotSent, EffectRejected, ExecutionContext, InstallationCandidate, Inventory, LaunchIntent,
     OpenOperation, Operation, OperationKey, OperationReceipt, NativeApprovalOperation,
-    PreparedLaunch, OperationCapacityDeferred,
+    PreparedLaunch, OperationCapacityDeferred, OperationNotAdmitted,
     ReconcileReport, ReconcileRequest, RuntimeEvent, RuntimeSnapshot,
     SessionKey, ShutdownPolicy, ShutdownReport, TurnOperation,
     StorageStatus, SessionClaimPage, SessionLeaseState, ProcessBirthRecord, ProcessBirthEvidence,
@@ -35,6 +35,7 @@ from .models import (
 from .profiles import prepare_launch, verify_prepared
 from .identifiers import is_codex_thread_id, validate_external_id
 from .open_operation import open_operation_semantic
+from .turn_operation import turn_operation_semantic
 from .protocol import intent_hash
 from .protocol import canonical_json
 from .ports import Journal, Clock, OwnedSlotLedger
@@ -766,16 +767,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                      context: ExecutionContext) -> OperationReceipt:
         self._external_operation_id(operation.operation_id)
         self._external_session_id(operation.session_id, "submit")
-        if (type(operation.literal) is not bool or not operation.text
-                or len(operation.text.encode("utf-8")) > 1024 * 1024):
-            raise CoreError("VALIDATION_ERROR", "submit")
-        payload = {"text": operation.text}
-        if operation.literal:
-            payload["literal"] = True
-        semantic = Operation(operation.operation_id, operation.session_id,
-                             "turn.submit", payload,
-                             operation.expected_turn_id)
-        return await self._send(semantic, context, "send_turn", payload)
+        semantic = turn_operation_semantic(operation)
+        return await self._send(semantic, context, "send_turn", semantic.payload)
 
     async def control(self, operation: ControlOperation,
                       context: ExecutionContext) -> OperationReceipt:
@@ -1069,7 +1062,9 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                 from .native.runtime_bridge import CopiedAdapterSession
                 if (not isinstance(binding.native, CopiedAdapterSession)
                         or not binding.native.supports_literal_text):
-                    raise CoreError("CAPABILITY_UNSUPPORTED", "submit", retry_safe=True)
+                    raise OperationNotAdmitted(OperationReceipt(
+                        semantic.operation_id, intent_hash(semantic, context), "FAILED", False, True,
+                        semantic.session_id, error_code="CAPABILITY_UNSUPPORTED"))
 
             capacity_key = None
             effect_entered = False
