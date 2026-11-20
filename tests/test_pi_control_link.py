@@ -3,7 +3,7 @@ import pytest
 from nexus_connector_core import CoreError, decode_control_frame, r4_submit_intent_hash
 from nexus_connector_core.pi_control_link import PI_RUN_CONTROL_REVISION, encode_pi_run_control
 from nexus_connector_core.protocol import canonical_json
-from nexus_connector_core.targeted_control_link import CLAUDE_OPERATION_STEER_CODEC
+from nexus_connector_core.targeted_control_link import CLAUDE_OPERATION_INTERRUPT_CODEC, CLAUDE_OPERATION_STEER_CODEC
 from test_r4_receipt_bridge import _frame
 
 
@@ -42,16 +42,21 @@ def test_pi_control_cannot_wrap_a_new_turn_or_combine_two_targets(source):
         encode_pi_run_control(source, RUN)
 
 
-def test_claude_compound_control_carries_a_distinct_operation_and_requires_its_revision():
-    codec = CLAUDE_OPERATION_STEER_CODEC
-    source = operation('turn.steer', {'text': 'Replace the reviewed turn'})
+@pytest.mark.parametrize('codec,other,action,payload', [
+    (CLAUDE_OPERATION_STEER_CODEC, CLAUDE_OPERATION_INTERRUPT_CODEC,
+     'turn.steer', {'text': 'Replace the reviewed turn'}),
+    (CLAUDE_OPERATION_INTERRUPT_CODEC, CLAUDE_OPERATION_STEER_CODEC,
+     'turn.interrupt', {'reason': 'Interrupt the reviewed turn'}),
+])
+def test_claude_control_carries_a_distinct_operation_and_requires_its_revision(codec, other, action, payload):
+    source = operation(action, payload)
     raw = codec.encode(source, 'active-operation')
     with pytest.raises(CoreError, match='VERSION_INCOMPATIBLE'):
-        decode_control_frame(raw, capabilities=(PI_RUN_CONTROL_REVISION,))
+        decode_control_frame(raw, capabilities=(PI_RUN_CONTROL_REVISION, other.revision))
     decoded = decode_control_frame(raw, capabilities=(codec.revision,))
     assert decoded['expected_claude_operation_id'] == 'active-operation' and decoded['operation'] == source
     for invalid in (source['operation_id'], '', 'core.internal.absent', 'bad\nref', 'x' * 161):
         with pytest.raises(CoreError, match='VALIDATION_ERROR'):
             codec.encode(source, invalid)
     with pytest.raises(CoreError, match='VALIDATION_ERROR'):
-        codec.encode(operation('turn.interrupt', {'reason': 'Interrupted alone'}), 'active-operation')
+        other.encode(source, 'active-operation')

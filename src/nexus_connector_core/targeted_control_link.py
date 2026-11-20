@@ -67,5 +67,8 @@ PI_RUN_CONTROL_CODEC = TargetedControlCodec(
 CLAUDE_OPERATION_STEER_CODEC = TargetedControlCodec(
     'nexus-claude-operation-steer-v1', 'claude.operation.steer', 'expected_claude_operation_id',
     ('turn.steer',), _valid_claude_target, 'claude_operation_steer')
+CLAUDE_OPERATION_INTERRUPT_CODEC = TargetedControlCodec(
+    'nexus-claude-operation-interrupt-v1', 'claude.operation.interrupt', 'expected_claude_operation_id',
+    ('turn.interrupt',), _valid_claude_target, 'claude_operation_interrupt')
 
-TARGETED_CONTROL_CODECS = (PI_RUN_CONTROL_CODEC, CLAUDE_OPERATION_STEER_CODEC)
+TARGETED_CONTROL_CODECS = (PI_RUN_CONTROL_CODEC, CLAUDE_OPERATION_STEER_CODEC, CLAUDE_OPERATION_INTERRUPT_CODEC)

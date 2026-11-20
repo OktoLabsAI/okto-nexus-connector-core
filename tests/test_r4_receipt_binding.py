@@ -116,6 +116,7 @@ def test_binding_recovery_matches_live_projection_for_all_actions(action):
     ('turn.steer', 'text', 'expected_pi_run_id', 'prun_' + '1' * 32, 'prun_' + '2' * 32, 'invalid'),
     ('turn.interrupt', 'reason', 'expected_pi_run_id', 'prun_' + '1' * 32, 'prun_' + '2' * 32, 'invalid'),
     ('turn.steer', 'text', 'expected_claude_operation_id', 'private-claude-original', 'some-other-turn', 'x' * 161),
+    ('turn.interrupt', 'reason', 'expected_claude_operation_id', 'private-claude-original', 'some-other-turn', 'x' * 161),
 ])
 def test_control_receipt_binding_keeps_the_private_run_across_restart(action, argument, target_key, target, other_target, invalid):
     frame = _frame() | {'action': action, 'payload': {argument: 'PRIVATE_TEXT'}}
