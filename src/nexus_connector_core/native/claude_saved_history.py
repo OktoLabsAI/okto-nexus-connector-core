@@ -64,6 +64,7 @@ def observe_claude_saved_history(state_home: str, session_uuid: str, cwd: str, *
             prefix_size = before_close.byte_size
         digest = hashlib.sha256()
         dialogue = set()
+        pending_snapshot = None
         with file.open("rb") as stream:
             opened = file_version(os.fstat(stream.fileno()))
             if opened[:4] != original[:4]:
@@ -78,23 +79,38 @@ def observe_claude_saved_history(state_home: str, session_uuid: str, cwd: str, *
                 if not line.endswith(b"\n") or len(line) > _MAX_LINE_BYTES:
                     return None
                 record = strict_json(line.decode("utf-8"))
-                if type(record) is not dict or record.get("sessionId") != session_uuid:
+                if type(record) is not dict:
                     return None
                 if closing_metadata:
-                    if record.get("type") != "cost-state" or record.keys() != _COST_STATE_KEYS:
+                    if (record.get("sessionId") != session_uuid or record.get("type") != "cost-state"
+                            or record.keys() != _COST_STATE_KEYS):
                         return None
                 else:
                     kind = record.get("type")
+                    if "sessionId" not in record and kind == "file-history-snapshot":
+                        if pending_snapshot is not None:
+                            return None
+                        pending_snapshot = _empty_snapshot_message(record)
+                        if pending_snapshot is None:
+                            return None
+                        digest.update(line)
+                        continue
+                    if record.get("sessionId") != session_uuid:
+                        return None
                     native_cwd = record.get("cwd")
                     if (kind in ("user", "assistant") or "cwd" in record) and (
                             type(native_cwd) is not str or Path(native_cwd) != workspace):
                         return None
                     if kind in ("user", "assistant") and record.get("isSidechain") is False:
+                        if pending_snapshot is not None:
+                            if kind != "user" or record.get("uuid") != pending_snapshot:
+                                return None
+                            pending_snapshot = None
                         dialogue.add(kind)
                 digest.update(line)
             if file_version(os.fstat(stream.fileno())) != opened:
                 return None
-        if dialogue != {"user", "assistant"} or (
+        if pending_snapshot is not None or dialogue != {"user", "assistant"} or (
                 before_close is not None and size == prefix_size and digest.hexdigest() != before_close.sha256):
             return None
         for parent in file.parents:
@@ -107,6 +123,21 @@ def observe_claude_saved_history(state_home: str, session_uuid: str, cwd: str, *
                                   size, digest.hexdigest())
     except (OSError, ValueError, TypeError, RecursionError):
         return None
+
+
+def _empty_snapshot_message(record):
+    """Recognize the reviewed interactive build's empty, pre-message file snapshot."""
+    snapshot = record.get("snapshot")
+    message_id = claude_session_uuid(record.get("messageId"))
+    if (record.keys() != {"type", "messageId", "snapshot", "isSnapshotUpdate"}
+            or message_id is None or record["isSnapshotUpdate"] is not False or type(snapshot) is not dict
+            or snapshot.keys() != {"messageId", "trackedFileBackups", "timestamp"}
+            or snapshot["messageId"] != message_id or snapshot["trackedFileBackups"] != {}
+            or type(snapshot["timestamp"]) is not str
+            or not re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}\.[0-9]{3}Z",
+                                snapshot["timestamp"])):
+        return None
+    return message_id
 
 
 def claude_history_path(state_home, session_uuid, cwd):

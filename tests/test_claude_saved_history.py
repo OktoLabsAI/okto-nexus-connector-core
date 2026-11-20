@@ -7,7 +7,9 @@ from uuid import uuid4
 
 import pytest
 
-from nexus_connector_core.native.claude_saved_history import observe_claude_saved_history
+from nexus_connector_core.native.claude_saved_history import (
+    observe_claude_saved_history,
+)
 
 
 def _record(**fields):
@@ -47,6 +49,49 @@ def test_same_history_and_normal_close_metadata_can_both_be_proved(saved):
     assert closed.file_identity == prior.file_identity
     assert closed.sha256 == hashlib.sha256(path.read_bytes()).hexdigest()
     assert closed == observe_claude_saved_history(home, session_uuid, cwd)
+
+
+@pytest.mark.parametrize("change", [
+    None, "unlinked", "wrong-inner-id", "duplicate", "unbound-tail", "backup", "update", "foreign-session",
+])
+def test_interactive_snapshot_must_bind_to_the_exact_main_thread_prompt(saved, change):
+    home, session_uuid, cwd, path, contents = saved
+    message_id = str(uuid4())
+    prefix = {
+        "type": "file-history-snapshot",
+        "messageId": message_id,
+        "isSnapshotUpdate": False,
+        "snapshot": {"messageId": message_id, "trackedFileBackups": {}, "timestamp": "2026-11-20T12:34:56.789Z"},
+    }
+    user, assistant = (json.loads(line) for line in contents.splitlines())
+    user["uuid"] = str(uuid4()) if change == "unlinked" else message_id
+    if change == "wrong-inner-id":
+        prefix["snapshot"]["messageId"] = str(uuid4())
+    elif change == "backup":
+        prefix["snapshot"]["trackedFileBackups"] = {"fixture.txt": {"version": 1}}
+    elif change == "update":
+        prefix["isSnapshotUpdate"] = True
+    elif change == "foreign-session":
+        prefix["sessionId"] = str(uuid4())
+    snapshot = _record(**prefix)
+    contents = _record(**user) + _record(**assistant)
+    if change == "duplicate":
+        contents = snapshot + snapshot + contents
+    elif change == "unbound-tail":
+        contents += snapshot
+    else:
+        contents = snapshot + contents
+    path.write_bytes(contents)
+
+    prior = observe_claude_saved_history(home, session_uuid, cwd)
+    if change is not None:
+        assert prior is None
+        return
+    assert prior.sha256 == hashlib.sha256(contents).hexdigest()
+    path.write_bytes(contents + _usage(session_uuid))
+    assert observe_claude_saved_history(home, session_uuid, cwd, before_close=prior) is not None
+    path.write_bytes(contents + snapshot)
+    assert observe_claude_saved_history(home, session_uuid, cwd, before_close=prior) is None
 
 
 @pytest.mark.parametrize("change", ["modified-prefix", "different-inode", "new-turn", "foreign-cost", "unfinished"])
