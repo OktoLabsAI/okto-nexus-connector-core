@@ -170,6 +170,48 @@ def test_codex_resume_rejects_invalid_id_or_start_only_overrides_before_spawn():
     assert incompatible._transport is None
 
 
+def test_codex_resume_does_not_fall_back_to_fork_or_create_thread(tmp_path):
+    peer = tmp_path / "fork_only_peer.py"
+    peer.write_text("""
+import json
+import sys
+
+for line in sys.stdin:
+    request = json.loads(line)
+    method = request["method"]
+    with open("methods.txt", "a", encoding="utf-8") as trace:
+        trace.write(method + "\\n")
+    if method == "initialized":
+        continue
+    reply = {"id": request["id"]}
+    if method == "initialize":
+        reply["result"] = {"userAgent": "nexus_connector_core/0.157.0"}
+    elif method == "account/read":
+        reply["result"] = {"requiresOpenaiAuth": False, "account": None}
+    elif method == "thread/resume":
+        assert request["params"]["threadId"] == "original-thread"
+        reply["error"] = {"code": -32601, "message": "Exact resume is unavailable"}
+    elif method in ("thread/fork", "thread/start"):
+        reply["result"] = {"thread": {"id": "different-thread", "status": {"type": "idle"}}}
+    print(json.dumps(reply), flush=True)
+""", encoding="utf-8")
+    connector = CodexAppServerConnector(command=(sys.executable, str(peer)), cwd=str(tmp_path),
+                                        handshake_timeout_s=5, require_authentication=False)
+    try:
+        with pytest.raises(NativeAdapterError) as denied:
+            connector.start(owning_agent_id="agent", resume_thread_id="original-thread")
+        assert denied.value.details["method"] == "thread/resume"
+        assert denied.value.details["codex_error"]["code"] == -32601
+        assert not connector._sessions_by_id
+        process = connector._transport._proc
+    finally:
+        connector.close()
+    assert process.poll() is not None
+    assert (tmp_path / "methods.txt").read_text(encoding="utf-8").splitlines() == [
+        "initialize", "initialized", "account/read", "thread/resume",
+    ]
+
+
 def test_concurrent_metadata_readers_share_the_native_call_when_one_disconnects():
     async def run():
         loop = asyncio.get_running_loop()
