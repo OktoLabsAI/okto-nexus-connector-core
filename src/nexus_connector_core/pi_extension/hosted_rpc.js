@@ -5,6 +5,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { startHostedRenderer } from "./hosted_renderer.js";
 import { fenceHostedRpcSteer } from "./hosted_steer.js";
+import { fenceHostedRpcLiteral } from "./hosted_literal.js";
 import { observeHostedPiChat } from "./hosted_chat.js";
 
 // These files define the version-specific handoff between Pi's own CLI and RPC.
@@ -35,23 +36,6 @@ export async function runOwnedRpc(runtime) {
   handoff = undefined;
   if (!next) throw new Error("Pi RPC owner handoff is unavailable");
   return next(runtime);
-}
-
-export function fenceHostedRpcLiteral(session) {
-  const prompt = session.prompt.bind(session);
-  session.prompt = async (message, options) => {
-    if (typeof message === "string") return prompt(message, options);
-    if (!message || options?.source !== "rpc" || message.kind !== "nexus_hosted_literal" ||
-        Object.keys(message).length !== 2 || typeof message.text !== "string" || !message.text ||
-        options.images !== undefined || options.streamingBehavior !== undefined) {
-      throw new Error("Literal Pi input is malformed.");
-    }
-    if (session.isStreaming || session.isCompacting || session._isEmittingAgentSettled ||
-        session._extensionRunner.hasHandlers("input")) {
-      throw new Error("Literal Pi input is unavailable.");
-    }
-    return prompt(message.text, { ...options, expandPromptTemplates: false });
-  };
 }
 
 /** Run Pi's canonical settings, auth, resource loader and RPC on one owner. */
