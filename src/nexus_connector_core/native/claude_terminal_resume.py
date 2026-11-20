@@ -86,6 +86,7 @@ async def open_saved_claude_terminal(
     process_birth_recorder, revalidate_launch, verify_content, resources,
 ):
     from .process.windows_terminal import OwnedWindowsTerminal
+    from .claude_terminal_reader import ClaudeTerminalText
 
     history = grant.history
     # No home guessing, implicit migration or re-use of a stale target.
@@ -148,7 +149,8 @@ async def open_saved_claude_terminal(
             verify_content()
             revalidate()
             return OwnedWindowsTerminal(argv, cwd=prepared.cwd, env=child_env,
-                                       container_id=identity.container_id, birth_observer=record_birth)
+                                       container_id=identity.container_id, birth_observer=record_birth,
+                                       output_projection=ClaudeTerminalText(redactor))
 
         default_keys = partial(has_default_claude_interrupt_key, history)
         allow_interrupt = default_keys if await asyncio.to_thread(default_keys) else None

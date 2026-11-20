@@ -7,7 +7,7 @@ import threading
 from collections import deque
 from contextlib import ExitStack
 from ctypes import wintypes as w
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 
 from ...models import CoreError
 from .birth import record_owned_process_birth, snapshot_owned_process_birth
@@ -38,30 +38,52 @@ def _console_api():
 class TerminalFrame:
     sequence: int
     data: bytes
+    discarded_prefix: bool = False
 
 
 class _OutputReplay:
-    def __init__(self):
+    def __init__(self, projection=None):
         self._available = threading.Condition()
+        self._projection = projection
         self._frames = deque()
         self._sequence = 0
         self._bytes = 0
         self._ended = False
         self._failed = False
 
-    def append(self, data):
-        with self._available:
+    def _append(self, frames):
+        for data in frames:
             self._sequence += 1
             self._frames.append(TerminalFrame(self._sequence, data))
             self._bytes += len(data)
             while self._bytes > _REPLAY_BYTES:
                 self._bytes -= len(self._frames.popleft().data)
+
+    def _project(self, method, *args):
+        try:
+            self._append(method(*args))
+        except CoreError:
+            # Keep draining the owner even when safe presentation is unavailable.
+            self._failed = True
+            self._frames.clear()
+            self._bytes = 0
+
+    def append(self, data):
+        with self._available:
+            if self._failed:
+                return
+            if self._projection is None:
+                self._append((data,))
+            else:
+                self._project(self._projection.feed, data)
             self._available.notify_all()
 
     def end(self, *, failed):
         with self._available:
+            if self._projection is not None and not failed and not self._failed:
+                self._project(self._projection.release_idle)
             self._ended = True
-            self._failed = failed
+            self._failed = self._failed or failed
             self._available.notify_all()
 
     def read(self, after_sequence, timeout):
@@ -72,10 +94,20 @@ class _OutputReplay:
         with self._available:
             if after_sequence > self._sequence:
                 raise CoreError("SESSION_CONFLICT", _STAGE)
-            if not self._available.wait_for(lambda: self._sequence > after_sequence or self._ended, timeout):
-                raise TimeoutError("The terminal has not produced more output.")
+            if not self._available.wait_for(
+                    lambda: self._sequence > after_sequence or self._ended or self._failed, timeout):
+                if self._projection is not None:
+                    self._project(self._projection.release_idle)
+                    self._available.notify_all()
+                if self._sequence == after_sequence and not self._failed:
+                    raise TimeoutError("The terminal has not produced more output.")
+            if self._failed and not self._frames:
+                raise CoreError("NATIVE_UNAVAILABLE", _STAGE)
             offset = after_sequence - (self._sequence - len(self._frames))
             if offset < 0:
+                # Only complete, projected frames can be opened after retention.
+                if after_sequence == 0 and self._projection is not None and self._frames:
+                    return replace(self._frames[0], discarded_prefix=True)
                 raise CoreError("SESSION_CONFLICT", "owned_terminal_cursor_expired")
             if offset < len(self._frames):
                 return self._frames[offset]
@@ -91,7 +123,8 @@ class OwnedWindowsTerminal:
     viewer uses `read_output` with its own cursor and has no lifecycle effect.
     """
 
-    def __init__(self, argv, *, cwd, env, columns=110, rows=28, container_id=None, birth_observer=None):
+    def __init__(self, argv, *, cwd, env, columns=110, rows=28, container_id=None, birth_observer=None,
+                 output_projection=None):
         if os.name != "nt":
             raise CoreError("CAPABILITY_UNSUPPORTED", _STAGE)
         if (not isinstance(argv, (list, tuple)) or not argv
@@ -105,7 +138,7 @@ class OwnedWindowsTerminal:
             raise ValueError("Invalid owned terminal launch.")
         import msvcrt
 
-        self._output = _OutputReplay()
+        self._output = _OutputReplay(output_projection)
         self._closing = threading.Event()
         self._close_lock = threading.Lock()
         self._write_lock = threading.Lock()

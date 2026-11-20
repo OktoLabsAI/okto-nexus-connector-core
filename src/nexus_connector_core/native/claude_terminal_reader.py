@@ -1,4 +1,4 @@
-"""An independent, read-only text view of an existing Claude pseudoconsole."""
+"""Project a Claude pseudoconsole into safe text before retaining its output."""
 
 import asyncio
 import codecs
@@ -6,6 +6,8 @@ import codecs
 from ..models import CoreError
 
 _LIMIT = 16 * 1024
+_FRAME_CHARACTERS = 2048  # At most 8192 UTF-8 bytes, including at a replay boundary.
+_DISCARDED = b"[Earlier Claude terminal output is no longer available.]\r\n"
 
 
 class _TerminalText:
@@ -46,32 +48,43 @@ class _TerminalText:
         return "".join(result)
 
 
-class ClaudeTerminalReader:
-    def __init__(self, terminal, redactor):
-        self._read = terminal.read_output
+class ClaudeTerminalText:
+    """Maintain one filter from the start of the owner, independent of readers."""
+
+    def __init__(self, redactor):
         self._redactor = redactor
-        self._cursor = 0
         self._decoder = codecs.getincrementaldecoder("utf-8")(errors="replace")
         self._text = _TerminalText()
         self._pending = ""
-        self._idle_flushed = False
 
-    async def read_output(self):
-        """Read another chunk without writing to or disposing the owner."""
-        try:
-            frame = await asyncio.to_thread(self._read, self._cursor, timeout=0.25)
-        except TimeoutError:
-            if self._idle_flushed or not self._pending:
-                raise
-            self._idle_flushed = True
-            output, self._pending = self._redactor.release_text_tail(self._pending)
-            return output.encode("utf-8")
-        if frame is None:
-            return None
-        self._idle_flushed = False
-        self._cursor = frame.sequence
-        text = self._text.read(self._decoder.decode(frame.data))
+    @staticmethod
+    def _frames(text):
+        for start in range(0, len(text), _FRAME_CHARACTERS):
+            yield text[start:start + _FRAME_CHARACTERS].encode("utf-8")
+
+    def feed(self, data):
+        text = self._text.read(self._decoder.decode(data))
         output, self._pending = self._redactor._split(self._pending + text, final=False)
         if len(self._pending) > _LIMIT:
             raise CoreError("CAPACITY_EXCEEDED", "claude_terminal_read")
-        return output.encode("utf-8")
+        return self._frames(output)
+
+    def release_idle(self):
+        if not self._pending:
+            return ()
+        output, self._pending = self._redactor.release_text_tail(self._pending)
+        return self._frames(output)
+
+
+class ClaudeTerminalReader:
+    def __init__(self, terminal):
+        self._read = terminal.read_output
+        self._cursor = 0
+
+    async def read_output(self):
+        """Read another chunk without writing to or disposing the owner."""
+        frame = await asyncio.to_thread(self._read, self._cursor, timeout=0.25)
+        if frame is None:
+            return None
+        self._cursor = frame.sequence
+        return _DISCARDED + frame.data if frame.discarded_prefix else frame.data

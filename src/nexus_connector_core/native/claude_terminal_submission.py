@@ -206,7 +206,7 @@ class ClaudeTerminalSession:
     def open_terminal_reader(self):
         from .claude_terminal_reader import ClaudeTerminalReader
 
-        return ClaudeTerminalReader(self._terminal, self._redactor)
+        return ClaudeTerminalReader(self._terminal)
 
     async def send(self, _verb, _payload, _operation_id, *, expected_turn_id=None):
         raise EffectNotSent("This action is not available on the owned Claude terminal.")
