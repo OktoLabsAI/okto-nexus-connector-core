@@ -44,6 +44,7 @@ frozen port cleanly - reported instead of smoothed over, per instructions.
 
 from __future__ import annotations
 
+from ...models import CoreError
 from ..process import (spawn_owned_process, observe_owned_process,
                        record_owned_process_birth)
 from ..framing import FrameLimitExceeded, protocol_lines, stderr_chunks
@@ -391,11 +392,7 @@ class _CodexTransport:
             self._write_lock.release()
 
     def request(self, method: str, params: Mapping[str, Any], *, timeout_s: float) -> Any:
-        """Correlated handshake or read. Blocks on a single ``Queue.get(timeout=...)``,
-        never a poll loop. Forbidden for :meth:`send`-issued commands (D2's
-        "no correlated reply" contract) - see the module's mismatch note on
-        why the handshake still needs correlation.
-        """
+        """Wait for one correlated response to a handshake, read or qualified control."""
         request_id = self._allocate_id()
         reply_q: queue.Queue[Any] = queue.Queue(maxsize=1)
         with self._pending_lock:
@@ -636,6 +633,7 @@ class CodexAppServerConnector:
         handshake_timeout_s: float = 30.0,
         thread_start_overrides: Mapping[str, Any] | None = None,
         require_authentication: bool = True,
+        confirm_steer: bool = False,
     ) -> None:
         self.capabilities = HarnessCapabilities(
             send_only=False,
@@ -653,6 +651,7 @@ class CodexAppServerConnector:
         if type(require_authentication) is not bool:
             raise ValueError("require_authentication must be boolean")
         self._require_authentication_for_start = require_authentication
+        self._confirm_steer = confirm_steer
 
         self._transport: _CodexTransport | None = None
         self._startup_close_outcome = "unknown"
@@ -1000,6 +999,11 @@ class CodexAppServerConnector:
                     state.pending_start_id = request_id
         return self._transport.send_fire_and_forget(method, params, on_allocated=register)
 
+    @property
+    def confirms_steer_acceptance(self) -> bool:
+        return (self._confirm_steer
+                and self._compatibility_report.get("native_version") == "0.157.0")
+
     def _steer(self, state: _ThreadState, command: HarnessCommand) -> None:
         if (command.expected_turn_id is not None and
                 command.expected_turn_id != state.active_turn_id):
@@ -1011,12 +1015,23 @@ class CodexAppServerConnector:
                 "cannot steer: no active turn on this codex thread.",
                 {"session_id": state.session_id, "not_sent": True},
             )
+        target = command.expected_turn_id or state.active_turn_id
         params = {
             "threadId": state.thread_id,
-            "expectedTurnId": command.expected_turn_id or state.active_turn_id,
+            "expectedTurnId": target,
             "input": self._text_input(command),
         }
-        self._send_request(state, _METHOD_TURN_STEER, params)
+        if not self.confirms_steer_acceptance:
+            self._send_request(state, _METHOD_TURN_STEER, params)
+            return
+        # The response acknowledges delivery to this turn. Its transcript
+        # and eventual result remain associated with the original submit.
+        try:
+            result = self._transport.request(_METHOD_TURN_STEER, params, timeout_s=5.0)
+        except NativeAdapterError:
+            raise CoreError("OUTCOME_UNKNOWN", "native_send", possible_effect=True) from None
+        if not isinstance(result, dict) or result.get("turnId") != target:
+            raise CoreError("OUTCOME_UNKNOWN", "native_send", possible_effect=True)
 
     def _interrupt(self, state: _ThreadState, command: HarnessCommand | None = None) -> None:
         if (command is not None and command.expected_turn_id is not None and
@@ -1595,7 +1610,8 @@ class CodexAppServerConnector:
 #    about what the CALLER awaits, not about whether the wire ever sends
 #    one back. Codex answers every request it receives, including the
 #    fire-and-forget ones this connector issues for ``turn/start``,
-#    ``turn/steer`` and ``turn/interrupt``. A late ERROR response to one of
+#    ``turn/interrupt`` and steer on other builds. The qualified steer
+#    path waits for the exact target acknowledgement. A late ERROR response to one of
 #    those has no other producer in the protocol (no notification restates
 #    "your turn/start was rejected"), so this connector still correlates
 #    fire-and-forget request ids internally, purely to convert a late error

@@ -255,6 +255,12 @@ class CopiedAdapterSession:
 
         return isinstance(self._connector, PiRpcConnector) and self._connector.confirms_prompt_acceptance
 
+    @property
+    def confirms_steer_acceptance(self) -> bool:
+        from .adapters.codex import CodexAppServerConnector
+
+        return isinstance(self._connector, CodexAppServerConnector) and self._connector.confirms_steer_acceptance
+
     async def send(self, verb: str, payload: Mapping[str, str],
                    operation_id: str, *,
                    expected_turn_id: str | None = None) -> None:
@@ -1187,6 +1193,8 @@ class CopiedAdapterFactory:
                 overrides['model'] = explicit_model
             if overrides:
                 client_kwargs['thread_start_overrides'] = overrides
+            if recorded_build and candidate.version == "0.157.0":
+                client_kwargs["confirm_steer"] = True
             connector = load_adapter(spec.adapter_id)(command=command,
                                                       cwd=prepared.cwd, env=env,
                                                       **client_kwargs)

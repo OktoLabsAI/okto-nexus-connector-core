@@ -1130,6 +1130,10 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
                     from .native.runtime_bridge import CopiedAdapterSession
                     if isinstance(binding.native, CopiedAdapterSession) and binding.native.confirms_prompt_acceptance:
                         completion_stage = 'ACCEPTED'
+                if verb == 'steer' and binding.adapter_id == 'codex_app_server':
+                    from .native.runtime_bridge import CopiedAdapterSession
+                    if isinstance(binding.native, CopiedAdapterSession) and binding.native.confirms_steer_acceptance:
+                        completion_stage = 'SUCCEEDED'
                 return await self._kernel.execute(semantic, context, effect,
                     terminal_event_expected=terminal_expected, completion_stage=completion_stage)
             except BaseException as error:

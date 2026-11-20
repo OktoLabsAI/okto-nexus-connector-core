@@ -1710,6 +1710,72 @@ def test_pi_public_idless_steer_settles_active_turn(tmp_path):
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("response,qualified,stage", [
+    ("match", True, "SUCCEEDED"),
+    ("match", False, "SUBMITTED"),
+    ("mismatch", True, "OUTCOME_UNKNOWN"),
+    ("timeout", True, "OUTCOME_UNKNOWN"),
+])
+def test_codex_steer_receipt_requires_the_reviewed_turn_ack(tmp_path, response, qualified, stage):
+    peer = Path(__file__).parent / "fixtures" / "codex_app_server_peer.py"
+    log = tmp_path / "codex-log.jsonl"
+
+    class FixtureFactory:
+        async def open(self, prepared, session_id, authority, *, stream_epoch):
+            connector = CodexAppServerConnector(
+                command=(sys.executable, str(peer), str(log)),
+                cwd=str(tmp_path), env={"CODEX_STEER_RESPONSE": response},
+                handshake_timeout_s=5, confirm_steer=qualified)
+            native = await asyncio.to_thread(connector.start, owning_agent_id=authority.agent_id)
+            return CopiedAdapterSession(connector, native, session_id=session_id,
+                                        stream_epoch=stream_epoch, context=authority)
+
+    async def run():
+        adapter_id = "codex_app_server"
+        candidate = InstallationCandidate(
+            adapter_id, sys.executable, fingerprint(Path(sys.executable)), "explicit", "selected")
+        authority = replace(context(), allowed_actions=frozenset({
+            "runtime.open", "turn.submit", "turn.steer", "turn.interrupt"}))
+        journal = SQLiteJournal(tmp_path / "journal.db")
+        runtime = LocalRuntimeCore(
+            journal, FixtureFactory(), candidates={adapter_id: candidate}, workspace_roots={"ws": str(tmp_path)})
+
+        async def matching_event(native_type):
+            async for event in runtime.events(EventCursor("srv", "exe", "public-session", "epoch")):
+                if event.native_type == native_type:
+                    return event
+
+        try:
+            prepared = await runtime.prepare(LaunchIntent("agent", "ws", adapter_id), authority)
+            await runtime.open(OpenOperation("open", "public-session", "epoch", prepared), authority)
+            await runtime.submit(TurnOperation("turn", "public-session", "TRIGGER_HOLD"), authority)
+            started = await asyncio.wait_for(matching_event("turn/started"), timeout=5)
+            turn_id = started.payload["turn_id"]
+            command = ControlOperation("steer", "public-session", "steer", "new direction", turn_id)
+            if stage == "OUTCOME_UNKNOWN":
+                with pytest.raises(CoreError, match="OUTCOME_UNKNOWN"):
+                    await runtime.control(command, authority)
+            else:
+                await runtime.control(command, authority)
+            receipt = await journal.get_receipt(OperationKey("srv", "exe", "steer"))
+            assert receipt.stage == stage and receipt.possible_effect and not receipt.retry_safe
+            assert await runtime.control(command, authority) == receipt
+            operations = [json.loads(line) for line in log.read_text(encoding="utf-8").splitlines()]
+            steered, = [entry["params"] for entry in operations if entry.get("method") == "turn/steer"]
+            assert steered["expectedTurnId"] == turn_id
+            active = await journal.get_receipt(OperationKey("srv", "exe", "turn"))
+            assert active.stage in {"SUBMITTED", "ACCEPTED", "RUNNING"}
+            await runtime.control(ControlOperation(
+                "interrupt", "public-session", "interrupt", expected_turn_id=turn_id), authority)
+            terminal = await asyncio.wait_for(matching_event("turn/completed"), timeout=5)
+            assert terminal.operation_id == "turn"
+        finally:
+            await runtime.shutdown(ShutdownPolicy(0.1, 0.1))
+            journal.close()
+
+    asyncio.run(run())
+
+
 def test_pi_public_interrupt_settles_and_allows_follow_up_submit(tmp_path):
     peer = Path(__file__).parent / "fixtures" / "pi_rpc_peer.py"
 

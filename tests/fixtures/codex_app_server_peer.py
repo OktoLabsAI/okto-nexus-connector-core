@@ -187,7 +187,10 @@ def main():
             continue
 
         if method == "initialize":
-            write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"userAgent": "okto-nexus/0.156.1"}})
+            user_agent = "okto-nexus/0.156.1"
+            if os.environ.get("CODEX_STEER_RESPONSE"):
+                user_agent = params["clientInfo"]["name"] + "/0.157.0"
+            write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"userAgent": user_agent}})
         elif method == "account/read":
             write_msg({"id": req_id, "result": {"requiresOpenaiAuth": True, "account": {"type": "apiKey"}}})
         elif method == "thread/start":
@@ -203,7 +206,13 @@ def main():
             threading.Thread(target=handle_turn, args=(thread_id, turn_id, text, req_id), daemon=True).start()
         elif method == "turn/steer":
             log({"method": "turn/steer", "params": params})
-            write_msg({"jsonrpc": "2.0", "id": req_id, "result": {}})
+            response = os.environ.get("CODEX_STEER_RESPONSE")
+            if response == "timeout":
+                continue
+            result = {"turnId": params["expectedTurnId"]} if response == "match" else {}
+            if response == "mismatch":
+                result["turnId"] = "other-turn"
+            write_msg({"jsonrpc": "2.0", "id": req_id, "result": result})
         elif method == "turn/interrupt":
             log({"method": "turn/interrupt", "params": params})
             # RES-C2 fix: real capture (EV-CX-001-raw_capture_interrupt.jsonl,
