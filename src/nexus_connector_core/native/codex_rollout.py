@@ -21,11 +21,12 @@ CODEX_SAVED_HISTORY_BUILD = (
 
 
 def saved_launch_configuration(prepared: PreparedLaunch) -> dict[str, str]:
-    """Compare launch configuration while allowing a fresh session MCP grant."""
+    """Compare launch configuration while allowing a fresh session-scoped tool grant."""
     intent = prepared.intent
+    session_refs = ('mcp-cap:', 'native-cap:') if intent.adapter_id == 'pi_rpc' else ('mcp-cap:',)
     inputs = dict(adapter_id=intent.adapter_id, mode=intent.mode, model=intent.model, argv=list(prepared.argv),
         harness_settings=harness_settings_dict(intent.harness_settings), mcp_preset=list(intent.mcp_preset),
-        credential_refs=sorted(ref for ref in prepared.secret_refs if not ref.startswith('mcp-cap:')))
+        credential_refs=sorted(ref for ref in prepared.secret_refs if not ref.startswith(session_refs)))
     return dict(profile_fingerprint=prepared.profile_fingerprint, root_fingerprint=prepared.root_fingerprint,
                 resume_configuration_sha256=hashlib.sha256(canonical_json(inputs)).hexdigest())
 

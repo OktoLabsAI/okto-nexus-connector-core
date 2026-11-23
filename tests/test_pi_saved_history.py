@@ -123,3 +123,19 @@ def test_late_pi_history_reply_keeps_private_path_and_digest_out_of_events():
         event = next(events)
     assert event.kind == "error"
     assert event.payload == {"type": "response", "command": "nexus_pi_saved_context", "success": False}
+
+
+def test_pi_launch_comparison_retains_credentials_and_ignores_only_scoped_tool_grants(tmp_path):
+    from dataclasses import replace
+    from nexus_connector_core import InstallationCandidate, LaunchIntent, PreparedLaunch
+    from nexus_connector_core.native.codex_rollout import saved_launch_configuration
+
+    root = str(tmp_path)
+    candidate = InstallationCandidate('pi_rpc', 'node', 'fingerprint', 'explicit', 'selected')
+    prepared = PreparedLaunch(LaunchIntent('agent', 'workspace', 'pi_rpc'), candidate, ('node', 'cli.js'),
+        root, root, 'root', 'profile', ('vault:approved', 'native-cap:original'))
+    current = saved_launch_configuration(prepared)['resume_configuration_sha256']
+    successor = replace(prepared, secret_refs=('vault:approved', 'native-cap:successor'))
+    assert saved_launch_configuration(successor)['resume_configuration_sha256'] == current
+    drifted = replace(successor, secret_refs=('vault:other', 'native-cap:successor'))
+    assert saved_launch_configuration(drifted)['resume_configuration_sha256'] != current
