@@ -1374,6 +1374,63 @@ def test_factory_passes_only_preapproved_capability_env_to_adapter(monkeypatch, 
     asyncio.run(run())
 
 
+@pytest.mark.parametrize("explicit_approval_mode", [False, True])
+def test_saved_claude_keeps_tool_denial_under_a_broader_r4_lease(tmp_path, monkeypatch, explicit_approval_mode):
+    from nexus_connector_core import R4Authority
+    from nexus_connector_core.native import runtime_bridge
+    from nexus_connector_core.native.claude_saved_history import ClaudeSavedHistory
+    from nexus_connector_core.native.claude_terminal_resume import ClaudeTerminalResumeGrant
+
+    home = str(tmp_path)
+    candidate = InstallationCandidate("claude_stream", sys.executable, fingerprint(Path(sys.executable)),
+                                      "explicit", "selected", version="synthetic")
+    prepared = PreparedLaunch(LaunchIntent("agent", "ws", "claude_stream"), candidate,
+        (sys.executable,), home, home, _root_fingerprint(tmp_path), "profile", ())
+    native_uuid = "51131bb3-7843-4c0e-a09b-83ec580e7c75"
+    history = ClaudeSavedHistory(native_uuid, home, home, (1, 1), (1, 2), (1, 3), 100, "a" * 64)
+    authority = R4Authority("session", "workspace-binding", 1, 1, "grant", "lease", 1, "connection", "boot")
+    ctx = context()
+    ctx = replace(ctx, r4_authority=authority, allowed_actions=ctx.allowed_actions | {"approval.decide", "input.provide"})
+    opened = []
+
+    async def environment(_prepared):
+        return {"CLAUDE_CONFIG_DIR": home}
+
+    async def grant(_prepared, session_id, scope):
+        return ClaudeTerminalResumeGrant(history, session_id, scope.server_id, scope.executor_id, scope.binding_id,
+            scope.agent_id, scope.workspace_id, scope.session_owner_generation, scope.authorization_revision,
+            scope.configuration_revision, prepared.profile_fingerprint, prepared.root_fingerprint, lambda: None)
+
+    async def open_terminal(prepared, command, env, session_id, scope, stream_epoch, **options):
+        assert "--tools" not in command
+        assert options["grant"].question_only is False and options["grant"].read_approval is False
+        opened.append(options["grant"].history)
+        return options["grant"]
+
+    monkeypatch.setattr(runtime_bridge, "qualified_build", lambda *args, **kwargs: True)
+    monkeypatch.setattr(runtime_bridge, "require_reviewed_claude_terminal", lambda *args: None)
+    monkeypatch.setattr(runtime_bridge, "open_claude_terminal", open_terminal)
+    factory = CopiedAdapterFactory(environment, claude_resume=grant,
+        native_approvals_enabled=explicit_approval_mode, native_approvals_from_lease=True)
+
+    async def run():
+        try:
+            def launch():
+                return factory.open(prepared, "session", ctx, stream_epoch="epoch",
+                                    resume_claude_session_id=native_uuid)
+            if explicit_approval_mode:
+                with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
+                    await launch()
+                assert opened == []
+            else:
+                await launch()
+                assert opened == [history]
+        finally:
+            factory.close()
+
+    asyncio.run(run())
+
+
 def test_factory_pi_native_action_launch_is_scoped_and_adds_local_extension(monkeypatch, tmp_path):
     import nexus_connector_core.native.runtime_bridge as bridge_module
     import nexus_connector_core.native.adapters.pi as pi_module

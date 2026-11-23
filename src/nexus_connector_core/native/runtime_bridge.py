@@ -1160,10 +1160,13 @@ class CopiedAdapterFactory:
             if kind != "claude_code" or not native_approvals_enabled or (question_only and read_approval):
                 raise CoreError("BINDING_NOT_AUTHORIZED", "native_approval_launch", retry_safe=True)
             command = (*command, "--tools", "AskUserQuestion,Read" if read_approval else "AskUserQuestion")
+        # A Connector lease can authorize approval handling while the reviewed
+        # terminal profile keeps all tools denied. Only the exact profile passes
+        # tools to the terminal and an explicit approval configuration must match.
         if claude_grant is not None and (claude_grant.question_only != question_only
                                          or claude_grant.read_approval != read_approval
-                                         or (resume_claude_session_id is not None and
-                                             native_approvals_enabled != (question_only or read_approval))):
+                                         or (resume_claude_session_id is not None and self._native_approvals_enabled
+                                             and not (question_only or read_approval))):
             raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
         preset_bridge = environment.pi_mcp_bridge if isinstance(environment, ProcessHTTPEnvironment) else None
         preset_config = None
