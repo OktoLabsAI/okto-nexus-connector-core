@@ -500,6 +500,13 @@ class ClaudeCodeStreamConnector:
         finally:
             self._initialize_probe = None
 
+    def read_current_owned_saved_history(self, session: HarnessSession) -> ClaudeSavedHistory | None:
+        with self._state_lock:
+            session_uuid, operation_id = self._history_session_uuid, self._history_operation_id
+        if session_uuid is None or operation_id is None:
+            return None
+        return self.read_owned_saved_history(session, session_uuid, operation_id)
+
     def read_owned_saved_history(self, session: HarnessSession, session_uuid: str,
                                  operation_id: str) -> ClaudeSavedHistory | None:
         """Observe a settled, corroborated conversation from this exact stream."""

@@ -1642,6 +1642,20 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("SESSION_CONFLICT", stage)
         return observed
 
+    async def read_live_current_claude_saved_history(
+            self, scope: Mapping, target: NativeSessionTarget, *, connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, ClaudeSavedHistory] | None:
+        """Read only the latest corroborated dialogue of the exact live Claude owner."""
+        stage = "native_rollout_read"
+        if not isinstance(target, NativeSessionTarget) or target.adapter_id != "claude_stream":
+            raise CoreError("VALIDATION_ERROR", stage)
+        observed = await self._read_live_saved_history(scope, target, "read_current_owned_claude_history", (),
+            connection_id=connection_id, connection_generation=connection_generation)
+        if observed is not None and (type(observed[1]) is not ClaudeSavedHistory
+                                     or claude_session_uuid(observed[1].session_uuid) is None):
+            raise CoreError("SESSION_CONFLICT", stage)
+        return observed
+
     async def _read_live_saved_history(self, scope, target, reader_name, args, *,
                                        connection_id, connection_generation):
         stage = "native_rollout_read"

@@ -819,6 +819,15 @@ class CopiedAdapterSession:
             raise CoreError("SESSION_CONFLICT", stage)
         return await asyncio.to_thread(reader, self._session, session_uuid, operation_id)
 
+    async def read_current_owned_claude_history(self) -> ClaudeSavedHistory | None:
+        stage = "native_rollout_read"
+        reader = getattr(self._connector, "read_current_owned_saved_history", None)
+        if self._session.harness_kind != "claude_code" or not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        if self._close_started:
+            raise CoreError("SESSION_CONFLICT", stage)
+        return await asyncio.to_thread(reader, self._session)
+
     async def close(self) -> str:
         preset_error = None
         if self._preset_bridge is not None:

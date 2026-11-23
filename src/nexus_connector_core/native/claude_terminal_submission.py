@@ -226,6 +226,12 @@ class ClaudeTerminalSession:
 
         return ClaudeTerminalReader(self._terminal)
 
+    async def read_current_owned_claude_history(self):
+        claim = self._history_turn
+        if claim is None:
+            return None
+        return await self.read_owned_claude_history(*claim[:2])
+
     async def read_owned_claude_history(self, session_uuid, operation_id):
         claim = self._history_turn
         if self._closed or claim is None or claim[:2] != (session_uuid, operation_id):
@@ -240,7 +246,8 @@ class ClaudeTerminalSession:
             # A different snapshot during the terminal correlation is not retirement evidence.
             return current if self._observe_history() == current else None
 
-        return await asyncio.to_thread(observe)
+        evidence = await asyncio.to_thread(observe)
+        return evidence if not self._closed and self._history_turn is claim else None
 
     async def send(self, _verb, _payload, _operation_id, *, expected_turn_id=None):
         raise EffectNotSent("This action is not available on the owned Claude terminal.")

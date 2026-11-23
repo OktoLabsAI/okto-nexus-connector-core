@@ -114,6 +114,10 @@ class RuntimeCore(Protocol):
             self, scope: Mapping[str, Any], target: NativeSessionTarget, session_uuid: str, operation_id: str, *,
             connection_id: str, connection_generation: int,
     ) -> tuple[NativeSessionOwnerProof, ClaudeSavedHistory] | None: ...
+    async def read_live_current_claude_saved_history(
+            self, scope: Mapping[str, Any], target: NativeSessionTarget, *,
+            connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, ClaudeSavedHistory] | None: ...
     async def reconcile(self, request: ReconcileRequest) -> ReconcileReport: ...
     async def close(self, operation: CloseOperation,
                     context: ExecutionContext, *,
