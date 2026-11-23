@@ -97,12 +97,12 @@ from ..process import (spawn_owned_process, observe_owned_process,
                        record_owned_process_birth)
 from ..framing import (ByteFrameLimitExceeded, IncompleteByteFrame,
                        byte_protocol_lines, stderr_chunks)
-from ...models import ProcessBirthEvidence
+from ...models import CoreError, ProcessBirthEvidence
 from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
 
 from ..legacy_environment import child_environment
-from ..pi_saved_history import PiSavedHistory, observe_pi_saved_history
+from ..pi_saved_history import PiSavedHistory, PiSavedResumeGrant, observe_pi_saved_history, pi_saved_history_current
 from ..pi_renderer import PiRendererEndpoint
 from ...pi_extension_resource import PiNativeActionLaunch, pi_extension_path
 from .compatibility import pi_version_observation
@@ -735,6 +735,7 @@ class PiRpcConnector:
         command_timeout_s: float = 30.0,
         version_command: Sequence[str] | None = None,
         hosted_rpc: Path | None = None,
+        saved_resume: PiSavedResumeGrant | None = None,
     ) -> None:
         self.capabilities = HarnessCapabilities(
             send_only=False,
@@ -762,6 +763,9 @@ class PiRpcConnector:
             raise TypeError("native_action must be a trusted PiNativeActionLaunch")
         self._native_action = native_action
         self._hosted_rpc = hosted_rpc
+        if saved_resume is not None and (type(saved_resume) is not PiSavedResumeGrant or hosted_rpc is None):
+            raise CoreError("CAPABILITY_UNSUPPORTED", "pi_saved_resume", retry_safe=True)
+        self._saved_resume = saved_resume
         self._handshake_timeout_s = handshake_timeout_s
         self._command_timeout_s = command_timeout_s
 
@@ -894,7 +898,8 @@ class PiRpcConnector:
                     "instance per session.",
                     {},
                 )
-            session_id = new_harness_session_id()
+            resume = self._saved_resume
+            session_id = resume.history.session_id if resume is not None else new_harness_session_id()
             with self._session_lock:
                 self._session_id = session_id
                 self._owning_agent_id = owning_agent_id
@@ -939,6 +944,15 @@ class PiRpcConnector:
                 # ID-less serialized fallback limited to earlier observations.
                 transport._response_ids_required = (
                     compatibility.get("native_version") == "0.87.1")
+                if resume is not None:
+                    resume.require_current()
+                    home = (self._env or {}).get("PI_CODING_AGENT_DIR")
+                    if (not home or Path(home) != Path(resume.history.agent_dir)
+                            or Path(self._cwd) != Path(resume.history.workspace)
+                            or not pi_saved_history_current(resume.history)):
+                        raise CoreError("PROFILE_DRIFT", "pi_saved_resume", retry_safe=True)
+                    if launch_guard is not None:
+                        launch_guard("pi_saved_resume")
                 transport.start(process_birth_observer=getattr(self, "_process_birth_observer", None))
                 # Readiness requires a successful response in the documented
                 # object shape; a rejected command only proves pipe connectivity.
@@ -971,7 +985,7 @@ class PiRpcConnector:
                 self._closed_event.set()
                 raise
 
-        return HarnessSession(
+        harness_session = HarnessSession(
             session_id=session_id,
             harness_kind="pi",
             owning_agent_id=owning_agent_id,
@@ -981,6 +995,18 @@ class PiRpcConnector:
             metadata={"pi_session_id": session_id},
             compatibility_report=compatibility,
         )
+
+        if resume is not None:
+            try:
+                resume.require_current()
+                if self.read_current_owned_saved_history(harness_session) != resume.history:
+                    raise CoreError("PROFILE_DRIFT", "pi_saved_resume", possible_effect=True)
+                if launch_guard is not None:
+                    launch_guard("pi_saved_resume")
+            except BaseException:
+                self.close()
+                raise
+        return harness_session
 
     def send(self, session: HarnessSession, command: HarnessCommand) -> None:
         self._validate_session(session)
@@ -1071,7 +1097,9 @@ class PiRpcConnector:
     # Command translation
     # ------------------------------------------------------------------ #
     def _build_argv(self, pi_session_id: str) -> list[str]:
-        argv = list(self._command) + ["--session-id", pi_session_id]
+        target = (["--session", self._saved_resume.history.session_file] if self._saved_resume is not None
+                  else ["--session-id", pi_session_id])
+        argv = list(self._command) + target
         if self._hosted_rpc is not None:
             argv.insert(1, str(self._hosted_rpc))
         if self._provider:

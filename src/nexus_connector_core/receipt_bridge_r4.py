@@ -26,7 +26,7 @@ def project_r4_open_receipt(
     submit_frame: Mapping[str, Any], core_receipt: OperationReceipt,
     context: ExecutionContext, prepared: PreparedLaunch, *,
     stream_epoch: str, receipt_revision: int, resume_thread_id: str | None = None,
-    resume_claude_session_id: str | None = None,
+    resume_claude_session_id: str | None = None, resume_pi_session_id: str | None = None,
 ) -> dict[str, Any]:
     """Verify the selected local launch and Core open journal receipt."""
     frame = _checked_submit(
@@ -47,7 +47,7 @@ def project_r4_open_receipt(
     try:
         semantic = open_operation_semantic(OpenOperation(frame["operation_id"],
             frame["session_id"], stream_epoch, prepared, resume_thread_id=resume_thread_id,
-            resume_claude_session_id=resume_claude_session_id))
+            resume_claude_session_id=resume_claude_session_id, resume_pi_session_id=resume_pi_session_id))
     except CoreError as error:
         raise CoreError(error.code, "r4_receipt_projection", possible_effect=True,
                         operation_id=core_receipt.operation_id) from error

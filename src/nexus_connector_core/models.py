@@ -414,6 +414,7 @@ class OpenOperation:
     prepared: PreparedLaunch
     resume_thread_id: str | None = field(default=None, repr=False)
     resume_claude_session_id: str | None = field(default=None, repr=False)
+    resume_pi_session_id: str | None = field(default=None, repr=False)
 
 
 @dataclass(frozen=True, slots=True)

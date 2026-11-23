@@ -5,6 +5,7 @@ import hashlib
 from .identifiers import is_codex_thread_id
 from .models import CoreError, OpenOperation, Operation
 from .native.claude_history_identity import claude_session_uuid
+from .native.pi_saved_history import is_pi_saved_session_id
 
 
 def open_operation_semantic(operation: OpenOperation) -> Operation:
@@ -17,6 +18,13 @@ def open_operation_semantic(operation: OpenOperation) -> Operation:
     }
     thread_id = operation.resume_thread_id
     claude_id = operation.resume_claude_session_id
+    pi_id = operation.resume_pi_session_id
+    if pi_id is not None:
+        if thread_id is not None or claude_id is not None or not is_pi_saved_session_id(pi_id):
+            raise CoreError("VALIDATION_ERROR", "pi_saved_resume", retry_safe=True)
+        if prepared.intent.adapter_id != "pi_rpc" or prepared.intent.mode != "managed":
+            raise CoreError("CAPABILITY_UNSUPPORTED", "pi_saved_resume", retry_safe=True)
+        payload["resume_pi_session_sha256"] = hashlib.sha256(pi_id.encode("ascii")).hexdigest()
     if claude_id is not None:
         if thread_id is not None or claude_session_uuid(claude_id) is None:
             raise CoreError("VALIDATION_ERROR", "claude_resume", retry_safe=True)

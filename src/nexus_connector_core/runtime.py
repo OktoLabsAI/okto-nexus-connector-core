@@ -121,7 +121,7 @@ class NativeFactory(Protocol):
     Managed factories may declare ``opening_guard`` and the async
     ``process_birth_recorder`` callback. The latter must finish after spawn
     and before handshake, with the factory retaining containment on failure.
-    An explicit ``resume_thread_id`` or ``resume_claude_session_id`` parameter
+    An explicit native resume parameter
     advertises the corresponding exact saved resume.
     """
 
@@ -436,6 +436,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             self._factory_accepts_process_launch = "process_launch" in factory_parameters
             self._factory_accepts_codex_resume = "resume_thread_id" in factory_parameters
             self._factory_accepts_claude_resume = "resume_claude_session_id" in factory_parameters
+            self._factory_accepts_pi_resume = "resume_pi_session_id" in factory_parameters
         except (TypeError, ValueError, AttributeError):
             # Legacy seams (bare async functions) do not declare it.
             self._factory_accepts_opening_guard = False
@@ -443,6 +444,7 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             self._factory_accepts_process_launch = False
             self._factory_accepts_codex_resume = False
             self._factory_accepts_claude_resume = False
+            self._factory_accepts_pi_resume = False
         self._uncertain_opens: set[SessionKey] = set()
         self._uncertain_launches = {}
         self._launch_recovery_tasks = {}
@@ -528,6 +530,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("CAPABILITY_UNSUPPORTED", "codex_resume", retry_safe=True)
         if operation.resume_claude_session_id is not None and not self._factory_accepts_claude_resume:
             raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
+        if operation.resume_pi_session_id is not None and not self._factory_accepts_pi_resume:
+            raise CoreError("CAPABILITY_UNSUPPORTED", "pi_saved_resume", retry_safe=True)
         self._check_drain_admission('runtime.open')
         async with self._lock:
             if (self._shutting_down or session_key in self._sessions or
@@ -563,6 +567,8 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             open_kwargs["resume_thread_id"] = resume_thread_id
         if operation.resume_claude_session_id is not None:
             open_kwargs["resume_claude_session_id"] = operation.resume_claude_session_id
+        if operation.resume_pi_session_id is not None:
+            open_kwargs["resume_pi_session_id"] = operation.resume_pi_session_id
         if self._factory_accepts_opening_guard:
             open_kwargs["opening_guard"] = attempt.guard
         effect_started = False

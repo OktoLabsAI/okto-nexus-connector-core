@@ -1,11 +1,13 @@
 """Private proof of the reviewed hosted Pi session file and native leaf."""
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from hashlib import sha256
 import os
 from pathlib import Path
 import re
 
+from ..models import CoreError
 from ..protocol import strict_json
 from .saved_history_file import file_identity, file_version, plain_path
 
@@ -31,11 +33,49 @@ class PiSavedHistory:
     sha256: str
 
 
+def is_pi_saved_session_id(value: object) -> bool:
+    return type(value) is str and _SESSION_ID.fullmatch(value) is not None
+
+
+_PI_GRANT_SCOPE = ('server_id', 'executor_id', 'binding_id', 'agent_id', 'workspace_id',
+                   'session_owner_generation', 'authorization_revision', 'configuration_revision')
+
+
+@dataclass(frozen=True, slots=True)
+class PiSavedResumeGrant:
+    """Trusted local approval of one exact, retired Pi file for one successor."""
+
+    history: PiSavedHistory = field(repr=False)
+    session_id: str
+    server_id: str
+    executor_id: str
+    binding_id: str
+    agent_id: str
+    workspace_id: str
+    session_owner_generation: int
+    authorization_revision: int
+    configuration_revision: int
+    profile_fingerprint: str
+    root_fingerprint: str
+    require_current: Callable[[], None] = field(repr=False)
+
+
+def require_pi_saved_resume_grant(grant, native_id, prepared, session_id, context):
+    if (type(grant) is not PiSavedResumeGrant or type(grant.history) is not PiSavedHistory
+            or grant.history.session_id != native_id or not is_pi_saved_session_id(native_id)
+            or grant.session_id != session_id or grant.profile_fingerprint != prepared.profile_fingerprint
+            or grant.root_fingerprint != prepared.root_fingerprint
+            or Path(grant.history.workspace) != Path(prepared.cwd)
+            or not callable(grant.require_current)
+            or any(getattr(grant, key) != getattr(context, key) for key in _PI_GRANT_SCOPE)):
+        raise CoreError('BINDING_NOT_AUTHORIZED', 'pi_saved_resume', retry_safe=True)
+
+
 def observe_pi_saved_history(agent_dir: str, workspace: str, session_file: str, session_id: str,
                              leaf_id: str, entry_count: int) -> PiSavedHistory | None:
     """Read the exact flushed file and prove that reopening would select the same branch."""
     if (not all(type(arg) is str and arg for arg in (agent_dir, workspace, session_file, session_id, leaf_id))
-            or _SESSION_ID.fullmatch(session_id) is None or _ENTRY_ID.fullmatch(leaf_id) is None
+            or not is_pi_saved_session_id(session_id) or _ENTRY_ID.fullmatch(leaf_id) is None
             or type(entry_count) is not int or not 2 <= entry_count <= _MAX_ENTRIES):
         return None
     home, cwd, file = map(Path, (agent_dir, workspace, session_file))

@@ -161,7 +161,8 @@ class SavedContextCodec:
 
 CODEX_SAVED_CONTEXT = SavedContextCodec('codex_app_server', 'codex', 'savedop_')
 CLAUDE_SAVED_CONTEXT = SavedContextCodec('claude_stream', 'claude', 'savedclaudeop_', native_session_digest=True)
-SAVED_CONTEXT_CODECS = (CODEX_SAVED_CONTEXT, CLAUDE_SAVED_CONTEXT)
+PI_SAVED_CONTEXT = SavedContextCodec('pi_rpc', 'pi', 'savedpiop_', native_session_digest=True)
+SAVED_CONTEXT_CODECS = (CODEX_SAVED_CONTEXT, CLAUDE_SAVED_CONTEXT, PI_SAVED_CONTEXT)
 
 # Keep the existing Codex imports and its negotiated wire format stable.
 SAVED_CODEX_LINK_REVISION = CODEX_SAVED_CONTEXT.link_revision

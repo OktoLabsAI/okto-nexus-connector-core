@@ -24,7 +24,7 @@ from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
 from .adapters.compatibility import qualified_build, can_probe_protocol
 from .claude_chat_facts import CLAUDE_STREAM_CHAT_EVENT, valid_claude_stream_chat_fact
 from .claude_history_identity import CLAUDE_HISTORY_IDENTITY, project_claude_history
-from .pi_saved_history import PiSavedHistory
+from .pi_saved_history import PiSavedHistory, PiSavedResumeGrant, require_pi_saved_resume_grant
 from .claude_saved_history import ClaudeSavedHistory
 from .claude_terminal_resume import (
     ClaudeTerminalFreshGrant, ClaudeTerminalResumeGrant, open_claude_terminal, require_claude_fresh_grant,
@@ -929,6 +929,8 @@ class CopiedAdapterFactory:
                                         Awaitable[CodexResumeGrant | None]] | None = None,
                  claude_resume: Callable[[PreparedLaunch, str, ExecutionContext],
                                          Awaitable[ClaudeTerminalResumeGrant | None]] | None = None,
+                 pi_saved_resume: Callable[[PreparedLaunch, str, ExecutionContext, Mapping[str, str]],
+                                           Awaitable[PiSavedResumeGrant | None]] | None = None,
                  claude_fresh: Callable[[PreparedLaunch, str, ExecutionContext, Mapping[str, str]],
                                         Awaitable[ClaudeTerminalFreshGrant | None]] | None = None,
                  native_approvals_enabled: bool = False,
@@ -945,6 +947,7 @@ class CopiedAdapterFactory:
                                    if codex_client_info is not None else None)
         self._codex_resume = codex_resume
         self._claude_resume = claude_resume
+        self._pi_saved_resume = pi_saved_resume
         self._claude_fresh = claude_fresh
         self._native_approvals_enabled = native_approvals_enabled
         self._native_approvals_from_lease = native_approvals_from_lease
@@ -982,6 +985,7 @@ class CopiedAdapterFactory:
                    process_launch=None,
                    resume_thread_id: str | None = None,
                    resume_claude_session_id: str | None = None,
+                   resume_pi_session_id: str | None = None,
                    ) -> CopiedAdapterSession | ClaudeTerminalSession:
         resources = []
         try:
@@ -989,7 +993,8 @@ class CopiedAdapterFactory:
                                     opening_guard=opening_guard, resources=resources,
                                     process_birth_recorder=process_birth_recorder,
                                     process_launch=process_launch, resume_thread_id=resume_thread_id,
-                                    resume_claude_session_id=resume_claude_session_id)
+                                    resume_claude_session_id=resume_claude_session_id,
+                                    resume_pi_session_id=resume_pi_session_id)
         except BaseException:
             for resource in resources:
                 resource.close()
@@ -997,7 +1002,8 @@ class CopiedAdapterFactory:
 
     async def _open(self, prepared: PreparedLaunch, session_id: str,
                     context: ExecutionContext, *, stream_epoch: str, opening_guard, resources,
-                    process_birth_recorder=None, process_launch=None, resume_thread_id=None, resume_claude_session_id=None):
+                    process_birth_recorder=None, process_launch=None, resume_thread_id=None,
+                    resume_claude_session_id=None, resume_pi_session_id=None):
         spec = adapter_spec(prepared.intent.adapter_id)
         registered = registered_managed_contract(spec.adapter_id)
         if spec.mode != "managed":
@@ -1008,6 +1014,11 @@ class CopiedAdapterFactory:
             if spec.native_kind != "claude_code" or registered is not None or self._claude_resume is None:
                 raise CoreError("CAPABILITY_UNSUPPORTED", "claude_resume", retry_safe=True)
             require_reviewed_claude_terminal(prepared, process_launch, process_birth_recorder, opening_guard)
+        if resume_pi_session_id is not None and (
+                spec.native_kind != "pi" or registered is not None or not self._pi_hosted_rpc
+                or self._pi_saved_resume is None or process_launch is None or process_birth_recorder is None
+                or opening_guard is None):
+            raise CoreError("CAPABILITY_UNSUPPORTED", "pi_saved_resume", retry_safe=True)
         # PC11: refuse productive work before secrets/spawn when the host's
         # containment backend cannot honor its contract. Never a silent
         # fallback to bare kill(pid).
@@ -1252,6 +1263,11 @@ class CopiedAdapterFactory:
             if self._pi_hosted_rpc:
                 hosted["hosted_rpc"] = await asyncio.to_thread(qualify_pi_hosted_rpc, command, candidate)
                 _revalidate_launch("pi_hosted_rpc")
+            if resume_pi_session_id is not None:
+                pi_grant = await self._pi_saved_resume(prepared, session_id, context, environment)
+                require_pi_saved_resume_grant(pi_grant, resume_pi_session_id, prepared, session_id, context)
+                hosted["saved_resume"] = pi_grant
+                await _validate_frontier("pi_saved_resume")
             native_action = (await self._pi_native_action(prepared, session_id, context)
                              if self._pi_native_action is not None else None)
             await _validate_frontier('native_action')

@@ -7,7 +7,7 @@ from nexus_connector_core.control_codec import decode_control_frame
 from nexus_connector_core.models import CoreError
 from nexus_connector_core.protocol import canonical_json
 from nexus_connector_core.saved_context_link import (
-    CLAUDE_SAVED_CONTEXT, CODEX_SAVED_CONTEXT, saved_native_session_digest,
+    CLAUDE_SAVED_CONTEXT, CODEX_SAVED_CONTEXT, PI_SAVED_CONTEXT, saved_native_session_digest,
     MAX_SAVED_CODEX_FRAME_BYTES, SAVED_CODEX_LINK_REVISION, SAVED_CODEX_PROBE,
     SAVED_CODEX_OPEN_REVISION, decode_saved_codex_frame, encode_saved_codex_frame,
     encode_saved_codex_open, saved_codex_operation_id, saved_codex_result,
@@ -104,9 +104,12 @@ def test_saved_opening_hashes_the_origin_and_requires_the_negotiated_envelope(pr
             encode_saved_codex_open(opening, source_scope=tampered, source=old)
 
 
-def test_claude_requires_its_own_negotiation_and_exact_history_digest(probe):
-    codec = CLAUDE_SAVED_CONTEXT
-    digest = saved_native_session_digest('51131bb3-7843-4c0e-a09b-83ec580e7c75')
+@pytest.mark.parametrize('codec,native_id', [
+    (CLAUDE_SAVED_CONTEXT, '51131bb3-7843-4c0e-a09b-83ec580e7c75'),
+    (PI_SAVED_CONTEXT, 'hsess_51131bb378434c0ea09b83ec580e7c75'),
+])
+def test_saved_opening_requires_its_own_negotiation_and_exact_history_digest(probe, codec, native_id):
+    digest = saved_native_session_digest(native_id)
     probe = probe | {'contract_revision': codec.link_revision, 'type': codec.probe_type}
     with pytest.raises(CoreError, match='VALIDATION_ERROR'):
         codec.encode_probe(probe)
@@ -125,7 +128,7 @@ def test_claude_requires_its_own_negotiation_and_exact_history_digest(probe):
     target = source_scope | {'session_id': 'successor'}
     operation = dict(target, protocol_major=1, contract_revision=R4_PREVIEW_REVISION,
         type='operation.submit', action='runtime.open', connection_id='live', connection_generation=4,
-        grant_id='grant', payload=dict(adapter_id='claude_stream', candidate_ref='nexus-install-v1:' + 'a' * 64,
+        grant_id='grant', payload=dict(adapter_id=codec.adapter_id, candidate_ref='nexus-install-v1:' + 'a' * 64,
             inventory_revision='sha256:' + 'a' * 64, realization_ref='realization', realization_revision=1,
             profile_revision=1, mode='managed'))
     operation['intent_hash'] = r4_submit_intent_hash(operation)
