@@ -16,8 +16,7 @@ MAX_SAVED_CODEX_FRAME_BYTES = 4096
 _IDENTIFIERS = ('server_id', 'executor_id', 'connection_id', 'request_id')
 _CHANNEL = frozenset((*_IDENTIFIERS, 'connection_generation', 'contract_revision', 'type'))
 _SOURCE_IDS = ('source_connection_id', 'opening_operation_id', 'close_operation_id', 'stream_epoch')
-_SOURCE_DIGESTS = ('opening_binding_digest', 'close_binding_digest', 'resource_release_digest')
-_SOURCE = frozenset((*_SOURCE_IDS, *_SOURCE_DIGESTS, 'source_connection_generation'))
+_SOURCE = frozenset((*_SOURCE_IDS, 'resource_release_digest', 'source_connection_generation'))
 
 
 def _identifier(value):
@@ -51,7 +50,7 @@ def decode_saved_codex_frame(raw: bytes) -> dict:
             if (type(source) is not dict or source.keys() != _SOURCE
                     or any(scope[key] != frame[key] for key in ('server_id', 'executor_id'))
                     or not all(_identifier(source[key]) for key in _SOURCE_IDS)
-                    or not all(_digest(source[key]) for key in _SOURCE_DIGESTS)
+                    or not _digest(source['resource_release_digest'])
                     or source['opening_operation_id'] == source['close_operation_id']
                     or not _generation(source['source_connection_generation'])
                     or source['source_connection_generation'] > frame['connection_generation']

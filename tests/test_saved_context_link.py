@@ -24,8 +24,7 @@ def probe():
                   'binding_revision': 4, 'credential_epoch': 5},
         'source': {'opening_operation_id': 'opening', 'close_operation_id': 'close',
                    'stream_epoch': 'stream', 'source_connection_id': 'old',
-                   'source_connection_generation': 3, 'opening_binding_digest': 'sha256:' + 'a' * 64,
-                   'close_binding_digest': 'sha256:' + 'b' * 64,
+                   'source_connection_generation': 3,
                    'resource_release_digest': 'sha256:' + 'c' * 64},
     }
 
@@ -59,6 +58,7 @@ def test_probe_rejects_private_data_native_actions_and_cross_scope(probe):
         probe | {'scope': probe['scope'] | {'executor_id': 'other'}},
         probe | {'scope': probe['scope'] | {'session_owner_generation': True}},
         probe | {'source': probe['source'] | {'rollout_path': 'private'}},
+        probe | {'source': probe['source'] | {'opening_binding_digest': 'sha256:' + 'a' * 64}},
         probe | {'source': probe['source'] | {'source_connection_generation': 5}},
         probe | {'source': probe['source'] | {'source_connection_generation': 4}},
         probe | {'source': probe['source'] | {'close_operation_id': 'opening'}},
