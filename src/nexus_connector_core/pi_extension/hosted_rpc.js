@@ -81,7 +81,7 @@ export async function runOwnedRpc(runtime) {
 
 /** Run Pi's canonical settings, auth, resource loader and RPC on one owner. */
 export async function runHostedPiRpc(cli, args, observeOwner, options) {
-  if (process.platform !== "win32" || process.arch !== "x64" || process.version !== "v24.15.0") {
+  if (!["win32", "linux"].includes(process.platform) || process.arch !== "x64" || process.version !== "v24.15.0") {
     throw new Error("The Node build is outside the reviewed Pi host");
   }
   if (args[0] !== "--mode" || args[1] !== "rpc") {

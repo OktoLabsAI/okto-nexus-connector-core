@@ -116,6 +116,11 @@ QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
 }
 QUALIFIED_CONTROL_BUILD_IDENTITIES = set(QUALIFIED_BUILD_IDENTITIES)
 
+# SI-037: the reviewed Linux Pi build supports conversation and presentation.
+# Keep control qualification independent of the hosted renderer check.
+QUALIFIED_BUILD_IDENTITIES.add(("pi", "0.87.1", "linux", "x86_64",
+    "sha256:80f7f9c0350b08ad8ed9c2ef368c17309b69a9bbcb07fff199b4267a9e27e132"))
+
 # 2026-10-03 isolated real handshake, conversation and authenticated Nexus MCP
 # call. Controls and native approval replies were not exercised for this build.
 QUALIFIED_BUILDS.add(("claude_code", "2.1.288", "win32", "x86_64",

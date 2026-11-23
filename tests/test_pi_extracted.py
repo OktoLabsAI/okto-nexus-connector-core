@@ -16,6 +16,7 @@ from nexus_connector_core.native.adapter_types import (
     STATUS_RUNNING, HarnessCommand, HarnessSession, NativeAdapterError,
     RuntimeCommandNotSent, RuntimeCommandRejected,
 )
+from nexus_connector_core.native.adapters.compatibility import qualified_build
 from nexus_connector_core.native.adapters.pi import PiRpcConnector, _PiTransport
 
 
@@ -158,16 +159,28 @@ def test_hosted_pi_rejects_a_stock_peer_that_cannot_prove_the_owner(tmp_path):
         connector.close()
 
 
-def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch):
-    candidate = InstallationCandidate("pi_rpc", "node.exe", "pair", "explicit", "selected",
+@pytest.mark.parametrize(("platform", "node", "pi_build", "node_build", "controls"), [
+    ("win32", "node.exe",
+     "sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b",
+     "sha256:3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5", True),
+    ("linux", "node",
+     "sha256:80f7f9c0350b08ad8ed9c2ef368c17309b69a9bbcb07fff199b4267a9e27e132",
+     "sha256:d1de76d8edf2fededf6f8b30d244e2c0529ac607923a018283b77e9c74bd932c", False),
+])
+def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch, platform, node, pi_build,
+                                                              node_build, controls):
+    candidate = InstallationCandidate("pi_rpc", node, "pair", "explicit", "selected",
                                       version="0.87.1", architecture="x86_64",
                                       launch_script="selected-pi-entry.js",
-                                      build_identity=pi_extension_resource._HOSTED_PI_BUILD)
+                                      build_identity=pi_build)
     argv = (candidate.executable, candidate.launch_script, "--mode", "rpc")
-    monkeypatch.setattr(pi_extension_resource, "sys", SimpleNamespace(platform="win32"))
-    observed = Mock(return_value=pi_extension_resource._HOSTED_NODE_BUILD)
+    monkeypatch.setattr(pi_extension_resource, "sys", SimpleNamespace(platform=platform))
+    observed = Mock(return_value=node_build)
     monkeypatch.setattr(pi_extension_resource, "fingerprint", observed)
     qualify = pi_extension_resource.qualify_pi_hosted_rpc
+    proof = ("pi", candidate.version, platform, candidate.architecture, candidate.fingerprint)
+    assert qualified_build(*proof, build_identity=pi_build)
+    assert qualified_build(*proof, build_identity=pi_build, control=True) is controls
     assert qualify(argv, candidate).name == "hosted_rpc.js"
     observed.assert_called_once_with(Path(candidate.executable))
     observed.reset_mock()
@@ -175,6 +188,7 @@ def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch):
                               (argv, replace(candidate, build_identity=None)),
                               (argv, replace(candidate, build_identity="sha256:" + "a" * 64)),
                               (argv, replace(candidate, version="0.87.2")),
+                              (argv, replace(candidate, architecture="aarch64")),
                               (argv[:2] + ("--mode", "json"), candidate)):
         with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED") as refused:
             qualify(command, selected)
@@ -182,6 +196,9 @@ def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch):
         assert not refused.value.possible_effect
     observed.assert_not_called()
     observed.return_value = "sha256:different"
+    with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
+        qualify(argv, candidate)
+    monkeypatch.setattr(pi_extension_resource, "sys", SimpleNamespace(platform="darwin"))
     with pytest.raises(CoreError, match="CAPABILITY_UNSUPPORTED"):
         qualify(argv, candidate)
 
