@@ -115,8 +115,15 @@ def test_native_presenter_proof_rechecks_the_exact_opening_process_and_lease(tmp
 
             factory.native.read_owned_codex_rollout = snapshot_rollout
             assert await read_rollout() == (proof, rollout)
+
+            async def current_rollout():
+                return rollout
+
+            factory.native.read_current_owned_codex_rollout = current_rollout
+            assert await runtime.read_live_current_codex_rollout(req.scope, target, **channel) == (proof, rollout)
             factory.native.active_turn = lambda: True
             assert await read_rollout() is None and requested == ['exact-thread']
+            assert await runtime.read_live_current_codex_rollout(req.scope, target, **channel) is None
             factory.native.active_turn = lambda: False
 
             async def rollout_after_owner_changed(thread_id):

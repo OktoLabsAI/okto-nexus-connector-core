@@ -804,6 +804,12 @@ class CopiedAdapterSession:
         except NativeAdapterError:
             raise CoreError("NATIVE_UNAVAILABLE", stage) from None
 
+    async def read_current_owned_codex_rollout(self) -> CodexRolloutEvidence | None:
+        thread_id = self._session.metadata.get("thread_id")
+        if not is_codex_thread_id(thread_id):
+            return None
+        return await self.read_owned_codex_rollout(thread_id)
+
     async def read_owned_claude_history(self, session_uuid: str, operation_id: str) -> ClaudeSavedHistory | None:
         stage = "native_rollout_read"
         reader = getattr(self._connector, "read_owned_saved_history", None)

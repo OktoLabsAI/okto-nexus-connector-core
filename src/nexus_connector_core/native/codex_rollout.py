@@ -11,6 +11,10 @@ from .saved_history_file import file_identity as _identity, file_version as _fil
 
 _MAX_HEADER_BYTES = 1024 * 1024
 _CHUNK_BYTES = 1024 * 1024
+CODEX_SAVED_HISTORY_BUILD = (
+    "0.157.0", "win32", "x86_64",
+    "sha256:ed1c7b36e44536809c868864c833af8a857f56599a7a7fe23b908a1ba1093b1f",
+)
 
 
 def observe_rollout(state_home: str | None, path: str | None,

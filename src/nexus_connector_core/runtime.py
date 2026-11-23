@@ -1611,6 +1611,20 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             raise CoreError("SESSION_CONFLICT", stage)
         return observed
 
+    async def read_live_current_codex_rollout(
+            self, scope: Mapping, target: NativeSessionTarget, *, connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, CodexRolloutEvidence] | None:
+        """Read the exact owner's current thread for the trusted host, without a caller-supplied thread ID."""
+        stage = "native_rollout_read"
+        if not isinstance(target, NativeSessionTarget) or target.adapter_id != "codex_app_server":
+            raise CoreError("VALIDATION_ERROR", stage)
+        observed = await self._read_live_saved_history(scope, target, "read_current_owned_codex_rollout", (),
+            connection_id=connection_id, connection_generation=connection_generation)
+        if observed is not None and (type(observed[1]) is not CodexRolloutEvidence
+                                     or not is_codex_thread_id(observed[1].thread_id)):
+            raise CoreError("SESSION_CONFLICT", stage)
+        return observed
+
     async def read_live_claude_saved_history(
             self, scope: Mapping, target: NativeSessionTarget, session_uuid: str, operation_id: str, *,
             connection_id: str, connection_generation: int,
