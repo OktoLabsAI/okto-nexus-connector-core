@@ -9,7 +9,10 @@ from .models import CoreError
 from .protocol import strict_json
 from .lease_denial import LEASE_DENIAL_REVISION, decode_lease_denial
 from .session_release import SESSION_RELEASE_REVISION, decode_session_release
-from .saved_context_link import SAVED_CODEX_LINK_REVISION, decode_saved_codex_frame
+from .saved_context_link import (
+    SAVED_CODEX_LINK_REVISION, SAVED_CODEX_OPEN_REVISION, SAVED_CODEX_OPERATION_PREFIX,
+    decode_saved_codex_frame, decode_saved_codex_open,
+)
 from .startup_refusal_link import STARTUP_REFUSAL_REVISION, decode_startup_refusal
 from .event_artifacts import EVENT_ARTIFACT_REVISION, decode_event_artifact
 from .targeted_control_link import TARGETED_CONTROL_CODECS
@@ -65,6 +68,10 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
         if isinstance(capabilities, (str, bytes)) or SAVED_CODEX_LINK_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
         return decode_saved_codex_frame(raw)
+    if header.get('contract_revision') == SAVED_CODEX_OPEN_REVISION:
+        if isinstance(capabilities, (str, bytes)) or SAVED_CODEX_OPEN_REVISION not in capabilities:
+            raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
+        return decode_saved_codex_open(raw)
     if header.get('contract_revision') == STARTUP_REFUSAL_REVISION:
         if isinstance(capabilities, (str, bytes)) or STARTUP_REFUSAL_REVISION not in capabilities:
             raise CoreError('VERSION_INCOMPATIBLE', 'control_negotiation')
@@ -78,6 +85,8 @@ def decode_control_frame(raw: bytes, *, capabilities: Collection[str] = ()) -> d
             raise CoreError('CAPACITY_PROTOCOL_UNSUPPORTED', 'control_negotiation')
         return decode_capacity_frame(raw)
     frame = decode_r4_frame(raw)
+    if (frame['type'] == 'operation.submit' and frame['operation_id'].startswith(SAVED_CODEX_OPERATION_PREFIX)):
+        raise CoreError('VERSION_INCOMPATIBLE', 'saved_codex_open')
     if (frame['type'] == 'operation.submit' and frame['action'] == 'turn.submit'
             and frame['payload'].get('literal') is True
             and (isinstance(capabilities, (str, bytes)) or PI_LITERAL_INPUT_REVISION not in capabilities)):

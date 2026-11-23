@@ -2,12 +2,14 @@
 
 import pytest
 
+from nexus_connector_core import R4_PREVIEW_REVISION, decode_r4_frame, r4_submit_intent_hash
 from nexus_connector_core.control_codec import decode_control_frame
 from nexus_connector_core.models import CoreError
 from nexus_connector_core.protocol import canonical_json
 from nexus_connector_core.saved_context_link import (
     MAX_SAVED_CODEX_FRAME_BYTES, SAVED_CODEX_LINK_REVISION, SAVED_CODEX_PROBE,
-    decode_saved_codex_frame, encode_saved_codex_frame, saved_codex_result,
+    SAVED_CODEX_OPEN_REVISION, decode_saved_codex_frame, encode_saved_codex_frame,
+    encode_saved_codex_open, saved_codex_operation_id, saved_codex_result,
 )
 
 
@@ -73,3 +75,29 @@ def test_probe_rejects_private_data_native_actions_and_cross_scope(probe):
     with pytest.raises(CoreError) as oversized:
         decode_saved_codex_frame(b'x' * (MAX_SAVED_CODEX_FRAME_BYTES + 1))
     assert oversized.value.code == 'CAPACITY_EXCEEDED'
+
+
+def test_saved_opening_hashes_the_origin_and_requires_the_negotiated_envelope(probe):
+    source_scope, source = probe['scope'], probe['source']
+    scope = source_scope | {'session_id': 'successor', 'session_owner_generation': 1}
+    opening = dict(scope, protocol_major=1, contract_revision=R4_PREVIEW_REVISION,
+        type='operation.submit', action='runtime.open', connection_id='live', connection_generation=4,
+        grant_id='grant', payload=dict(adapter_id='codex_app_server', candidate_ref='nexus-install-v1:' + 'a' * 64,
+            inventory_revision='sha256:' + 'a' * 64, realization_ref='realization', realization_revision=1,
+            profile_revision=1, mode='managed'))
+    opening['intent_hash'] = r4_submit_intent_hash(opening)
+    opening['operation_id'] = saved_codex_operation_id(scope, opening['intent_hash'], source_scope, source)
+    raw = encode_saved_codex_open(opening, source_scope=source_scope, source=source)
+    with pytest.raises(CoreError, match='VERSION_INCOMPATIBLE'):
+        decode_control_frame(raw, capabilities=[SAVED_CODEX_LINK_REVISION])
+    with pytest.raises(CoreError, match='VERSION_INCOMPATIBLE'):
+        decode_control_frame(canonical_json(opening), capabilities=[SAVED_CODEX_OPEN_REVISION])
+    with pytest.raises(CoreError, match='VALIDATION_ERROR'):
+        decode_r4_frame(canonical_json(opening | {'saved_codex_resume': True}))
+    assert decode_control_frame(raw, capabilities=[SAVED_CODEX_OPEN_REVISION])['operation'] == opening
+    for tampered, old in ((source_scope, source | {'close_operation_id': 'another'}),
+                          (source_scope | {'binding_id': 'other'}, source),
+                          (source_scope | {'session_owner_generation': 2}, source),
+                          (scope, source)):
+        with pytest.raises(CoreError, match='VALIDATION_ERROR'):
+            encode_saved_codex_open(opening, source_scope=tampered, source=old)
