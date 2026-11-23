@@ -31,6 +31,47 @@ export function attachOwnedRpcInput(attach, input, onLine) {
   return attach(input, filterInput ? filterInput(onLine) : onLine);
 }
 
+function savedContext(session, manager) {
+  const leaf = manager.getLeafId();
+  const sessionFile = session.sessionFile;
+  if (session.isIdle !== true || session.pendingMessageCount !== 0 || session.retryAttempt !== 0 ||
+      session._bashAbortControllers.size !== 0 || typeof sessionFile !== "string" || typeof leaf !== "string" ||
+      manager.fileEntries.length > 100001) return null;
+  const header = manager.getHeader();
+  const entries = manager.getEntries();
+  if (!header || entries.at(-1)?.id !== leaf) return null;
+  // Match the reviewed SessionManager's actual JSONL serialization. The RPC
+  // returns a digest, never the transcript held by the live owner.
+  let bytes = 0;
+  const digest = createHash("sha256");
+  for (const entry of [header, ...entries]) {
+    const line = JSON.stringify(entry) + "\n";
+    const size = Buffer.byteLength(line);
+    bytes += size;
+    if (size > 4 * 1024 * 1024 || bytes > 64 * 1024 * 1024) return null;
+    digest.update(line);
+  }
+  return { sessionId: session.sessionId, sessionFile, leaf, entries: entries.length, sha256: digest.digest("hex") };
+}
+
+function observeSavedContext(owner, writeProtocol, downstream) {
+  const session = owner.session;
+  const manager = session.sessionManager;
+  return (onLine) => {
+    const next = downstream(onLine);
+    return (line) => {
+      let frame;
+      try { frame = JSON.parse(line); } catch { return next(line); }
+      if (frame?.type !== "nexus_pi_saved_context") return next(line);
+      if (typeof frame.id !== "string" || Object.keys(frame).length !== 2) return;
+      const data = owner.session === session && session.sessionManager === manager
+        ? savedContext(session, manager) : null;
+      writeProtocol(JSON.stringify({type: "response", command: frame.type, id: frame.id,
+        success: data !== null, data}) + "\n");
+    };
+  };
+}
+
 export async function runOwnedRpc(runtime) {
   const next = handoff;
   handoff = undefined;
@@ -114,7 +155,7 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   // Confirm one frame on the original pipe before starting the RPC reader.
   const writeProtocol = process.stdout.write.bind(process.stdout);
   void runHostedPiRpc(cli, args, async (owner, InteractiveMode) => {
-    filterInput = fenceHostedRpcSteer(owner, writeProtocol);
+    filterInput = observeSavedContext(owner, writeProtocol, fenceHostedRpcSteer(owner, writeProtocol));
     fenceHostedRpcLiteral(owner.session);
     observeHostedPiChat(owner, writeProtocol);
     const port = await startHostedRenderer(InteractiveMode, owner, rendererKey);

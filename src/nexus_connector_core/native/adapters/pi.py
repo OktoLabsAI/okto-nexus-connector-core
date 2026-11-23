@@ -102,6 +102,7 @@ from ...protocol import strict_json
 from ..event_buffers import NativeEventHistory, subscribe, stop_overflowed_process
 
 from ..legacy_environment import child_environment
+from ..pi_saved_history import PiSavedHistory, observe_pi_saved_history
 from ..pi_renderer import PiRendererEndpoint
 from ...pi_extension_resource import PiNativeActionLaunch, pi_extension_path
 from .compatibility import pi_version_observation
@@ -843,6 +844,36 @@ class PiRpcConnector:
             raise NativeAdapterError(ErrorCode.CONFLICT, "The Pi owner changed during the read.")
         return {"native_session_id": session.session_id, "is_streaming": state["isStreaming"],
                 "is_compacting": state["isCompacting"], "pending_message_count": state["pendingMessageCount"]}
+
+    def read_current_owned_saved_history(self, session: HarnessSession) -> PiSavedHistory | None:
+        """Observe one flushed, idle session through its hosted RPC owner."""
+        self._validate_session(session)
+        transport = self._transport
+        home = (self._env or {}).get("PI_CODING_AGENT_DIR")
+        if (self._hosted_rpc is None or transport is None or not transport.is_alive()
+                or transport._hosted_rpc_revision != 2 or not transport._response_ids_required or not home):
+            return None
+
+        def state():
+            response = transport.request("nexus_pi_saved_context", {}, timeout_s=min(3.0, self._command_timeout_s))
+            data = response.get("data")
+            if (response.get("success") is True and type(data) is dict
+                    and data.keys() == {"sessionId", "sessionFile", "leaf", "entries", "sha256"}
+                    and data["sessionId"] == session.session_id):
+                return data
+            return None
+
+        current = state()
+        if current is None:
+            return None
+        evidence = observe_pi_saved_history(home, self._cwd, current["sessionFile"],
+                                           session.session_id, current["leaf"], current["entries"])
+        if evidence is None or evidence.sha256 != current["sha256"] or state() != current:
+            return None
+        self._validate_session(session)
+        if self._transport is not transport or not transport.is_alive():
+            return None
+        return evidence
 
     def owned_pi_renderer(self, session: HarnessSession) -> PiRendererEndpoint | None:
         self._validate_session(session)

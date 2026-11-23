@@ -24,6 +24,7 @@ from .adapter_types import (HarnessCommand, HarnessEvent, HarnessSession,
 from .adapters.compatibility import qualified_build, can_probe_protocol
 from .claude_chat_facts import CLAUDE_STREAM_CHAT_EVENT, valid_claude_stream_chat_fact
 from .claude_history_identity import CLAUDE_HISTORY_IDENTITY, project_claude_history
+from .pi_saved_history import PiSavedHistory
 from .claude_saved_history import ClaudeSavedHistory
 from .claude_terminal_resume import (
     ClaudeTerminalFreshGrant, ClaudeTerminalResumeGrant, open_claude_terminal, require_claude_fresh_grant,
@@ -827,6 +828,18 @@ class CopiedAdapterSession:
         if self._close_started:
             raise CoreError("SESSION_CONFLICT", stage)
         return await asyncio.to_thread(reader, self._session)
+
+    async def read_current_owned_pi_history(self) -> PiSavedHistory | None:
+        stage = "native_rollout_read"
+        reader = getattr(self._connector, "read_current_owned_saved_history", None)
+        if self._session.harness_kind != "pi" or not callable(reader):
+            raise CoreError("CAPABILITY_UNSUPPORTED", stage)
+        if self._close_started:
+            raise CoreError("SESSION_CONFLICT", stage)
+        try:
+            return await asyncio.to_thread(reader, self._session)
+        except NativeAdapterError:
+            raise CoreError("NATIVE_UNAVAILABLE", stage) from None
 
     async def close(self) -> str:
         preset_error = None

@@ -43,6 +43,7 @@ from .targeting import validate_control_target
 from .lease_runtime_r4 import R4LeaseRuntime
 from .native.pi_renderer import PiRendererEndpoint
 from .native.claude_history_identity import claude_session_uuid
+from .native.pi_saved_history import PiSavedHistory
 from .native.claude_saved_history import ClaudeSavedHistory
 from .close_runtime import CloseRuntimeMixin
 from .drain import CooperativeDrain, _ReleasedUnclaimedLaunchProof
@@ -1653,6 +1654,20 @@ class LocalRuntimeCore(CooperativeDrain, R4LeaseRuntime, CloseRuntimeMixin):
             connection_id=connection_id, connection_generation=connection_generation)
         if observed is not None and (type(observed[1]) is not ClaudeSavedHistory
                                      or claude_session_uuid(observed[1].session_uuid) is None):
+            raise CoreError("SESSION_CONFLICT", stage)
+        return observed
+
+    async def read_live_current_pi_saved_history(
+            self, scope: Mapping, target: NativeSessionTarget, *, connection_id: str, connection_generation: int,
+    ) -> tuple[NativeSessionOwnerProof, PiSavedHistory] | None:
+        """Read the flushed branch of one exact, idle Pi owner."""
+        stage = "native_rollout_read"
+        if not isinstance(target, NativeSessionTarget) or target.adapter_id != "pi_rpc":
+            raise CoreError("VALIDATION_ERROR", stage)
+        observed = await self._read_live_saved_history(scope, target, "read_current_owned_pi_history", (),
+            connection_id=connection_id, connection_generation=connection_generation)
+        if observed is not None and (type(observed[1]) is not PiSavedHistory
+                                     or observed[1].session_id != target.native_session_id):
             raise CoreError("SESSION_CONFLICT", stage)
         return observed
 
