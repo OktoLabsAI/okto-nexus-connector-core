@@ -169,6 +169,7 @@ _VERB_PROMPT = "prompt"
 _VERB_STEER = "steer"
 _VERB_ABORT = "abort"
 _VERB_GET_STATE = "get_state"
+_VERB_SAVED_CONTEXT = "nexus_pi_saved_context"
 
 _TYPE_RESPONSE = "response"
 _TYPE_EXTENSION_UI_REQUEST = "extension_ui_request"
@@ -855,7 +856,7 @@ class PiRpcConnector:
             return None
 
         def state():
-            response = transport.request("nexus_pi_saved_context", {}, timeout_s=min(3.0, self._command_timeout_s))
+            response = transport.request(_VERB_SAVED_CONTEXT, {}, timeout_s=min(3.0, self._command_timeout_s))
             data = response.get("data")
             if (response.get("success") is True and type(data) is dict
                     and data.keys() == {"sessionId", "sessionFile", "leaf", "entries", "sha256"}
@@ -1352,6 +1353,10 @@ class PiRpcConnector:
         stray or duplicate line from the child must not be
         silently dropped (D2: no native occurrence is lost, only coarsened).
         """
+        if msg.get("command") == _VERB_SAVED_CONTEXT:
+            # A reply can arrive after its private request timed out. Preserve
+            # that transport fact without projecting a local path or digest.
+            msg = {"type": _TYPE_RESPONSE, "command": _VERB_SAVED_CONTEXT, "success": False}
         self._push_event("error", _TYPE_RESPONSE, msg)
 
     def _on_child_exit(self, returncode: int | None, stderr_tail: str) -> None:

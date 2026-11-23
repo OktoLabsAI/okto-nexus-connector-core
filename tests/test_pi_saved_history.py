@@ -1,3 +1,4 @@
+from contextlib import closing
 import json
 import os
 from pathlib import Path
@@ -109,3 +110,16 @@ def test_hosted_pi_history_checks_exact_owner_again_after_file_read(saved_file):
     transport.request.reset_mock()
     assert connector.read_current_owned_saved_history(session) is None
     transport.request.assert_not_called()
+
+
+def test_late_pi_history_reply_keeps_private_path_and_digest_out_of_events():
+    connector = PiRpcConnector()
+    connector._session_id = "hsess_" + "a" * 32
+    connector._on_unmatched_response({
+        "type": "response", "command": "nexus_pi_saved_context", "success": True,
+        "data": {"sessionFile": "private", "sha256": "private digest"},
+    })
+    with closing(connector.events()) as events:
+        event = next(events)
+    assert event.kind == "error"
+    assert event.payload == {"type": "response", "command": "nexus_pi_saved_context", "success": False}
