@@ -1441,6 +1441,11 @@ class CodexAppServerConnector:
         turn_id: str | None,
     ) -> None:
         kind = _EVENT_KIND_BY_METHOD.get(native_method, _DEFAULT_EVENT_KIND)
+        thread = payload.get("thread")
+        if isinstance(thread, dict) and "path" in thread:
+            # Rollout paths stay with the owning adapter. The thread ID and
+            # other lifecycle metadata remain available to consumers.
+            payload = payload | {"thread": {key: value for key, value in thread.items() if key != "path"}}
         event = HarnessEvent(
             session_id=session_id,
             harness_kind="codex",

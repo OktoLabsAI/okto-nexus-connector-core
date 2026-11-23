@@ -1867,7 +1867,8 @@ def test_copied_peer_terminal_reduces_public_receipt(tmp_path, adapter_id):
                     command=(sys.executable,
                              str(fixture_dir / "codex_app_server_peer.py"),
                              str(tmp_path / "codex-log.jsonl")),
-                    cwd=str(tmp_path), handshake_timeout_s=5)
+                    cwd=str(tmp_path), handshake_timeout_s=5,
+                    env={"CODEX_TEST_EARLY_THREAD": "1"})
             else:
                 peer = fixture_dir / "claude_stream_peer.py"
                 connector = ClaudeCodeStreamConnector(
@@ -1895,15 +1896,23 @@ def test_copied_peer_terminal_reduces_public_receipt(tmp_path, adapter_id):
         await runtime.submit(TurnOperation("turn", "public-session", "hello"),
                              context())
 
+        observed_threads = []
+
         async def terminal():
             async for item in runtime.events(EventCursor("srv", "exe",
                                                         "public-session", "epoch")):
+                if item.native_type == "thread/started":
+                    observed_threads.append(item.payload["thread"])
                 if item.payload.get("delivery_phase") == "terminal":
                     return item
 
         item = await asyncio.wait_for(terminal(), timeout=10)
         assert item.operation_id == "turn"
         assert item.payload["delivery_outcome"] == "success"
+        if adapter_id == "codex_app_server":
+            assert len(observed_threads) == 1
+            assert observed_threads[0]["id"]
+            assert "path" not in observed_threads[0]
         assert (await journal.get_receipt(OperationKey("srv", "exe", "turn"))).stage == "SUCCEEDED"
         await runtime.shutdown(ShutdownPolicy())
         journal.close()

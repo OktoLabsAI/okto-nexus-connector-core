@@ -195,8 +195,9 @@ def main():
             write_msg({"id": req_id, "result": {"requiresOpenaiAuth": True, "account": {"type": "apiKey"}}})
         elif method == "thread/start":
             thread_id = next_thread_id()
-            if params.get("_early_notify"):
-                write_msg({"method": "thread/started", "params": {"thread": {"id": thread_id}}})
+            if params.get("_early_notify") or os.environ.get("CODEX_TEST_EARLY_THREAD"):
+                write_msg({"method": "thread/started", "params": {"thread": {
+                    "id": thread_id, "path": "private/rollout-test.jsonl"}}})
             write_msg({"jsonrpc": "2.0", "id": req_id, "result": {"thread": {"id": thread_id}}})
         elif method == "turn/start":
             log({"method": "turn/start", "params": params})
