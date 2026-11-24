@@ -288,6 +288,15 @@ def test_production_allowlist_grants_only_the_recorded_real_builds():
         fingerprint="sha256:" + "0" * 64)["compatible_controls"] == []
 
 
+def test_linux_pi_controls_require_the_reviewed_installation_identity():
+    identity = "sha256:80f7f9c0350b08ad8ed9c2ef368c17309b69a9bbcb07fff199b4267a9e27e132"
+    exact = dict(platform="linux", architecture="x86_64", build_identity=identity)
+    assert compatibility.control_observation("pi", "0.87.1", **exact)["compatible_controls"] == ["steer", "interrupt"]
+    for drift in ({"build_identity": None}, {"build_identity": "sha256:" + "0" * 64},
+                  {"architecture": "aarch64"}, {"platform": "darwin"}):
+        assert compatibility.control_observation("pi", "0.87.1", **(exact | drift))["compatible_controls"] == []
+
+
 def test_native_request_contracts_advertise_only_campaign_proven_shapes():
     """HITL advertisement is exactly what the real campaigns exercised."""
     assert compatibility.CODEX_NATIVE_REQUEST_CONTRACTS["0.157.0"] == (

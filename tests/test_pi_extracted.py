@@ -159,16 +159,16 @@ def test_hosted_pi_rejects_a_stock_peer_that_cannot_prove_the_owner(tmp_path):
         connector.close()
 
 
-@pytest.mark.parametrize(("platform", "node", "pi_build", "node_build", "controls"), [
+@pytest.mark.parametrize(("platform", "node", "pi_build", "node_build"), [
     ("win32", "node.exe",
      "sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b",
-     "sha256:3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5", True),
+     "sha256:3331e1ffe19874215472217c5e94f5a0c6d8e18c4ac7111d3937aa0ad5e9b4a5"),
     ("linux", "node",
      "sha256:80f7f9c0350b08ad8ed9c2ef368c17309b69a9bbcb07fff199b4267a9e27e132",
-     "sha256:d1de76d8edf2fededf6f8b30d244e2c0529ac607923a018283b77e9c74bd932c", False),
+     "sha256:d1de76d8edf2fededf6f8b30d244e2c0529ac607923a018283b77e9c74bd932c"),
 ])
 def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch, platform, node, pi_build,
-                                                              node_build, controls):
+                                                              node_build):
     candidate = InstallationCandidate("pi_rpc", node, "pair", "explicit", "selected",
                                       version="0.87.1", architecture="x86_64",
                                       launch_script="selected-pi-entry.js",
@@ -180,7 +180,7 @@ def test_hosted_pi_requires_the_selected_reviewed_node_and_cli(monkeypatch, plat
     qualify = pi_extension_resource.qualify_pi_hosted_rpc
     proof = ("pi", candidate.version, platform, candidate.architecture, candidate.fingerprint)
     assert qualified_build(*proof, build_identity=pi_build)
-    assert qualified_build(*proof, build_identity=pi_build, control=True) is controls
+    assert qualified_build(*proof, build_identity=pi_build, control=True)
     assert qualify(argv, candidate).name == "hosted_rpc.js"
     observed.assert_called_once_with(Path(candidate.executable))
     observed.reset_mock()

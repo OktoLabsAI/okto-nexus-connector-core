@@ -111,15 +111,12 @@ QUALIFIED_BUILD_IDENTITIES: set[tuple[str, str, str, str, str]] = {
      "sha256:df63d86e72bc1a27f13899ad0467c4b312d8ee2cb67ae3a09e37f734d9f0edcb"),
     ("pi", "0.87.1", "win32", "x86_64",
      "sha256:caf8bfad84ea26a7c8eaee06e0cde3dd7e34ef05e00dbebc348dfb3f22de487b"),
+    ("pi", "0.87.1", "linux", "x86_64",
+     "sha256:80f7f9c0350b08ad8ed9c2ef368c17309b69a9bbcb07fff199b4267a9e27e132"),
     ("claude_code", "2.1.282", "win32", "x86_64",
      "sha256:b9c8e2e61cc523f4d78630d6141e843c41fbe530cd297e7d4af8acd44841bed9"),
 }
 QUALIFIED_CONTROL_BUILD_IDENTITIES = set(QUALIFIED_BUILD_IDENTITIES)
-
-# SI-037: the reviewed Linux Pi build supports conversation and presentation.
-# Keep control qualification independent of the hosted renderer check.
-QUALIFIED_BUILD_IDENTITIES.add(("pi", "0.87.1", "linux", "x86_64",
-    "sha256:80f7f9c0350b08ad8ed9c2ef368c17309b69a9bbcb07fff199b4267a9e27e132"))
 
 # 2026-10-03 isolated real handshake, conversation and authenticated Nexus MCP
 # call. Controls and native approval replies were not exercised for this build.
