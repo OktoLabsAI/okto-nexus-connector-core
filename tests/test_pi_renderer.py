@@ -53,7 +53,18 @@ class NativeTranscript {
       ["\x1b]52;c;c2VjcmV0\x07the session\x1b[32m✓\x1b[0m"] };
   }
   mountInteractiveTui() {}
-  renderSessionEntries() {}
+  getUserMessageText(message) { return message.content; }
+  renderSessionEntries() {
+    const prefix = "NEXUS DELIVERY: respond to the sender's request using your available capabilities.";
+    const record = { schema_version: 1, intent: "conversation", operation_id: "technical-operation",
+      workspace_id: "project", recipient_agent_id: "recipient", sender_agent_id: "sender", context_id: "context",
+      content: [{type: "text", text: "Review the delivery address"}] };
+    const content = prefix + "\n" + JSON.stringify(record) + "\nNEXUS TRANSPORT BINDING:\n{}";
+    const message = {role: "user", content};
+    this.messages.push(this.getUserMessageText(message));
+    assert.equal(message.content, content);
+    assert.equal(this.getUserMessageText({role: "user", content: prefix + "\nnot a delivery"}), prefix + "\nnot a delivery");
+  }
   async handleEvent({ type, message }) {
     if (type === "message_start") {
       this.streamingComponent = {};
@@ -111,7 +122,9 @@ process.stdin.resume();
                     frame = await reader.read_output()
                     assert frame == "\x1b[2J\x1b[Hthe session\x1b[32m✓\x1b[0m".encode()
                     async with target.attach(180, 40) as second, target.attach(100, 40, edit=True) as writer:
-                        assert b"Retained history" in await second.read_output()
+                        history = await second.read_output()
+                        assert b"Retained history" in history and b"Review the delivery address" in history
+                        assert b"technical-operation" not in history and b"NEXUS TRANSPORT BINDING" not in history
                         assert await writer.read_event() == frame
                         with pytest.raises(CoreError, match="NATIVE_UNAVAILABLE"):
                             async with target.attach(100, 40):

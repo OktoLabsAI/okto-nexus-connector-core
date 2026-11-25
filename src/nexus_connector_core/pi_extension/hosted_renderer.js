@@ -117,6 +117,24 @@ function validText(text, limit) {
 }
 
 /** Bounded private renderer subscriptions to the exact session already held by RPC. */
+function visibleDelivery(text) {
+  const prefix = "NEXUS DELIVERY: respond to the sender's request using your available capabilities.";
+  if (typeof text !== "string" || !text.startsWith(prefix) || text.length > 256 * 1024) return text;
+  const [, encoded, ...suffix] = text.split("\n");
+  if (!encoded || (suffix.length && !suffix[0].startsWith("NEXUS TRANSPORT BINDING:") && !suffix[0].startsWith("SUPERSEDES:"))) return text;
+  try {
+    const record = JSON.parse(encoded);
+    if (record?.schema_version !== 1 || !["conversation", "handoff_execute"].includes(record.intent) ||
+        !["operation_id", "workspace_id", "recipient_agent_id", "sender_agent_id", "context_id"]
+          .every(field => typeof record[field] === "string" && record[field]) || !Array.isArray(record.content)) return text;
+    const body = record.content.filter(part => part?.type === "text" && typeof part.text === "string")
+      .map(part => part.text).join("\n\n");
+    return body.trim() ? body : "Request received";
+  } catch {
+    return text;
+  }
+}
+
 export async function startHostedRenderer(InteractiveMode, owner, key) {
   if (!/^[0-9a-f]{64}$/.test(key)) throw new Error("Missing private Pi presentation key");
   const session = owner.session;
@@ -125,6 +143,11 @@ export async function startHostedRenderer(InteractiveMode, owner, key) {
   const observerHost = { session, setBeforeSessionInvalidate() {}, setRebindSession() {} };
 
   class TranscriptMode extends InteractiveMode {
+    getUserMessageText(message) {
+      // Only the viewer projects the delivery body. The owned session and model retain their original context.
+      return visibleDelivery(super.getUserMessageText(message));
+    }
+
     // Mount only the transcript and optional draft editor. The owner keeps its
     // existing RPC tools, extension UI bindings and lifecycle.
     openTranscript(socket, terminal, editing) {
